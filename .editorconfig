@@ -1,0 +1,22 @@
+# 统一编辑器行为，避免因编辑器差异产生无意义的 diff
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.{bat,cmd,ps1,nsh}]
+end_of_line = crlf
+
+[*.{js,mjs,cjs,json,css,html}]
+indent_size = 2
+
+[*.py]
+indent_size = 4

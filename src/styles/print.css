@@ -1,0 +1,588 @@
+/*
+ * QuillPad · 打印版式（PDF / 打印共用）
+ *
+ * 这份 CSS **只被 `src/core/print.js` 以 `?inline` 方式读取**，不会注入应用页面，
+ * 因此可以完全按打印场景写，不必迁就屏幕样式。三条自我约束：
+ *
+ *  1. 排版数值一律走 `--qp-*` token（由 print.js 从当前主题的 computedStyle 里读出来
+ *     再写进打印页的 `:root`），保证「打印稿 = 所见即所得」；
+ *  2. **不复用任何交互态样式**：没有零宽标记、没有悬停态、
+ *     没有 widget 边框 —— 打印稿里不存在「光标」，所有装饰性 UI 都属于噪音；
+ *  3. 分页规则集中在 §7，任何新增块级元素都要回答「跨页时它怎么办」。
+ *
+ * 单位说明：正文用 `em` 跟随 `--qp-body-size`，分页与纸张用 `mm`，
+ * 代码块与表格用 `px`（与屏幕上的度量一致，避免 devicePixelRatio 差异）。
+ */
+
+/* ------------------------------------------------------------------ 1. 纸张 */
+
+/* 默认 A4 / 上下 20mm / 左右 18mm；用户改纸张时 print.js 会追加同优先级
+   的 @page 覆盖（后出现的规则生效）。 */
+@page {
+  size: 210mm 297mm;
+  margin: 20mm 18mm 20mm 18mm;
+}
+
+/* 打印页里 body 的默认外边距必须清零，否则内容整体右移 */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #ffffff;
+}
+
+/* --------------------------------------------------------------- 2. 基础排版 */
+
+.qp-print {
+  /* 变量兜底：正常路径下 print.js 会用真实 token 值覆盖这一组 */
+  --qp-body-size: 16px;
+  --qp-body-leading: 1.75;
+  --qp-para-gap: 0.9em;
+  --qp-measure: 46em;
+  --qp-text: #1c1f26;
+  --qp-text-dim: #4a5260;
+  --qp-text-faint: #7c8493;
+  --qp-accent: #2f6feb;
+  --qp-panel: #f4f5f7;
+  --qp-border: #e3e5e9;
+  --qp-code-bg: #f7f8fa;
+  --qp-code-text: #24292f;
+  --qp-img-max: 100%;
+  /* 字体栈兜底：print.js 会在本文件之后用同名变量覆盖成
+   * 「内联子集字体 + 系统栈」。这里把 `QPPrintSans` 也放在最前面，
+   * 万一覆盖没生效（比如单独打开本文件调试），仍优先用内联字体。 */
+  --qp-print-sans: 'QPPrintSans', -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  --qp-print-mono: 'JetBrains Mono', 'Cascadia Mono', Consolas, monospace;
+
+  box-sizing: border-box;
+  color: var(--qp-text);
+  background: #ffffff;
+  font-family: var(--qp-print-sans);
+  font-size: var(--qp-body-size);
+  line-height: var(--qp-body-leading);
+  font-kerning: normal;
+  font-variant-ligatures: common-ligatures;
+  /* 打印禁用平滑滚动 / 任何动效 */
+  text-rendering: optimizeLegibility;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.qp-print * {
+  box-sizing: border-box;
+}
+
+/* 内容列宽：屏幕上 46em 是「一行 42–46 个汉字」，打印页同样保持这个行长 */
+.qp-print__body {
+  max-width: var(--qp-measure);
+  margin: 0 auto;
+}
+
+/* --------------------------------------------------------------- 3. 标题层级 */
+
+/* 层级靠字重与留白，不靠描边（PRD §4.D1.3） */
+.qp-print h1,
+.qp-print h2,
+.qp-print h3,
+.qp-print h4,
+.qp-print h5,
+.qp-print h6 {
+  font-weight: 680;
+  line-height: 1.3;
+  margin: 0;
+  break-after: avoid-page;
+  page-break-after: avoid;
+  break-inside: avoid;
+}
+
+.qp-print h1 {
+  font-size: 1.9em;
+  line-height: 1.25;
+  margin: 2.6em 0 0.7em;
+  letter-spacing: 0.01em;
+}
+
+.qp-print h2 {
+  font-size: 1.45em;
+  line-height: 1.3;
+  margin: 2.2em 0 0.6em;
+}
+
+.qp-print h3 {
+  font-size: 1.22em;
+  line-height: 1.35;
+  margin: 1.9em 0 0.5em;
+  font-weight: 640;
+}
+
+.qp-print h4 {
+  font-size: 1.08em;
+  margin: 1.6em 0 0.45em;
+  font-weight: 620;
+}
+
+.qp-print h5 {
+  font-size: 1em;
+  margin: 1.4em 0 0.4em;
+  font-weight: 620;
+}
+
+.qp-print h6 {
+  font-size: 0.94em;
+  margin: 1.2em 0 0.4em;
+  font-weight: 620;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* 文档标题（第一屏大标题）不与页眉撞在一起 */
+.qp-print > .qp-print__body > h1:first-child {
+  margin-top: 0;
+}
+
+/* --------------------------------------------------------------- 4. 正文元素 */
+
+.qp-print p {
+  margin: 0 0 var(--qp-para-gap);
+  /* 中文断行：优先在标点后断，避免「孤字成行」 */
+  overflow-wrap: break-word;
+  word-break: normal;
+  line-break: strict;
+}
+
+.qp-print strong {
+  font-weight: 680;
+}
+
+.qp-print em {
+  font-style: italic;
+}
+
+.qp-print del {
+  text-decoration: line-through;
+}
+
+.qp-print a {
+  color: var(--qp-accent);
+  text-decoration: none;
+  /* 打印稿里链接不显示下划线（PDF 里点不动的下划线就是噪音），
+     但保留 URL 的语义 —— 由 print.js 决定是否追加「(url)」 */
+}
+
+.qp-print code {
+  font-family: var(--qp-print-mono);
+  font-size: 0.88em;
+  padding: 0.12em 0.36em;
+  border-radius: 4px;
+  background: var(--qp-code-bg);
+  color: var(--qp-code-text);
+  /* 与正文基线不跳动 */
+  vertical-align: baseline;
+}
+
+.qp-print kbd {
+  font-family: var(--qp-print-mono);
+  font-size: 0.82em;
+  padding: 0.1em 0.4em;
+  border: 1px solid var(--qp-border);
+  border-radius: 4px;
+}
+
+/* --------------------------------------------------------- 5. 引用 / 列表 / 任务 */
+
+.qp-print blockquote {
+  margin: 1.1em 0;
+  padding: 0 0 0 18px;
+  border-left: 3px solid var(--qp-border-strong, #d3d7de);
+  color: var(--qp-text-dim);
+  /* 无背景色：减少色块噪音（PRD §4.D2 引用行） */
+  background: none;
+}
+
+.qp-print blockquote blockquote {
+  margin-left: 14px;
+}
+
+.qp-print ul,
+.qp-print ol {
+  margin: 0 0 var(--qp-para-gap);
+  padding-left: 1.6em;
+}
+
+.qp-print li {
+  margin: 0 0 0.32em;
+}
+
+.qp-print li > ul,
+.qp-print li > ol {
+  margin: 0.32em 0 0;
+}
+
+/* 任务列表：复选框用纯 CSS 方块，不依赖表单控件 */
+.qp-print .qp-task-item {
+  list-style: none;
+  margin-left: -1.3em;
+  padding-left: 1.5em;
+  position: relative;
+}
+
+.qp-print .qp-task-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.42em;
+  width: 0.85em;
+  height: 0.85em;
+  border: 1.2px solid var(--qp-border-strong, #d3d7de);
+  border-radius: 3px;
+}
+
+.qp-print .qp-task-item.is-done::before {
+  background: var(--qp-accent);
+  border-color: var(--qp-accent);
+}
+
+.qp-print .qp-task-item.is-done {
+  color: var(--qp-text-faint);
+  text-decoration: line-through;
+}
+
+.qp-print hr {
+  border: 0;
+  border-top: 1px solid var(--qp-border);
+  margin: 2.2em 0;
+}
+
+/* --------------------------------------------------------------- 6. 表格 / 图 */
+
+.qp-print table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 0.92em;
+  margin: 1.2em 0;
+}
+
+/* 跨页时每页都重复表头（B3「表格不破列」） */
+.qp-print thead {
+  display: table-header-group;
+}
+
+.qp-print tfoot {
+  display: table-footer-group;
+}
+
+.qp-print tr {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.qp-print th,
+.qp-print td {
+  border: 1px solid var(--qp-border);
+  padding: 8px 14px;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: break-word;
+}
+
+.qp-print th {
+  background: var(--qp-panel);
+  font-weight: 600;
+}
+
+/* 斑马纹：亮度差 2%，黑白打印也不会糊成一片 */
+.qp-print tbody tr:nth-child(even) td {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.qp-print img {
+  max-width: var(--qp-img-max, 100%);
+  height: auto;
+  border-radius: 8px;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.qp-print figure {
+  margin: 1.2em 0;
+  text-align: center;
+}
+
+.qp-print figcaption {
+  font-size: 0.78em;
+  color: var(--qp-text-faint);
+  margin-top: 0.4em;
+}
+
+/* 图片无法内联时的占位（打印稿永不外链图片） */
+.qp-print .qp-img-missing {
+  display: inline-block;
+  padding: 10px 14px;
+  border: 1px dashed var(--qp-border);
+  border-radius: 6px;
+  color: var(--qp-text-faint);
+  font-size: 0.82em;
+}
+
+/* --------------------------------------------------------------- 7. 分页规则 */
+
+/*
+ * 分页三原则：
+ *  ① 一个「语义单元」（段落 / 列表项 / 引用 / 表格行 / 图片 / 代码块）不被切开；
+ *  ② 标题后面必须至少跟着一行正文（`break-after: avoid`）；
+ *  ③ 代码块优先整块；单块高度超页时退化成软换行分页，且每页首行完整。
+ */
+.qp-print p,
+.qp-print li,
+.qp-print blockquote,
+.qp-print td,
+.qp-print th,
+.qp-print img,
+.qp-print pre,
+.qp-print figure,
+.qp-print table {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+/*
+ * 超高代码块（> 40 行，由 print.js 打 `is-tall`）：
+ * 整块 avoid 会让 Chromium 直接把它挤到下一页并裁掉尾部，
+ * 所以这里解除 avoid、改用软换行，让它在行边界处分页。
+ */
+.qp-print pre.is-tall {
+  break-inside: auto;
+  page-break-inside: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* 代码块容器：横向滚动条在 PDF 里没有意义，一律不出现 */
+.qp-print pre {
+  margin: 1.1em 0;
+  padding: 16px 18px;
+  border: 1px solid var(--qp-border);
+  border-radius: 10px;
+  background: var(--qp-code-bg);
+  color: var(--qp-code-text);
+  font-family: var(--qp-print-mono);
+  font-size: 14px;
+  line-height: 1.6;
+  overflow: visible;
+  white-space: pre;
+  tab-size: 2;
+  orphans: 3;
+  widows: 3;
+}
+
+.qp-print pre code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* 代码块语言标签 */
+.qp-print .qp-code-lang {
+  display: block;
+  font-family: var(--qp-print-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--qp-text-faint);
+  margin: 0 0 6px;
+}
+
+/* 代码块容器：标签 + pre 打包在一起，避免标签被 pre 的圆角裁掉 */
+.qp-print .qp-code-block {
+  margin: 1.1em 0;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.qp-print .qp-code-block pre {
+  margin: 0;
+}
+
+/*
+ * 语法着色：`classHighlighter` 产出 `tok-keyword` / `tok-string` 这类类名。
+ * 颜色走 `--tok-*` 变量，由 print.js 按「代码高亮配色」写入；跟随主题时
+ * 这些变量为空 → 所有 span 继承正文色（等价于不着色），不会出现高对比噪音。
+ */
+.qp-print .tok-comment {
+  color: var(--tok-comment, var(--qp-text-faint));
+  font-style: italic;
+}
+
+.qp-print .tok-keyword,
+.qp-print .tok-operator,
+.qp-print .tok-modifier {
+  color: var(--tok-keyword, inherit);
+}
+
+.qp-print .tok-string,
+.qp-print .tok-special {
+  color: var(--tok-string, inherit);
+}
+
+.qp-print .tok-number,
+.qp-print .tok-bool,
+.qp-print .tok-literal {
+  color: var(--tok-number, inherit);
+}
+
+.qp-print .tok-variableName,
+.qp-print .tok-propertyName,
+.qp-print .tok-function,
+.qp-print .tok-className {
+  color: var(--tok-function, inherit);
+}
+
+.qp-print .tok-typeName,
+.qp-print .tok-tagName,
+.qp-print .tok-attributeName {
+  color: var(--tok-type, inherit);
+}
+
+.qp-print .tok-punctuation,
+.qp-print .tok-bracket {
+  color: var(--tok-punct, inherit);
+}
+
+/* 显式分页标记（`[pagebreak]` 段落由 print.js 转成这个元素） */
+.qp-print .qp-page-break {
+  break-after: page;
+  page-break-after: always;
+  height: 0;
+  margin: 0;
+  border: 0;
+}
+
+/* 前言区（front matter）：打印稿里作为元信息卡片保留 */
+.qp-print .qp-frontmatter {
+  margin: 0 0 1.4em;
+  padding: 10px 14px;
+  border-left: 3px solid var(--qp-border);
+  background: var(--qp-panel);
+  border-radius: 8px;
+  font-family: var(--qp-print-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--qp-text-dim);
+  white-space: pre-wrap;
+}
+
+/* ------------------------------------------------------------- 8. 目录（TOC） */
+
+/*
+ * 取舍：Chromium 在 `printToPDF` 前无法知道「某标题会落在第几页」，
+ * 回填页码需要两阶段渲染 + 重新排版，实测会让分页整体漂移（±2 页）。
+ * 所以打印目录做成「章节列表」：层级缩进 + 标题文本，不带页码。
+ * 章节顺序与正文一致，读者用 PDF 侧边栏（Chromium 会自动生成大纲）跳转。
+ */
+.qp-print .qp-toc {
+  break-after: page;
+  page-break-after: always;
+  padding-top: 4mm;
+}
+
+.qp-print .qp-toc__title {
+  font-size: 1.35em;
+  font-weight: 680;
+  margin: 0 0 1.2em;
+  letter-spacing: 0.02em;
+}
+
+.qp-print .qp-toc__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 0.95em;
+  line-height: 1.9;
+}
+
+.qp-print .qp-toc__item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.qp-print .qp-toc__item--2 {
+  padding-left: 24px;
+  font-size: 0.94em;
+}
+
+.qp-print .qp-toc__item--3 {
+  padding-left: 48px;
+  font-size: 0.9em;
+  color: var(--qp-text-dim);
+}
+
+/* 点线引导符：纯 CSS，不需要页码对齐 */
+.qp-print .qp-toc__lead {
+  flex: 1;
+  border-bottom: 1px dotted var(--qp-border);
+  transform: translateY(-0.28em);
+}
+
+/* ------------------------------------------------------------ 9. 数学 / 脚注 */
+
+.qp-print .katex {
+  font-size: 1.05em;
+}
+
+.qp-print .katex-display {
+  margin: 1em 0;
+  break-inside: avoid;
+}
+
+.qp-print .qp-footnotes {
+  margin-top: 2.4em;
+  padding-top: 0.8em;
+  border-top: 1px solid var(--qp-border);
+  font-size: 0.86em;
+  color: var(--qp-text-dim);
+}
+
+.qp-print .qp-footnotes__item {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 0.36em;
+}
+
+.qp-print .qp-footnotes__id {
+  font-weight: 600;
+  color: var(--qp-text);
+}
+
+/* --------------------------------------------------------------- 10. 深色主题 */
+
+/*
+ * 深色主题打印：只在用户显式选「深色」时启用（`theme='dark'`）。
+ * 底色必须自己画，因为 printToPDF 需要 `printBackground:true` 才会输出背景。
+ */
+.qp-print--dark {
+  background: #14171c;
+  color: #dfe3ea;
+  --qp-text: #dfe3ea;
+  --qp-text-dim: #a8b0bd;
+  --qp-text-faint: #7c8493;
+  --qp-panel: #1c2027;
+  --qp-border: #2c313a;
+  --qp-code-bg: #1a1e25;
+  --qp-code-text: #dfe3ea;
+  --qp-accent: #7aa2f7;
+}
+
+.qp-print--dark table tbody tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* 减少动效：打印稿里本来就是静态的，这条只是让「关闭动效」的语义一致 */
+@media (prefers-reduced-motion: reduce) {
+  .qp-print * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

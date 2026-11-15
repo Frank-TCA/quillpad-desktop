@@ -1,0 +1,16 @@
+{
+  "id": "community.csv-to-json",
+  "name": "CSV 转 JSON",
+  "description": "把当前 CSV 文本转换成 json 数组",
+  "author": "QuillPad 社区示例",
+  "version": "1.1.0",
+  "license": "ISC",
+  "engines": { "quillpad": ">=1.0.0" },
+  "main": "main.js",
+  "permissions": ["editor:read", "editor:write"],
+  "contributes": {
+    "commands": [
+      { "id": "to-json", "title": "CSV 转 JSON 数组", "key": "Mod-Alt-Shift-c" }
+    ]
+  }
+}

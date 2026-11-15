@@ -1,0 +1,19 @@
+{
+  "id": "community.line-sorter",
+  "name": "行排序增强",
+  "description": "按长度 / 数字 / 自然序排序，支持去重相邻行",
+  "author": "QuillPad 社区示例",
+  "version": "1.3.2",
+  "license": "BSD-2-Clause",
+  "engines": { "quillpad": ">=1.0.0" },
+  "main": "main.js",
+  "permissions": ["editor:read", "editor:write"],
+  "contributes": {
+    "commands": [
+      { "id": "by-length", "title": "按行长排序", "key": "Mod-Alt-Shift-l" },
+      { "id": "by-numeric", "title": "按行首数字排序", "key": "Mod-Alt-Shift-d" },
+      { "id": "natural", "title": "按自然序排序", "key": "Mod-Alt-Shift-n" },
+      { "id": "dedupe-adjacent", "title": "删除相邻重复行", "key": "Mod-Alt-Shift-x" }
+    ]
+  }
+}

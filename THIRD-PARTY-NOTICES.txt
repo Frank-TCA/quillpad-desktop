@@ -1,0 +1,143 @@
+QuillPad 第三方组件许可声明
+================================
+
+版本：1.0.0
+生成方式：node scripts/notices.mjs（依赖有变动后请重新生成）
+
+QuillPad 自身为自有软件。本文件列出随应用分发的第三方组件及其许可，
+全部为 MIT / ISC / BSD / Apache-2.0 / SIL OFL 1.1 等宽松许可，
+不包含 GPL / AGPL / SSPL 等传染性许可组件。
+
+--------------------------------------------------------------------
+1. 打包进应用的运行时依赖
+--------------------------------------------------------------------
+
+  @codemirror/autocomplete 6.20.4
+    许可：MIT
+  @codemirror/commands 6.11.1
+    许可：MIT
+  @codemirror/lang-cpp 6.0.3
+    许可：MIT
+  @codemirror/lang-css 6.3.1
+    许可：MIT
+  @codemirror/lang-go 6.0.1
+    许可：MIT
+  @codemirror/lang-html 6.4.12
+    许可：MIT
+  @codemirror/lang-java 6.0.2
+    许可：MIT
+  @codemirror/lang-javascript 6.2.5
+    许可：MIT
+  @codemirror/lang-json 6.0.2
+    许可：MIT
+  @codemirror/lang-markdown 6.5.2
+    许可：MIT
+  @codemirror/lang-php 6.0.2
+    许可：MIT
+  @codemirror/lang-python 6.2.1
+    许可：MIT
+  @codemirror/lang-rust 6.0.2
+    许可：MIT
+  @codemirror/lang-sql 6.10.0
+    许可：MIT
+  @codemirror/lang-vue 0.1.3
+    许可：MIT
+  @codemirror/lang-xml 6.1.0
+    许可：MIT
+  @codemirror/lang-yaml 6.1.3
+    许可：MIT
+  @codemirror/language 6.13.1
+    许可：MIT
+  @codemirror/legacy-modes 6.5.5
+    许可：MIT
+  @codemirror/search 6.7.2
+    许可：MIT
+  @codemirror/state 6.7.6
+    许可：MIT
+  @codemirror/theme-one-dark 6.1.3
+    许可：MIT
+  @codemirror/view 6.43.15
+    许可：MIT
+  @lezer/highlight 1.2.5
+    许可：MIT
+  codemirror 6.0.2
+    许可：MIT
+  katex 0.16.47
+    许可：MIT
+  marked 18.1.2
+    许可：MIT
+
+--------------------------------------------------------------------
+2. 桌面外壳
+--------------------------------------------------------------------
+
+  electron 45.2.1
+    许可：MIT
+
+--------------------------------------------------------------------
+3. 内置字体
+--------------------------------------------------------------------
+
+  noto-sans-sc-subset.ttf / noto-serif-sc-subset.ttf
+    来源：Google Noto Sans SC / Noto Serif SC（上游 Adobe & Google）
+    许可：SIL Open Font License 1.1
+    说明：由 scripts/font-subset.py 生成的子集（Modified Version），
+          完整许可全文见 src/assets/fonts/OFL.txt（随安装包分发）。
+
+--------------------------------------------------------------------
+4. 构建期依赖许可分布（全量 node_modules 统计）
+--------------------------------------------------------------------
+
+  MIT: 244 个包
+  ISC: 25 个包
+  BSD-3-Clause: 10 个包
+  Apache-2.0: 9 个包
+  BlueOak-1.0.0: 6 个包
+  BSD-2-Clause: 5 个包
+  WTFPL: 3 个包
+  MPL-2.0: 2 个包
+  Python-2.0: 1 个包
+  0BSD: 1 个包
+
+--------------------------------------------------------------------
+5. 常见许可全文
+--------------------------------------------------------------------
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+ISC License
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+PERFORMANCE OF THIS SOFTWARE.
+
+Apache-2.0 全文：https://www.apache.org/licenses/LICENSE-2.0
+SIL OFL 1.1 全文：见 src/assets/fonts/OFL.txt
+
+共收录 27 个运行时依赖、1 个桌面外壳组件。

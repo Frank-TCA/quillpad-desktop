@@ -1,0 +1,28 @@
+{
+  "id": "quillpad.text-tools",
+  "name": "文本处理包",
+  "description": "大小写、排序、去重、去空行、Base64、URL 编解码、JSON 格式化与列对齐，共 13 条命令。",
+  "author": "QuillPad 官方",
+  "version": "1.0.0",
+  "license": "MIT",
+  "engines": { "quillpad": ">=1.0.0" },
+  "main": "main.js",
+  "permissions": ["editor:read", "editor:write"],
+  "contributes": {
+    "commands": [
+      { "id": "upper", "title": "转为大写", "key": "Mod-Alt-u" },
+      { "id": "lower", "title": "转为小写", "key": "Mod-Alt-l" },
+      { "id": "title-case", "title": "标题式大小写", "key": "Mod-Alt-t" },
+      { "id": "sort-asc", "title": "行升序排序", "key": "Mod-Alt-a" },
+      { "id": "sort-desc", "title": "行降序排序", "key": "Mod-Alt-d" },
+      { "id": "dedupe", "title": "删除重复行", "key": "Mod-Alt-e" },
+      { "id": "remove-empty", "title": "删除空行", "key": "Mod-Alt-x" },
+      { "id": "reverse", "title": "反转行序", "key": "Mod-Alt-r" },
+      { "id": "base64-encode", "title": "Base64 编码", "key": "Mod-Alt-b" },
+      { "id": "base64-decode", "title": "Base64 解码", "key": "Mod-Alt-Shift-b" },
+      { "id": "url-encode", "title": "URL 编码", "key": "Mod-Alt-q" },
+      { "id": "json-format", "title": "JSON 格式化", "key": "Mod-Alt-f" },
+      { "id": "align-columns", "title": "按分隔符对齐列", "key": "Mod-Alt-m" }
+    ]
+  }
+}

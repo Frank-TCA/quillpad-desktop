@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2f6feb"/>
+      <stop offset="1" stop-color="#6d3ff0"/>
+    </linearGradient>
+  </defs>
+
+  <!--
+    小尺寸变体（16 / 24 / 32px 用）：
+    1. 去掉羽轴细缝 —— 10/512 的缝缩到 16px 不足 0.4px，只会糊成噪点；
+    2. 剪影加厚并略微向中心收拢，保证 16px 时仍是一个干净的实心形状；
+    3. 圆角从 112 收到 88，四角留给白羽的面积更大。
+    底色与主图标同一条渐变（白羽对比度 ≈ 5.8:1，远高于 3:1 的可读下限）。
+  -->
+  <rect width="512" height="512" rx="88" fill="url(#g)"/>
+
+  <g fill="#ffffff">
+    <path d="M 434 50
+             C 333 69 220 138 172 230
+             C 148 275 129 338 117 381
+             C 184 364 266 328 321 270
+             C 381 208 431 132 434 50 Z"/>
+    <path d="M 129 366 C 118 380 110 390 101 401" fill="none"
+          stroke="#ffffff" stroke-width="36" stroke-linecap="round"/>
+  </g>
+</svg>

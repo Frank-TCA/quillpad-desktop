@@ -1,0 +1,360 @@
+{
+  "version": 1,
+  "source": "QuillPad 兼容性映射（作者自行整理；插件名称与许可标识属各自权利人）",
+  "counts": {
+    "builtin": 12,
+    "port": 12,
+    "unsupported": 16,
+    "installable": 7
+  },
+  "items": [
+    {
+      "no": 1,
+      "nppPlugin": "NppExec",
+      "nppLicense": "GPL-2.0",
+      "status": "unsupported",
+      "quillpadEquivalent": "—",
+      "installable": false,
+      "reason": "需在沙箱外执行任意本地命令；插件模型不提供 Node/子进程权限"
+    },
+    {
+      "no": 2,
+      "nppPlugin": "Python Script",
+      "nppLicense": "GPL-2.0",
+      "status": "unsupported",
+      "quillpadEquivalent": "—",
+      "installable": false,
+      "reason": "需嵌入 Python 运行时与原生绑定（体积 +150MB），且原插件 GPL"
+    },
+    {
+      "no": 3,
+      "nppPlugin": "Compare",
+      "nppLicense": "GPL-2.0",
+      "status": "unsupported",
+      "quillpadEquivalent": "—",
+      "installable": false,
+      "reason": "需独立 diff 视图与三方合并语义，v2 未排期"
+    },
+    {
+      "no": 4,
+      "nppPlugin": "JSON Viewer",
+      "nppLicense": "GPL-3.0",
+      "status": "port",
+      "quillpadEquivalent": "quillpad.dev-tools",
+      "installable": true,
+      "batch": "首版"
+    },
+    {
+      "no": 5,
+      "nppPlugin": "XML Tools",
+      "nppLicense": "GPL-3.0",
+      "status": "unsupported",
+      "quillpadEquivalent": "—",
+      "installable": false,
+      "reason": "需 XPath/XSD 校验引擎，使用频次低，v2 未排期"
+    },
+    {
+      "no": 6,
+      "nppPlugin": "TextFX Characters",
+      "nppLicense": "GPL-2.0",
+      "status": "port",
+      "quillpadEquivalent": "quillpad.text-tools",
+      "installable": true,
+      "batch": "首版"
+    },
+    {
+      "no": 7,
+      "nppPlugin": "NppFTP",
+      "nppLicense": "GPL-2.0",
+      "status": "unsupported",
+      "quillpadEquivalent": "—",
+      "installable": false,
+      "reason": "网络凭据管理与 FTP/SFTP 协议栈，明确不做"
+    },
+    {
+      "no": 8,
+      "nppPlugin": "Explorer",
+      "nppLicense": "MIT",
+      "status": "builtin",
+      "quillpadEquivalent": "v1 文件树（sidebar.js）",
+      "installable": false
+    },
+    {
+      "no": 9,
+      "nppPlugin": "DSpellCheck",
+      "nppLicense": "LGPL/GPL/MPL",
+      "status": "unsupported",
+      "quillpadEquivalent": "—",
+      "installable": false,
+      "reason": "安全分支仅 MPL，中文场景收益低，v2 不引入"
+    },
+    {
+      "no": 10,
+      "nppPlugin": "MarkdownViewer++",
+      "nppLicense": "MIT",
+      "status": "builtin",
+      "quillpadEquivalent": "WYSIWYG + split 预览",
+      "installable": false
+    },
+    {
+      "no": 11,
+      "nppPlugin": "Markdown Panel",
+      "nppLicense": "MIT",
+      "status": "builtin",
+      "quillpadEquivalent": "大纲 + 文档地图",
+      "installable": false
+    },
+    {
+      "no": 12,
+      "nppPlugin": "Preview HTML",
+      "nppLicense": "MIT",
+      "status": "builtin",
+      "quillpadEquivalent": "split 预览",
+      "installable": false
+    },
+    {
+      "no": 13,
+      "nppPlugin": "Converter",
+      "nppLicense": "MIT",
+      "status": "port",
+      "quillpadEquivalent": "quillpad.text-tools",
+      "installable": true,
+      "batch": "首版"
+    },
+    {
+      "no": 14,
+      "nppPlugin": "Column Tools",
+      "nppLicense": "GPL-2.0",
+      "status": "builtin",
+      "quillpadEquivalent": "列选择 + 列编辑",
+      "installable": false
+    },
+    {
+      "no": 15,
+      "nppPlugin": "CSV Lint",
+      "nppLicense": "MIT",
+      "status": "port",
+      "quillpadEquivalent": "quillpad.md-tools",
+      "installable": false,
+      "batch": "后续"
+    },
+    {
+      "no": 16,
+      "nppPlugin": "Emmet",
+      "nppLicense": "MIT",
+      "status": "port",
+      "quillpadEquivalent": "—",
+      "installable": false,
+      "batch": "后续"
+    },
+    {
+      "no": 17,
+      "nppPlugin": "QuickText",
+      "nppLicense": "GPL-2.0",
+      "status": "unsupported",
+      "quillpadEquivalent": "宏（命令序列）部分替代",
+      "installable": false,
+      "reason": "需 snippet 占位符/变量引擎，v2 以命令序列宏替代"
+    },
+    {
+      "no": 18,
+      "nppPlugin": "Snippet",
+      "nppLicense": "GPL-3.0",
+      "status": "unsupported",
+      "quillpadEquivalent": "—",
+      "installable": false,
+      "reason": "需片段仓库与循环占位语义，沙箱不提供文件写入"
+    },
+    {
+      "no": 19,
+      "nppPlugin": "Regex Trainer",
+      "nppLicense": "MIT",
+      "status": "port",
+      "quillpadEquivalent": "quillpad.dev-tools",
+      "installable": true,
+      "batch": "首版"
+    },
+    {
+      "no": 20,
+      "nppPlugin": "Insertion",
+      "nppLicense": "GPL-2.0",
+      "status": "port",
+      "quillpadEquivalent": "quillpad.text-tools",
+      "installable": true,
+      "batch": "首版"
+    },
+    {
+      "no": 21,
+      "nppPlugin": "Speech",
+      "nppLicense": "闭源",
+      "status": "unsupported",
+      "quillpadEquivalent": "—",
+      "installable": false,
+      "reason": "需 Windows SAPI 原生 TTS 绑定，Electron 无标准接口"
+    },
+    {
+      "no": 22,
+      "nppPlugin": "NppCalc",
+      "nppLicense": "GPL-2.0",
+      "status": "unsupported",
+      "quillpadEquivalent": "—",
+      "installable": false,
+      "reason": "需表达式求值引擎；插件沙箱禁用 eval 与 Function"
+    },
+    {
+      "no": 23,
+      "nppPlugin": "RunMe",
+      "nppLicense": "GPL-2.0",
+      "status": "unsupported",
+      "quillpadEquivalent": "—",
+      "installable": false,
+      "reason": "同 NppExec，需要子进程执行能力，沙箱不提供"
+    },
+    {
+      "no": 24,
+      "nppPlugin": "MIME Tools",
+      "nppLicense": "Apache-2.0",
+      "status": "port",
+      "quillpadEquivalent": "quillpad.text-tools",
+      "installable": true,
+      "batch": "首版"
+    },
+    {
+      "no": 25,
+      "nppPlugin": "BetterMultiSelection",
+      "nppLicense": "MIT",
+      "status": "builtin",
+      "quillpadEquivalent": "多光标 + 列编辑",
+      "installable": false
+    },
+    {
+      "no": 26,
+      "nppPlugin": "WebEdit",
+      "nppLicense": "GPL-2.0",
+      "status": "unsupported",
+      "quillpadEquivalent": "—",
+      "installable": false,
+      "reason": "需浏览器内核双向定位，与 WYSIWYG 单一文档模型冲突"
+    },
+    {
+      "no": 27,
+      "nppPlugin": "AutoSave",
+      "nppLicense": "MIT",
+      "status": "builtin",
+      "quillpadEquivalent": "自动保存（1.5s 防抖）",
+      "installable": false
+    },
+    {
+      "no": 28,
+      "nppPlugin": "Bookmark",
+      "nppLicense": "MIT",
+      "status": "unsupported",
+      "quillpadEquivalent": "—",
+      "installable": false,
+      "reason": "书签能力登记为 P2，v2 不实现"
+    },
+    {
+      "no": 29,
+      "nppPlugin": "Code Alignment",
+      "nppLicense": "MIT",
+      "status": "port",
+      "quillpadEquivalent": "quillpad.text-tools",
+      "installable": true,
+      "batch": "首版"
+    },
+    {
+      "no": 30,
+      "nppPlugin": "CCompletion",
+      "nppLicense": "MIT",
+      "status": "port",
+      "quillpadEquivalent": "CodeMirror autocompletion",
+      "installable": false,
+      "batch": "后续"
+    },
+    {
+      "no": 31,
+      "nppPlugin": "Light Explorer",
+      "nppLicense": "MIT",
+      "status": "builtin",
+      "quillpadEquivalent": "文件树 + 命令面板",
+      "installable": false
+    },
+    {
+      "no": 32,
+      "nppPlugin": "LuaScript",
+      "nppLicense": "GPL-2.0",
+      "status": "unsupported",
+      "quillpadEquivalent": "—",
+      "installable": false,
+      "reason": "需 Lua 原生绑定；沙箱不允许嵌入执行引擎"
+    },
+    {
+      "no": 33,
+      "nppPlugin": "NppCrypt",
+      "nppLicense": "MIT",
+      "status": "unsupported",
+      "quillpadEquivalent": "—",
+      "installable": false,
+      "reason": "加密属安全敏感能力，需独立审计，非编辑器核心"
+    },
+    {
+      "no": 34,
+      "nppPlugin": "HTML Tag",
+      "nppLicense": "MIT",
+      "status": "port",
+      "quillpadEquivalent": "括号匹配扩展",
+      "installable": false,
+      "batch": "后续"
+    },
+    {
+      "no": 35,
+      "nppPlugin": "Tags Jump",
+      "nppLicense": "MIT",
+      "status": "port",
+      "quillpadEquivalent": "大纲符号跳转",
+      "installable": false,
+      "batch": "后续"
+    },
+    {
+      "no": 36,
+      "nppPlugin": "File Switcher",
+      "nppLicense": "MIT",
+      "status": "builtin",
+      "quillpadEquivalent": "Tab 切换 + 命令面板",
+      "installable": false
+    },
+    {
+      "no": 37,
+      "nppPlugin": "Session Manager",
+      "nppLicense": "MIT",
+      "status": "builtin",
+      "quillpadEquivalent": "会话持久化",
+      "installable": false
+    },
+    {
+      "no": 38,
+      "nppPlugin": "Document Map",
+      "nppLicense": "MIT",
+      "status": "builtin",
+      "quillpadEquivalent": "文档地图",
+      "installable": false
+    },
+    {
+      "no": 39,
+      "nppPlugin": "Terminal",
+      "nppLicense": "MIT",
+      "status": "unsupported",
+      "quillpadEquivalent": "—",
+      "installable": false,
+      "reason": "内嵌终端需 PTY 与原生模块，与沙箱/签名策略冲突"
+    },
+    {
+      "no": 40,
+      "nppPlugin": "NppMenuSearch",
+      "nppLicense": "MIT",
+      "status": "builtin",
+      "quillpadEquivalent": "命令面板（Mod-Shift-P）",
+      "installable": false
+    }
+  ]
+}

@@ -1,0 +1,100 @@
+appId: com.quillpad.desktop
+productName: QuillPad
+copyright: QuillPad
+
+directories:
+  # 所有构建产物统一收敛到 dist/（不按版本号另建 dist-vx-sx 目录）。
+  # 安装包落在 dist/release/，与 Vite 的前端产物（dist/assets、dist/index.html）共存。
+  # files 中已显式排除 dist/release，避免把安装包再打进 app.asar。
+  output: dist/release
+  buildResources: build
+
+# 直接用 node_modules 里已解包的 Electron（版本由 package.json 的 devDependency 锁死）。
+#
+# 为什么不用默认下载 zip + 解压：默认路径会先把 electron 解压到
+# dist/release/win-unpacked.tmp，再**把整个目录 rename 成 win-unpacked**。本机
+# 环境对这个 rename 稳定返回 EPERM（新写出的 249MB exe 正被杀软实时扫描、目录
+# 句柄未释放），重试 20 次仍失败后回落到「复制 + 删除源目录」，而删除 74 个文件
+# 又会撞上环境的批量删除保护 —— 打包在这里必挂。
+# 指定一个「已解包的 electron 目录」后走的是 emptyDir + copyDir 分支，全程没有
+# 目录 rename，也不产生需要批量删除的中间目录，构建稳定。
+electronDist: node_modules/electron/dist
+
+# 只打包运行期真正需要的三样东西：
+#   dist/    前端产物（Vite 已把所有依赖内联进去）
+#   desktop/ Electron 壳代码
+#   icon.png 窗口图标
+# node_modules 一律排除 —— 壳只用 Node/Electron 内置模块，带上会白白多出几十 MB。
+files:
+  - dist/**/*
+  - desktop/**/*
+  - build/icon.png
+  - package.json
+  # 合规交付物（QA D-1 双保险②）：licenses/ 目录随包进 app.asar，
+  # 任何 target 下都能在包内检索到许可全文，不依赖 resources/ 是否被裁剪。
+  - licenses/**/*
+  - '!**/*.map'
+  # 安装包输出目录（dist/release 以及临时的 dist/release-verify*）不能被打进
+  # app.asar，否则会自我嵌套：第一次踩到时 2.2 GB 的 nsis.7z 把安装包撑爆。
+  - '!dist/release*/**/*'
+
+# ------------------------------------------------------------------ 合规交付物
+# PRD §4.F3-2 / ARCH T17③ / QA D-1：许可声明与 OFL 全文必须随**安装包**分发，
+# 目标路径是 <安装目录或便携解包目录>/resources/licenses/。
+# extraResources 的目的地相对 resources/，NSIS 与 portable 两个 target 都走
+# win-unpacked/，因此两份产物都会带上；打包后另行解包实测（见交付报告）。
+extraResources:
+  - from: build/THIRD-PARTY-NOTICES.txt
+    to: licenses/THIRD-PARTY-NOTICES.txt
+  - from: src/assets/fonts/OFL.txt
+    to: licenses/OFL.txt
+
+asar: true
+compression: maximum
+
+# 打包后钩子：用 rcedit 手动写 exe 图标 + 版本元数据（因 signAndEditExecutable: false）
+afterPack: build/after-pack.cjs
+
+win:
+  icon: build/icon.ico
+  # winCodeSign-2.6.0 无法下载（GitHub 504 + 国内镜像缺失），跳过 rcedit 内嵌步骤；
+  # 图标与版本元数据由 afterPack 钩子 (build/after-pack.cjs) 手动补写。
+  signAndEditExecutable: false
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  # 产物名带 v 前缀：界面上、下载页上看到的版本号一律是 v1.0.0 这种写法
+  artifactName: QuillPad-v${version}-${arch}.${ext}
+
+# ---------------------------------------------------------------- 安装版
+nsis:
+  artifactName: QuillPad-Setup-v${version}.${ext}
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: QuillPad
+  uninstallDisplayName: QuillPad 文本编辑器
+  # 卸载时连同 %APPDATA%\QuillPad 一起删除（会话、主题、最近文件、句柄缓存）
+  deleteAppDataOnUninstall: true
+  # 右键菜单 / 文件关联 / 额外痕迹清理
+  include: build/installer.nsh
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeaderIcon: build/icon.ico
+  installerLanguages:
+    - zh_CN
+  language: '2052'
+  runAfterFinish: true
+
+# ---------------------------------------------------------------- 便携版
+portable:
+  # 单文件、免安装，双击即运行；数据写在同目录的 QuillPad-Data 里，删掉即彻底清除
+  artifactName: QuillPad-v${version}-portable.${ext}
+  requestExecutionLevel: user
+  unpackDirName: QuillPad

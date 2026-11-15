@@ -1,0 +1,290 @@
+%% QuillPad v2 · 类图（核心数据结构与服务类）
+%% 与 docs/ARCH-v2.md §4 一致
+
+classDiagram
+  %% ---------------------------------------------------------------- 编辑器
+  class EditorManager {
+    +Map~string,EditorState~ states
+    +Map~string,number~ scrollTops
+    +Map~string,string~ loadedLang
+    +string activeTabId
+    +Compartment themeCompartment
+    +Compartment langCompartment
+    +Compartment appearanceCompartment
+    +Compartment keymapCompartment
+    +Compartment wysiwygCompartment
+    +EditorView view
+    +__init__(host, opts)
+    +createState(tab) EditorState
+    +switchTo(tab) void
+    +setWysiwyg(ext) void
+    +setTheme(id) void
+    +setAppearance(patch) void
+    +setAppKeymap(bindings) void
+    +scrollToRatio(r) void
+    +gotoPos(pos, len) void
+    +getContent() string
+  }
+
+  class ViewModeUtil {
+    <<module>>
+    +effectiveViewMode(tab, ctx) ViewMode
+    +nextViewMode(cur) ViewMode
+    +isMarkdownOnly(language) boolean
+  }
+
+  class WysiwygExtension {
+    <<module createWysiwygExtension>>
+    +enabled() boolean
+    +features WysiwygFeatures
+    +getDocDir() string
+    +runCommand(id, args) void
+    +toast(msg, kind) void
+  }
+
+  class BlockField {
+    <<StateField>>
+    +decorations DecorationSet
+    +computeBlocks(state, ctx) DecorationSet
+  }
+
+  class InlinePlugin {
+    <<ViewPlugin>>
+    +decorations DecorationSet
+    +atomic RangeSet
+    +computeInline(u) Result
+    +activeLines Set~number~
+  }
+
+  class ScanMarkdown {
+    <<module>>
+    +scanMarkdown(state, window) ScanResult
+  }
+
+  class MarksSpec {
+    <<module>>
+    +hidden(kind) Decoration
+    +revealed(kind) Decoration
+    +content(node) Decoration
+  }
+
+  class Widgets {
+    <<module>>
+    +HrWidget
+    +FenceHeadWidget
+    +FrontmatterWidget
+    +TocWidget
+    +TaskWidget
+    +ImageWidget
+    +MathWidget
+    +FootnoteRefWidget
+  }
+
+  %% ---------------------------------------------------------------- 表格
+  class TableModel {
+    +number from
+    +number to
+    +string[] headers
+    +TableAlign[] aligns
+    +string[][] rows
+    +number[] widths
+    +string[] rawLines
+  }
+
+  class TableModelModule {
+    <<module>>
+    +parseTable(text, from, to) TableModel
+    +serializeTable(model) SerializeResult
+    +computeWidths(model) number[]
+    +escapeCell(v) string
+    +unescapeCell(v) string
+  }
+
+  class TableOps {
+    <<module>>
+    +applyTableOp(model, op, at) TableModel
+  }
+
+  class TableWidget {
+    +TableModel model
+    +number activeRow
+    +number activeCol
+    +toDOM() HTMLElement
+    +eq(other) boolean
+    +ignoreEvent() boolean
+    +openCellEditor(r, c) void
+    +commit() void
+  }
+
+  %% ---------------------------------------------------------------- 打印
+  class PrintBuilder {
+    <<module print.js>>
+    +buildPrintHtml(doc, opts) PrintHtml
+    +exportPdf(app, tab, opts, ctrl) ExportResult
+    +printDocument(app, tab, opts) Result
+    +measureTocPages(win) number
+  }
+
+  class PdfOptions {
+    +string paper
+    +number customWidth
+    +number customHeight
+    +string orientation
+    +Margin margin
+    +string theme
+    +string codeTheme
+    +number imageMaxWidth
+    +string pageNumber
+    +boolean toc
+    +HeaderFooter header
+    +HeaderFooter footer
+    +string fileName
+    +string dir
+  }
+
+  class PrintFonts {
+    <<module>>
+    +loadPrintFonts() Promise~FontSet~
+    +toBase64(buf) string
+  }
+
+  class DesktopBridge {
+    <<module desktop.js>>
+    +hasDesktop() boolean
+    +exportPdfViaDesktop(payload) Promise~Result~
+    +printViaDesktop(payload) Promise~Result~
+    +copyFile(payload) Promise~Result~
+    +pluginInstall(payload) Promise~Result~
+    +readMacros() Promise~Macro[]~
+  }
+
+  %% ---------------------------------------------------------------- 宏
+  class Macro {
+    +string id
+    +string name
+    +number createdAt
+    +1 version
+    +MacroStep[] steps
+  }
+
+  class MacroStep {
+    +string cmd
+    +object args
+    +Selection sel
+    +number delay
+  }
+
+  class MacroRecorder {
+    <<module macro.js>>
+    +setCommandRecorder(fn) void
+    +startRecording(app) Result
+    +stopRecording(name) Promise~Macro~
+    +playMacro(macro, app) Promise~PlayResult~
+    +loadMacros() Promise~Macro[]~
+    +saveMacros(list) Promise~boolean~
+    +NON_REPLAYABLE Set~string~
+  }
+
+  %% ---------------------------------------------------------------- 插件
+  class PluginManifest {
+    +string id
+    +string name
+    +string description
+    +string author
+    +string version
+    +string license
+    +Engines engines
+    +string main
+    +string[] permissions
+    +Contributes contributes
+  }
+
+  class ManifestModule {
+    <<module>>
+    +validateManifest(raw, ctx) ValidateResult
+    +staticScan(source, fileName) ScanResult
+    +satisfies(version, range) boolean
+  }
+
+  class PluginHost {
+    +Map~string,Installed~ installed
+    +Map~string,Sandbox~ sandboxes
+    +prepareInstall(src) Promise~Result~
+    +install(payload) Promise~Result~
+    +enable(id) Promise~Result~
+    +disable(id) Promise~Result~
+    +uninstall(id) Promise~Result~
+    +update(id) Promise~Result~
+    +registerContributions(manifest) void
+    +unregisterContributions(id) void
+  }
+
+  class Sandbox {
+    +Worker worker
+    +string pluginId
+    +number lastBeat
+    +createSandbox(opts) Sandbox
+    +post(msg) void
+    +terminate() void
+    +alive() boolean
+    +buildPrelude(pluginId, api) string
+  }
+
+  class RpcChannel {
+    +number inflight
+    +Map~string,Pending~ pending
+    +invoke(pluginId, method, params) Promise~any~
+    +handleIncoming(msg) void
+    +RPC_TIMEOUT_MS number
+    +RPC_MAX_INFLIGHT number
+    +HEARTBEAT_MS number
+  }
+
+  class PluginApi {
+    <<module api.js>>
+    +createPluginApi(opts) ApiMap
+    +PERMISSION_ERROR Map~string,string~
+    +checkPermission(perm) void
+  }
+
+  class CatalogService {
+    <<module catalog.js>>
+    +load(remoteUrl) Promise~CatalogEntry[]~
+    +search(q, filters) CatalogEntry[]
+    +sortBy(mode) CatalogEntry[]
+    +statusOf(entry, installed) string
+  }
+
+  class NppCompat {
+    <<module npp-compat.js>>
+    +load() Promise~NppCompatEntry[]~
+    +normalize(name) string
+    +match(detected) ReportItem[]
+    +buildReport(items) string
+  }
+
+  %% ---------------------------------------------------------------- 关系
+  EditorManager "1" *-- "1" WysiwygExtension : wysiwygCompartment
+  WysiwygExtension *-- BlockField
+  WysiwygExtension *-- InlinePlugin
+  InlinePlugin ..> ScanMarkdown : uses
+  BlockField ..> ScanMarkdown : uses
+  InlinePlugin ..> MarksSpec : uses
+  BlockField ..> Widgets : uses
+  BlockField ..> TableWidget : uses
+  TableWidget --> TableModel
+  TableWidget ..> TableOps : commit via
+  TableModelModule ..> TableModel : create
+  EditorManager ..> ViewModeUtil : mode
+  PrintBuilder ..> PdfOptions : reads
+  PrintBuilder ..> PrintFonts : uses
+  PrintBuilder ..> DesktopBridge : IPC
+  MacroRecorder ..> DesktopBridge : persist
+  PluginHost "1" --> "0..*" Sandbox : spawns
+  PluginHost --> CatalogService : market
+  PluginHost ..> ManifestModule : validate
+  PluginHost --> PluginApi : exposes
+  Sandbox "1" *-- "1" RpcChannel
+  RpcChannel ..> PluginApi : dispatch
+  PluginApi --> EditorManager : editor.*
+  NppCompat ..> PluginHost : port install

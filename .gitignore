@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Build + release output (regenerable via `npm run build` / `npm run build:exe`).
+# Everything is funneled into dist/: the Vite bundle at dist/ root and the
+# electron-builder installers under dist/release/. Installers are distributed
+# through GitHub Releases, never committed to the repo (each exe >100 MB).
+dist/
+# 打包验证用的临时输出目录（electron-builder -c.directories.output=dist-verify）
+dist-*/
+
+# 卸载器编译的临时产物（成功后会被移动到 dist/release/，失败时可能残留）
+build/_uninstaller-*.exe
+
+# Runtime data
+QuillPad-Data/
+
+# Workspace-local tooling state
+.workbuddy/
+
+# 内部文档（PRD、内部变更记录、QA 审计）不随开源仓库发布，存放于仓库外的私有目录
+docs/internal/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# 回归脚本生成的截图
+shots/

@@ -1,0 +1,167 @@
+%% QuillPad v2 · 关键时序图（4 幅）
+%% 与 docs/ARCH-v2.md §2.2–§2.6 一致
+
+%% ---------------------------------------------------------------- ① PDF 导出
+sequenceDiagram
+  autonumber
+  actor U as 用户
+  participant DLG as pdf-dialog.js
+  participant P as print.js
+  participant F as print-fonts.js
+  participant D as desktop.js
+  participant PR as preload.cjs
+  participant IP as ipcMain
+  participant W as 隐藏 BrowserWindow
+  participant FS as 磁盘
+
+  U->>DLG: Ctrl+Shift+E / 工具栏「导出 PDF」
+  DLG->>P: buildPrintHtml(doc, opts)（首屏缩略，300ms 防抖）
+  P->>F: loadPrintFonts() -> base64（首次 fetch woff2，之后内存缓存）
+  P->>P: renderMarkdown(doc, {toc:false}) + 打印 CSS
+  P-->>DLG: 自包含 HTML（无外链、无 script）
+  DLG->>DLG: iframe srcdoc 渲染缩略图
+  U->>DLG: 调整纸张/边距/页码/目录页 -> 点「导出 PDF」
+  DLG->>P: exportPdf(app, tab, opts, {onProgress})
+  P->>P: 阶段1 解析 Markdown
+  P->>F: 阶段2 版式计算（字体 base64 / 图片 data URL）
+  P->>P: 阶段3 渲染页面（@page + 分页规则）
+  alt 有 window.quillpadDesktop.exportPdf
+    P->>D: exportPdfViaDesktop({html, options, suggestedName})
+    D->>PR: ipcRenderer.invoke('qp:export-pdf', payload)
+    PR->>IP: ipcMain.handle('qp:export-pdf')
+    IP->>FS: 写 <temp>/quillpad-print-<ts>.html
+    IP->>W: new BrowserWindow({show:false, sandbox:true})
+    IP->>W: loadFile(tempHtml)
+    W-->>IP: did-finish-load
+    IP->>W: executeJavaScript('document.fonts.ready.then(()=>1)')
+    IP->>W: executeJavaScript('__qpMeasureToc()') -> 目录页码（±1 页）
+    IP->>W: printToPDF({pageSize, printBackground, preferCSSPageSize, displayHeaderFooter, headerTemplate, footerTemplate, landscape})
+    W-->>IP: Buffer
+    IP->>W: win.destroy()
+    IP->>FS: 未指定路径 -> dialog.showSaveDialog -> 写 PDF
+    IP-->>PR: {ok:true, path, bytes}
+    PR-->>D: resolve
+    D-->>P: {ok:true, path}
+  else 浏览器降级
+    P->>P: window.open() + document.write(html) + print()
+    P-->>DLG: {ok:true, degraded:true}
+  end
+  P-->>DLG: 阶段4 写入完成
+  DLG-->>U: toast + 关闭对话框
+
+%% ------------------------------------------------- ② WYSIWYG 光标进出同一行
+sequenceDiagram
+  autonumber
+  participant K as 键盘/鼠标
+  participant CM as EditorView
+  participant VP as wysiwyg ViewPlugin（行内）
+  participant SF as wysiwyg StateField（块级）
+  participant DOM as .cm-line / widget
+
+  Note over CM: 初始：光标在他行，本行标记折叠为零宽 span
+  K->>CM: ArrowDown 进入第 N 行
+  CM->>CM: dispatch({selection}) -> tr.selection
+  CM->>VP: update(u: selectionSet=true)
+  VP->>VP: activeLines = 所有选区区间覆盖的行
+  VP->>VP: 只遍历 view.visibleRanges 重建 RangeSet
+  VP->>DOM: 第 N 行 EmphasisMark/HeaderMark -> .qp-md-mark[data-qp-mark]
+  CM->>SF: update(tr.selection) 同步执行
+  SF->>SF: 第 N 行含块级节点（表格/围栏/front matter）-> 撤销 replace，改发行装饰
+  SF->>DOM: 块源码以 --text-faint 浮现
+  Note over DOM: 同帧完成（<=16ms），静止类不做位移动画
+  K->>CM: ArrowDown 离开第 N 行
+  CM->>VP: update(selectionSet=true)
+  VP->>VP: 第 N 行不再 active -> 标记回零宽（.qp-md-hide，无 data-qp-mark）
+  VP->>DOM: 宽度归零，正文右移回原位
+  CM->>SF: update(tr.selection)
+  SF->>DOM: 块级节点重新 replace 成 widget
+  Note over CM: viewportChanged -> VP 同步重算（不放 rAF，避免滚动闪烁）<br/>docChanged -> 两层重算，StateField 用 map 保留未变区
+
+%% ---------------------------------------------------------- ③ 表格单元格提交
+sequenceDiagram
+  autonumber
+  actor U as 用户
+  participant TW as TableWidget（DOM）
+  participant OV as 浮层 input
+  participant TM as table-model.js
+  participant CM as EditorView
+  participant APP as app.js
+
+  U->>TW: 单击单元格 (r,c)
+  TW->>TW: e.stopPropagation() + preventDefault()
+  TW->>OV: 按 cell.getBoundingClientRect() 定位并显示
+  OV->>OV: value = 单元原始源文本（已反转义 \\| 与 <br>）
+  U->>OV: 输入 + Enter
+  OV->>TM: serializeTable(applyCellEdit(model, r, c, value))
+  TM-->>OV: {text, from, to}
+  OV->>CM: view.dispatch({changes:{from,to,insert:text}})
+  CM->>APP: updateListener -> handleContentChange（自动保存/大纲/预览）
+  CM->>CM: StateField 重算 -> widget 以新模型重建（colgroup 宽度由纯函数重算）
+  OV->>OV: blur + hide
+  Note over U,CM: Mod-Z -> 文档回退 -> 模型回退 -> colgroup 宽度数组逐项相同
+
+%% ------------------------------------------------------------- ④ 插件 RPC 调用
+sequenceDiagram
+  autonumber
+  actor U as 用户
+  participant PAL as palette/menubar
+  participant H as plugins/host.js
+  participant R as plugins/rpc.js
+  participant SB as Worker（沙箱）
+  participant API as plugins/api.js
+  participant CM as EditorView
+
+  U->>PAL: 执行「插件：JSON 格式化」
+  PAL->>H: runCommand('plugin.quillpad.text-tools.jsonFormatToggle')
+  H->>R: invoke(pluginId, 'command.invoke', {cmdId:'jsonFormatToggle'})
+  R->>SB: postMessage({v:1,id,method:'command.invoke',params})
+  Note over R: 10s 超时 / 16 并发上限 / 心跳 5s
+  SB->>SB: 插件 main.js 处理器执行
+  SB->>R: postMessage({v:1,id,method:'editor.getSelection'})
+  R->>API: call('editor.getSelection')
+  API->>API: 权限校验 editor:read -> 未声明则 EPERM_EDITOR_READ
+  API->>CM: state.sliceDoc(sel.from, sel.to)
+  API-->>R: {text}
+  R-->>SB: {v:1,id,ok:true,data:{text}}
+  SB->>SB: 计算 JSON 缩进结果
+  SB->>R: postMessage({v:1,id,method:'editor.replaceSelection',params:{text}})
+  R->>API: call('editor.replaceSelection')
+  API->>CM: view.dispatch(replaceSelection(text))
+  API-->>R: {ok:true}
+  SB-->>R: {v:1,id:原始请求,ok:true,data:{changed:1}}
+  R-->>H: resolve
+  H-->>PAL: {ok:true}
+
+%% ---------------------------------------------------------- ⑤ 插件安装管线（补充）
+sequenceDiagram
+  autonumber
+  actor U as 用户
+  participant MKT as plugin-panel
+  participant DLG as plugin-install-dialog
+  participant H as plugins/host.js
+  participant MF as plugins/manifest.js
+  participant D as desktop.js
+  participant IP as ipcMain
+  participant PFS as plugin-fs.cjs
+  participant FS as 磁盘
+
+  U->>MKT: 点「安装」quillpad.text-tools
+  MKT->>H: prepareInstall({source:'catalog', id})
+  H->>D: fetchPluginBundle({download, sha256})
+  D->>IP: qp:plugin-install
+  IP->>PFS: 解压到 temp -> sha256 校验 -> realpath 校验 -> 原子 rename
+  PFS-->>IP: {ok:true, path}
+  IP-->>D: {ok:true}
+  H->>MF: validateManifest(plugin.json)
+  alt license 不在白名单 / engines 不匹配 / schema 非法
+    MF-->>H: {ok:false, code:'ELICENSE'|'EENGINE'|'ESCHEMA'}
+    H-->>DLG: 拒绝（展示原文）
+    DLG-->>U: 弹窗「License 不在白名单」/「需要 QuillPad 3.x」
+    Note over FS: 不创建 %APPDATA%/QuillPad/plugins/<id>
+  else 通过
+    H->>MF: staticScan(main.js) -> 命中 eval(/new Function/require(/process./__dirname/document./fetch(/<script src="http
+    MF-->>H: {ok:true} 或 {ok:false, code:'ESCAN', line:42}
+    H->>H: state.enabled[id]=true -> plugins-state.json
+    H->>H: 加载沙箱 -> 注册 contributes.commands
+    H-->>U: toast「已安装并启用（13 条命令）」
+  end

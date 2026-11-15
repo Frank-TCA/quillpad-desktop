@@ -1,0 +1,418 @@
+/* ==========================================================================
+   QuillPad · 主题变量
+   所有颜色都通过 CSS 变量下发，主题切换只改 :root[data-theme] 上的变量集合。
+   四套主题：aurora（默认深色）/ ivory（浅色）/ nord / solarized（浅色）
+   ========================================================================== */
+
+:root {
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", "Fira Code", Consolas,
+    "Microsoft YaHei", monospace;
+
+  /* 小控件统一 5px 圆角；.tab / .sidebar__tab 属于「标签页」语义，保持 0（见 layout.css 注释） */
+  --radius-xs: 5px;
+  --radius-sm: 5px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-pill: 999px;
+
+  --tr: 120ms ease;
+  --tr-slow: 200ms cubic-bezier(0.22, 1, 0.36, 1);
+
+  --shadow-pop: 0 8px 28px rgba(0, 0, 0, 0.45);
+  --shadow-soft: 0 2px 10px rgba(0, 0, 0, 0.25);
+  --shadow-glow: 0 0 0 1px var(--border), 0 12px 32px rgba(0, 0, 0, 0.4);
+
+  /* 组件尺寸 */
+  --h-titlebar: 38px;
+  --h-menubar: 30px;
+  --h-toolbar: 40px;
+  --h-tabbar: 34px;
+  --h-statusbar: 26px;
+  --w-sidebar: 248px;
+
+  --z-menu: 900;
+  --z-panel: 700;
+  --z-overlay: 1000;
+  --z-toast: 1200;
+
+  /* --------------------------------------------------- v2 · 排版 token（D2）
+     统一供给「预览 / WYSIWYG / PDF」三处；颜色类 token 一律引用主题变量，
+     因此 4 套主题无需各写一份数值。 */
+  --qp-body-size: 16px;
+  --qp-body-leading: 1.75;
+  --qp-para-gap: 0.9em;
+  /* WYSIWYG 里源码空行压缩后的高度：等于预览 `.markdown-body p` 的段落外边距。
+     两者必须一致，否则同一份文档在两种视图里段落节奏不同。 */
+  --qp-blank-h: 12px;
+  --qp-measure: 46em;
+
+  --qp-h1-size: 1.9em;
+  --qp-h1-weight: 680;
+  --qp-h1-gap-top: 2.6em;
+  --qp-h1-gap-bottom: 0.7em;
+  --qp-h2-size: 1.45em;
+  --qp-h2-weight: 680;
+  --qp-h2-gap-top: 2.2em;
+  --qp-h2-gap-bottom: 0.6em;
+  --qp-h3-size: 1.22em;
+  --qp-h3-weight: 680;
+  --qp-h3-gap-top: 1.9em;
+  --qp-h3-gap-bottom: 0.5em;
+  --qp-h4-size: 1em;
+  --qp-h4-weight: 680;
+  --qp-h4-gap-top: 1.7em;
+  --qp-h4-gap-bottom: 0.6em;
+  --qp-h5-size: 1em;
+  --qp-h5-weight: 620;
+  --qp-h6-size: 0.94em;
+  --qp-h6-weight: 620;
+
+  --qp-code-inline-size: 0.86em;
+  --qp-code-size: 0.85em;
+  --qp-code-leading: 1.65;
+  --qp-code-pad-y: 14px;
+  --qp-code-pad-x: 16px;
+  /* 代码块与上下文的间距（= 预览 pre 的 1em margin） */
+  --qp-code-gap: 16px;
+  --qp-code-radius: 8px;
+
+  --qp-quote-bar: 3px;
+  --qp-quote-indent: 15px;
+  --qp-table-size: 0.92em;
+  --qp-cell-pad: 7px 12px;
+  --qp-task-size: 16px;
+  --qp-hr-margin: 32px;
+  --qp-img-radius: 8px;
+  --qp-img-max: 100%;
+  --qp-toc-size: 13px;
+  --qp-fm-size: 12.5px;
+
+  --qp-mark-color: var(--text-faint);
+  --qp-focus-dim: 0.35;
+
+  --qp-motion-fast: 120ms;
+  --qp-motion-state: 180ms;
+  --qp-motion-panel: 240ms;
+  --qp-ease: cubic-bezier(0.2, 0, 0, 1);
+
+  color-scheme: dark;
+}
+
+/* 「减少动效」：三档时长统一归零（设置项写入 html[data-reduce-motion]）。
+   系统偏好 `prefers-reduced-motion: reduce` 与设置项双通道生效，任一开启即关闭过渡。 */
+html[data-reduce-motion="true"] {
+  --qp-motion-fast: 0ms;
+  --qp-motion-state: 0ms;
+  --qp-motion-panel: 0ms;
+  --tr: 0s;
+  --tr-slow: 0s;
+  --qp-ease: linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --qp-motion-fast: 0ms;
+    --qp-motion-state: 0ms;
+    --qp-motion-panel: 0ms;
+    --tr: 0s;
+    --tr-slow: 0s;
+    --qp-ease: linear;
+  }
+}
+
+/* ---------------------------------------------------------------- Aurora Dark */
+:root[data-theme="aurora"] {
+  --bg: #0a0c10;
+  --bg-editor: #0d1015;
+  --bg-panel: #151a21;
+  --bg-elevated: #1b2029;
+  --bg-hover: #1c2229;
+  --bg-active: #202832;
+  --bg-input: #0b0e13;
+
+  --border: #232a34;
+  --border-strong: #2e3742;
+
+  --text: #dbe3ec;
+  --text-dim: #8b97a6;
+  --text-faint: #5d6775;
+
+  --accent: #6ea8fe;
+  --accent-2: #b48cff;
+  --accent-contrast: #0a0c10;
+  --accent-soft: rgba(110, 168, 254, 0.14);
+  --accent-soft-2: rgba(180, 140, 255, 0.14);
+
+  --danger: #ef6a6a;
+  --danger-soft: rgba(239, 106, 106, 0.14);
+  --success: #4ec9a8;
+  --success-soft: rgba(78, 201, 168, 0.14);
+  --warning: #e2b341;
+  --warning-soft: rgba(226, 179, 65, 0.14);
+
+  --scrollbar: #3a444f;
+  --scrollbar-hover: #55626f;
+
+  --gradient-brand: linear-gradient(135deg, #6ea8fe 0%, #b48cff 100%);
+  --gradient-glow: radial-gradient(
+    circle at 50% 40%,
+    rgba(110, 168, 254, 0.18),
+    rgba(180, 140, 255, 0.08) 45%,
+    transparent 70%
+  );
+  color-scheme: dark;
+}
+
+/* ----------------------------------------------------------------- Ivory Light */
+:root[data-theme="ivory"] {
+  --bg: #f4f5f7;
+  --bg-editor: #ffffff;
+  --bg-panel: #f5f6f9;
+  --bg-elevated: #ffffff;
+  --bg-hover: #eceef2;
+  --bg-active: #e3e7ee;
+  --bg-input: #ffffff;
+
+  --border: #dfe3e9;
+  --border-strong: #c8ced8;
+
+  --text: #1c2126;
+  --text-dim: #5d6673;
+  --text-faint: #8d96a3;
+
+  --accent: #2563eb;
+  --accent-2: #7c3aed;
+  --accent-contrast: #ffffff;
+  --accent-soft: rgba(37, 99, 235, 0.1);
+  --accent-soft-2: rgba(124, 58, 237, 0.1);
+
+  --danger: #d93a3a;
+  --danger-soft: rgba(217, 58, 58, 0.1);
+  --success: #12805c;
+  --success-soft: rgba(18, 128, 92, 0.1);
+  --warning: #a8700a;
+  --warning-soft: rgba(168, 112, 10, 0.12);
+
+  --scrollbar: #b9c1cc;
+  --scrollbar-hover: #8e99a8;
+
+  --gradient-brand: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+  --gradient-glow: radial-gradient(
+    circle at 50% 40%,
+    rgba(37, 99, 235, 0.12),
+    rgba(124, 58, 237, 0.06) 45%,
+    transparent 70%
+  );
+  --shadow-pop: 0 8px 28px rgba(28, 33, 38, 0.16);
+  --shadow-soft: 0 2px 10px rgba(28, 33, 38, 0.08);
+  color-scheme: light;
+}
+
+/* ------------------------------------------------------------------------ Nord */
+:root[data-theme="nord"] {
+  --bg: #21252b;
+  --bg-editor: #2b3038;
+  --bg-panel: #232830;
+  --bg-elevated: #2f353e;
+  --bg-hover: #363d48;
+  --bg-active: #3d4552;
+  --bg-input: #22262c;
+
+  --border: #39424e;
+  --border-strong: #4a5563;
+
+  --text: #dfe6f0;
+  --text-dim: #9aa7b8;
+  --text-faint: #6b7889;
+
+  --accent: #88c0d0;
+  --accent-2: #b48ead;
+  --accent-contrast: #1b1f24;
+  --accent-soft: rgba(136, 192, 208, 0.16);
+  --accent-soft-2: rgba(180, 142, 173, 0.16);
+
+  --danger: #e0787c;
+  --danger-soft: rgba(224, 120, 124, 0.14);
+  --success: #a3be8c;
+  --success-soft: rgba(163, 190, 140, 0.14);
+  --warning: #ebcb8b;
+  --warning-soft: rgba(235, 203, 139, 0.14);
+
+  --scrollbar: #4a5563;
+  --scrollbar-hover: #6b7a8c;
+
+  --gradient-brand: linear-gradient(135deg, #88c0d0 0%, #b48ead 100%);
+  --gradient-glow: radial-gradient(
+    circle at 50% 40%,
+    rgba(136, 192, 208, 0.16),
+    rgba(180, 142, 173, 0.08) 45%,
+    transparent 70%
+  );
+  color-scheme: dark;
+}
+
+/* --------------------------------------------------------------- Solarized Light */
+:root[data-theme="solarized"] {
+  --bg: #eee8d5;
+  --bg-editor: #fdf6e3;
+  --bg-panel: #f5efdc;
+  --bg-elevated: #fdf6e3;
+  --bg-hover: #e9e2cd;
+  --bg-active: #e0d8c1;
+  --bg-input: #fdf6e3;
+
+  --border: #ded6bd;
+  --border-strong: #c6bda2;
+
+  --text: #40525f;
+  --text-dim: #4f6270;
+  --text-faint: #93a1a1;
+
+  --accent: #268bd2;
+  --accent-2: #6c71c4;
+  --accent-contrast: #fdf6e3;
+  --accent-soft: rgba(38, 139, 210, 0.12);
+  --accent-soft-2: rgba(108, 113, 196, 0.12);
+
+  --danger: #dc322f;
+  --danger-soft: rgba(220, 50, 47, 0.1);
+  --success: #5b7300;
+  --success-soft: rgba(91, 115, 0, 0.12);
+  --warning: #b58900;
+  --warning-soft: rgba(181, 137, 0, 0.12);
+
+  --scrollbar: #bfb494;
+  --scrollbar-hover: #9c906f;
+
+  --gradient-brand: linear-gradient(135deg, #268bd2 0%, #6c71c4 100%);
+  --gradient-glow: radial-gradient(
+    circle at 50% 40%,
+    rgba(38, 139, 210, 0.12),
+    rgba(108, 113, 196, 0.06) 45%,
+    transparent 70%
+  );
+  --shadow-pop: 0 8px 28px rgba(64, 82, 95, 0.18);
+  --shadow-soft: 0 2px 10px rgba(64, 82, 95, 0.08);
+  color-scheme: light;
+}
+
+/* ------------------------------------------------------------------ 全局重置 */
+* {
+  box-sizing: border-box;
+}
+
+/* hidden 属性必须永远生效（避免被组件里的 display 规则覆盖） */
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  outline: none;
+}
+
+/* 键盘可达性：上面的按钮重置清掉了 outline，这里为键盘导航补回统一的焦点环。
+   使用 :focus-visible，鼠标点击不会出现焦点环，只在 Tab / 方向键导航时出现。 */
+button:focus-visible,
+[role="menuitem"]:focus-visible,
+[role="tab"]:focus-visible,
+[role="option"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+input,
+textarea,
+select {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+/* ------------------------------------------------------------- 细滚动条（自绘） */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar);
+  border-radius: var(--radius-pill);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background var(--tr);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-hover);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.icon {
+  display: block;
+  flex: none;
+}
+
+/* 主题过渡（只给背景/颜色加，避免布局抖动） */
+.app,
+.titlebar,
+.menubar,
+.toolbar,
+.statusbar,
+.sidebar,
+.tabbar,
+.editor-pane {
+  transition: background-color var(--tr-slow), border-color var(--tr-slow),
+    color var(--tr-slow);
+}
+
+/* --------------------------------------------------------- 5 色文本标记 */
+.qp-tmark--red { background: color-mix(in srgb, #e5484d 26%, transparent); }
+.qp-tmark--yellow { background: color-mix(in srgb, #f5a623 28%, transparent); }
+.qp-tmark--green { background: color-mix(in srgb, #46a758 26%, transparent); }
+.qp-tmark--blue { background: color-mix(in srgb, #3b82f6 26%, transparent); }
+.qp-tmark--purple { background: color-mix(in srgb, #8e4ec6 26%, transparent); }

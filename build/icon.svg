@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- 品牌 2.0.0：底色加深（白羽对它 ≥ 4.5:1），保证 16px 下仍然「看得清」 -->
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2f6feb"/>
+      <stop offset="1" stop-color="#6d3ff0"/>
+    </linearGradient>
+
+    <!-- 羽轴：在羽毛上挖出一道细缝，透出底色，形成羽轴的效果 -->
+    <mask id="vein">
+      <rect width="512" height="512" fill="#ffffff"/>
+      <path d="M 372 126 C 300 176 232 250 178 326"
+            fill="none" stroke="#000000" stroke-width="10" stroke-linecap="round"/>
+    </mask>
+  </defs>
+
+  <rect width="512" height="512" rx="112" fill="url(#g)"/>
+
+  <g fill="#ffffff">
+    <!-- 羽毛主体：尖端在右上，向左下收窄；下缘更鼓，上缘较直 -->
+    <path mask="url(#vein)"
+          d="M 396 96
+             C 318 110 232 164 194 236
+             C 176 272 160 322 150 356
+             C 196 344 258 318 302 274
+             C 348 226 394 158 396 96 Z"/>
+    <!-- 笔杆：与羽毛根部衔接，短而细 -->
+    <path d="M 158 344 C 150 354 144 362 138 370" fill="none"
+          stroke="#ffffff" stroke-width="20" stroke-linecap="round"/>
+  </g>
+</svg>

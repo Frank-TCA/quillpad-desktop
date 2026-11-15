@@ -1,0 +1,1362 @@
+/* ==========================================================================
+   QuillPad · 骨架布局
+   标题栏 / 菜单栏 / 工具栏 / 侧栏 / 标签栏 / 编辑区 / 状态栏 / 欢迎页
+   ========================================================================== */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background: var(--bg);
+  position: relative;
+}
+
+/* ------------------------------------------------------------------ 1. 标题栏 */
+.titlebar {
+  height: var(--h-titlebar);
+  flex: none;
+  display: grid;
+  grid-template-columns: 200px 1fr 200px;
+  align-items: center;
+  gap: 8px;
+  /* 左右内边距与菜单栏 / 工具栏 / 状态栏统一，保证右侧按钮列右缘一致 */
+  padding: 0 8px 0 12px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+.titlebar__brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.brand-logo {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--gradient-brand);
+  box-shadow: 0 0 14px rgba(110, 168, 254, 0.28);
+  flex: none;
+}
+
+.brand-logo svg {
+  width: 13px;
+  height: 13px;
+  color: #fff;
+}
+
+.brand-name {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  background: var(--gradient-brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  white-space: nowrap;
+}
+
+.titlebar__title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.titlebar__title .doc-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 60%;
+}
+
+.titlebar__title .doc-dirty {
+  color: var(--warning);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.titlebar__title .doc-path {
+  color: var(--text-faint);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 40%;
+}
+
+.titlebar__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+/* ---------------------------------------------------------------- 2. 菜单栏 */
+.menubar {
+  height: var(--h-menubar);
+  flex: none;
+  display: flex;
+  align-items: stretch;
+  /* 菜单项之间 4px：与工具栏「组内 2px / 组间 17px」形成两种明确的节奏 */
+  gap: 4px;
+  /* 左侧 2px + 菜单项自身 10px = 文字左缘 12px，与 logo / 侧栏页签对齐 */
+  padding: 0 8px 0 2px;
+  background: var(--bg);
+  /* 菜单栏与工具栏之间用更重的描边，明确区分「应用外壳」与「操作条」两层 */
+  border-bottom: 1px solid var(--border-strong);
+  user-select: none;
+  position: relative;
+  z-index: var(--z-panel);
+}
+
+.menubar__item {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  font-size: 12px;
+  color: var(--text-dim);
+  border-radius: var(--radius-xs);
+  margin: 3px 0;
+  transition: background var(--tr), color var(--tr);
+  white-space: nowrap;
+}
+
+/* hover 用比普通面板底色更明显的一档，避免"只有文字变色"的弱反馈 */
+.menubar__item:hover {
+  background: var(--bg-active);
+  color: var(--text);
+}
+
+/* 打开状态下再叠一条强调色下划线，与标签栏激活态的语言保持一致 */
+.menubar__item.is-open {
+  background: var(--bg-active);
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+/* 窄窗口溢出折叠按钮（菜单适配窗口） */
+.menubar__overflow {
+  margin-left: auto;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+/* ----------------------------------------------------------------- 3. 工具栏 */
+.toolbar {
+  height: var(--h-toolbar);
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  /* 左侧 6px + 图标自身 6px = 图标左缘 12px，与 logo / 菜单文字对齐 */
+  padding: 0 8px 0 6px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.toolbar::-webkit-scrollbar {
+  display: none;
+}
+
+.toolbar-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  margin: 0 6px;
+  flex: none;
+}
+
+.tool-btn {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  transition: background var(--tr), color var(--tr), transform var(--tr);
+  flex: none;
+}
+
+.tool-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.tool-btn:active {
+  transform: scale(0.94);
+}
+
+.tool-btn.is-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.tool-btn[disabled] {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+/* 工具栏右侧控件组：靠右对齐，让顶栏左右都有内容 */
+.toolbar__right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 10px;
+}
+
+/* Markdown 格式按钮组：默认隐藏，非 Markdown 文档零宽度 */
+.qp-md-tools { display: inline-flex; align-items: center; gap: 2px; flex: none; }
+.qp-md-tools[hidden] { display: none; }
+
+/* 当前文档信息芯片（语法 · 编码），点击可切换语法 */
+.tool-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-dim);
+  font-size: 11.5px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--tr), color var(--tr), border-color var(--tr);
+}
+
+.tool-chip:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.tool-chip:active {
+  transform: scale(0.98);
+}
+
+/* 通用 tooltip（由 ui/tooltip.js 渲染，见 components.css 的 .qp-tooltip） */
+[data-tip] {
+  position: relative;
+}
+
+/* ------------------------------------------------------------------- 4. 主体 */
+.workspace {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ------------------------------------------------------------------ 左侧栏 */
+.sidebar {
+  width: var(--w-sidebar);
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  /* 侧栏与编辑区底色已拉开 ≥6 个色阶，再用一条描边 + 极轻的内阴影把分界做实 */
+  border-right: 1px solid var(--border);
+  box-shadow: 1px 0 0 var(--border);
+  overflow: hidden;
+  user-select: none;
+}
+
+.sidebar[hidden] {
+  display: none;
+}
+
+.sidebar-resizer {
+  width: 4px;
+  flex: none;
+  cursor: col-resize;
+  background: transparent;
+  transition: background var(--tr);
+  position: relative;
+  z-index: 5;
+  margin-left: -2px;
+}
+
+.sidebar-resizer:hover,
+.sidebar-resizer.is-dragging {
+  background: var(--accent);
+  opacity: 0.5;
+}
+
+.sidebar__tabs {
+  display: flex;
+  height: 32px;
+  flex: none;
+  border-bottom: 1px solid var(--border);
+  padding: 0 6px 0 2px;
+  gap: 2px;
+  align-items: stretch;
+}
+
+/* 例外：侧栏页签保持 0 圆角。
+   它是「页签」而不是「按钮」——页签靠下划线与位置表达状态，加圆角反而会读成可点击的胶囊。 */
+.sidebar__tab {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  /* 圆角统一到 --radius-sm（5px）；与文档标签页不同，侧栏页签不是「标签」语义 */
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  transition: color var(--tr), border-color var(--tr);
+}
+
+.sidebar__tab:hover {
+  color: var(--text-dim);
+}
+
+.sidebar__tab.is-active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+/* 顶部右侧「关闭侧边栏」按钮：推到行尾并垂直居中 */
+.sidebar__close {
+  margin-left: auto;
+  align-self: center;
+}
+
+.sidebar__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 6px 4px 12px;
+}
+
+.sidebar__foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 32px;
+  padding: 0 6px;
+  border-top: 1px solid var(--border);
+}
+
+.sidebar__foot-title {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 文件树 */
+.tree-node {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 23px;
+  padding-right: 8px;
+  border-radius: var(--radius-xs);
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--tr), color var(--tr);
+}
+
+.tree-node:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.tree-node.is-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.tree-node__caret {
+  width: 12px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+  transition: transform var(--tr);
+}
+
+.tree-node__caret.is-open {
+  transform: rotate(90deg);
+}
+
+.tree-node__icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+}
+
+.tree-node.is-active .tree-node__icon {
+  color: var(--accent);
+}
+
+.tree-node__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tree-empty {
+  padding: 18px 14px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+  line-height: 1.7;
+  text-align: center;
+}
+
+/* 大纲 */
+.outline-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 23px;
+  padding: 0 8px;
+  border-radius: var(--radius-xs);
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.outline-item:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.outline-item__kind {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--accent);
+  opacity: 0.8;
+  flex: none;
+  width: 34px;
+}
+
+.outline-item__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+/* ------------------------------------------------------------------ 编辑区 */
+.editor-pane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-editor);
+  overflow: hidden;
+  position: relative;
+}
+
+.editor-split {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.editor-host {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+}
+
+.editor-host > .cm-editor {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 标签栏 */
+.tabbar {
+  height: var(--h-tabbar);
+  flex: none;
+  display: flex;
+  align-items: stretch;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* 右侧留白：保证最后一个标签的关闭按钮不贴边、不被裁掉 */
+  padding-right: 14px;
+  user-select: none;
+  scrollbar-width: none;
+}
+
+.tabbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* 标签溢出时的左右渐隐遮罩。
+   遮罩挂在 .editor-pane 上（而不是 .tabbar 本身），这样它不会跟着横向滚动一起位移。 */
+.editor-pane::before,
+.editor-pane::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  width: 28px;
+  height: var(--h-tabbar);
+  z-index: 3;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--tr);
+}
+
+.editor-pane::before {
+  left: 0;
+  background: linear-gradient(to right, var(--bg-panel), transparent);
+}
+
+.editor-pane::after {
+  right: 0;
+  background: linear-gradient(to left, var(--bg-panel), transparent);
+}
+
+.editor-pane.is-overflow-left::before,
+.editor-pane.is-overflow-right::after {
+  opacity: 1;
+}
+
+.tabbar:empty,
+.tabbar.is-empty {
+  display: none;
+}
+
+/* 标签栏末尾的「+」：新建文件（与 Ctrl+N 同一条命令） */
+.tabadd {
+  flex: none;
+  align-self: center;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin: 0 2px 0 5px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background var(--tr), color var(--tr);
+}
+
+.tabadd:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.tabadd:active {
+  background: var(--bg-active);
+}
+
+.tabadd svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* 标签多到溢出时，「+」吸附在右边缘 —— 否则它会被滚出视口，看得见标签却
+   没地方新建。补一层与标签栏同色的底，压住从它下面滚过的标签。 */
+.tabbar.has-overflow .tabadd {
+  position: sticky;
+  right: 0;
+  margin-left: 0;
+  background: var(--bg-panel);
+  box-shadow: -8px 0 8px -8px rgba(0, 0, 0, 0.3);
+}
+
+.tabbar.has-overflow .tabadd:hover {
+  background: var(--bg-hover);
+}
+
+/* 标签栏左右滑动按钮：溢出时才显示，浮在标签栏两端（不随横向滚动位移） */
+.tabnav {
+  position: absolute;
+  top: 0;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: var(--h-tabbar);
+  padding: 0;
+  border: none;
+  background: var(--bg-panel);
+  color: var(--text-dim);
+  cursor: pointer;
+  opacity: 0.92;
+  transition: color var(--tr), background var(--tr);
+}
+
+.tabnav[hidden] {
+  display: none;
+}
+
+.tabnav--prev {
+  left: 0;
+  border-right: 1px solid var(--border);
+}
+
+.tabnav--next {
+  right: 0;
+  border-left: 1px solid var(--border);
+}
+
+.tabnav:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg-hover, var(--bg-panel));
+}
+
+.tabnav:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.tabnav svg {
+  width: 13px;
+  height: 13px;
+}
+
+.tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  /* 左右内边距对称，长文件名不会被单边过早截断 */
+  padding: 0 10px;
+  max-width: 200px;
+  min-width: 90px;
+  font-size: 12px;
+  color: var(--text-dim);
+  background: transparent;
+  border-right: 1px solid var(--border);
+  /* 顶部微圆角：hover 时与激活态的卡片感一致。
+     例外说明：文档标签页属于「标签」语义，底部保持 0 圆角以便与标签栏贴合；
+     其余所有控件（按钮 / 状态格 / 侧栏页签）统一使用 --radius-sm（5px）。 */
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  cursor: pointer;
+  transition: background var(--tr), color var(--tr);
+  flex: none;
+}
+
+.tab:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.tab.is-active {
+  background: var(--bg-editor);
+  color: var(--text);
+}
+
+.tab.is-active::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 2px;
+  background: var(--gradient-brand);
+}
+
+.tab.is-dragging {
+  opacity: 0.4;
+}
+
+.tab.is-drop-before::before,
+.tab.is-drop-after::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+.tab.is-drop-before::before {
+  left: -1px;
+}
+
+.tab.is-drop-after::before {
+  right: -1px;
+}
+
+.tab__icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--text-dim);
+  opacity: 0.9;
+}
+
+.tab.is-active .tab__icon {
+  color: var(--accent);
+}
+
+.tab__name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab__dirty {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warning);
+  flex: none;
+}
+
+.tab__close {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-xs);
+  color: var(--text-faint);
+  opacity: 0;
+  transition: background var(--tr), color var(--tr), opacity var(--tr);
+}
+
+.tab:hover .tab__close,
+.tab.is-active .tab__close {
+  opacity: 1;
+}
+
+.tab__close:hover {
+  background: var(--bg-active);
+  color: var(--danger);
+}
+
+/* Markdown 预览 */
+.preview-pane {
+  flex: 0 0 45%;
+  min-width: 0;
+  border-left: 1px solid var(--border);
+  overflow: auto;
+  background: var(--bg-editor);
+  padding: 26px 34px 60px;
+}
+
+.preview-pane[hidden] {
+  display: none;
+}
+
+/* v2 · 三态视图模式（A1）：由 app.setViewMode 写入 data-view-mode。
+   - source：只显示编辑区（v1 行为）
+   - wysiwyg：只显示编辑区，但编辑区挂装饰层
+   - split：左源码 + 右预览（预览由 updatePreview 渲染） */
+.editor-split[data-view-mode="split"] .editor-host {
+  flex: 1 1 55%;
+}
+
+.editor-split[data-view-mode="split"] .preview-pane {
+  flex: 0 0 45%;
+}
+
+.editor-split[data-view-mode="source"] .preview-pane,
+.editor-split[data-view-mode="wysiwyg"] .preview-pane {
+  display: none;
+}
+
+/* ---------------------------------------------------------------- 5. 状态栏 */
+.statusbar {
+  height: var(--h-statusbar);
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  /* 左侧 5px + 状态项自身 7px = 文字左缘 12px，与上层各栏左缘对齐 */
+  padding: 0 8px 0 5px;
+  font-size: 11px;
+  color: var(--text-dim);
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border);
+  user-select: none;
+  overflow: hidden;
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--radius-xs);
+  white-space: nowrap;
+  transition: background var(--tr), color var(--tr);
+}
+
+.status-item[data-clickable="true"] {
+  cursor: pointer;
+}
+
+.status-item[data-clickable="true"]:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+/* 点击后的短暂高亮：让「缩进 / 换行符」这类点击即生效的操作有明确反馈 */
+.status-item.is-flash {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* 唯一的分隔线：把「文档信息」与「文档属性」两组分开，
+   而不是插在「行/列」和「行数」中间把同一组信息割裂开 */
+.status-sep {
+  width: 1px;
+  height: 12px;
+  background: var(--border);
+  margin: 0 6px;
+  flex: none;
+}
+
+.status-spacer {
+  flex: 1;
+  min-width: 4px;
+}
+
+.status-item.is-success {
+  color: var(--success);
+}
+
+.status-item.is-warning {
+  color: var(--warning);
+}
+
+.status-item.is-danger {
+  color: var(--danger);
+}
+
+/* ---------------------------------------------------------------- 6. 欢迎页 */
+.welcome {
+  position: absolute;
+  inset: calc(var(--h-titlebar) + var(--h-menubar) + var(--h-toolbar)) 0
+    var(--h-statusbar) 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-editor);
+  overflow: auto;
+  z-index: 20;
+}
+
+.welcome[hidden] {
+  display: none;
+}
+
+.welcome__inner {
+  width: min(780px, calc(100% - 64px));
+  padding: 32px 0 48px;
+  position: relative;
+}
+
+.welcome__glow {
+  position: absolute;
+  inset: -60px -120px auto -120px;
+  height: 420px;
+  background: var(--gradient-glow);
+  filter: blur(10px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.welcome__head {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.welcome__logo {
+  width: 62px;
+  height: 62px;
+  margin: 0 auto 16px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background: var(--gradient-brand);
+  box-shadow: 0 14px 40px rgba(110, 168, 254, 0.32);
+}
+
+.welcome__logo svg {
+  width: 32px;
+  height: 32px;
+  color: #fff;
+}
+
+.welcome__title {
+  margin: 0;
+  font-size: 27px;
+  font-weight: 700;
+  letter-spacing: -0.8px;
+  color: var(--text);
+}
+
+.welcome__sub {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.welcome__cards {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 26px;
+}
+
+.welcome-card {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 16px 16px 15px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  text-align: left;
+  transition: border-color var(--tr), background var(--tr),
+    transform var(--tr), box-shadow var(--tr);
+}
+
+.welcome-card:hover {
+  background: var(--bg-elevated);
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-soft);
+}
+
+.welcome-card__icon {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-md);
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.welcome-card__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.welcome-card__desc {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  line-height: 1.5;
+}
+
+.welcome__cols {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr 1.15fr;
+  gap: 12px;
+}
+
+.welcome-block {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px 16px;
+}
+
+.welcome-block__title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 10px;
+}
+
+.recent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.recent-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: left;
+  transition: background var(--tr), color var(--tr);
+  overflow: hidden;
+}
+
+.recent-item:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.recent-item__name {
+  flex: none;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-item__path {
+  flex: 1;
+  font-size: 10.5px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  direction: rtl;
+}
+
+.kbd-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px 18px;
+}
+
+.kbd-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  padding: 3px 0;
+}
+
+kbd {
+  font-family: var(--font-ui);
+  font-size: 10.5px;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: var(--radius-xs);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------- 禅模式 */
+.app.is-zen .titlebar,
+.app.is-zen .menubar,
+.app.is-zen .toolbar,
+.app.is-zen .sidebar,
+.app.is-zen .sidebar-resizer,
+.app.is-zen .tabbar,
+.app.is-zen .statusbar {
+  display: none !important;
+}
+
+.app.is-zen .welcome {
+  inset: 0;
+}
+
+.app.is-zen::after {
+  content: "";
+  position: fixed;
+  top: 10px;
+  right: 14px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* --------------------------------------------------- Markdown 预览排版
+   v2（D1/D2）：预览与 WYSIWYG、PDF 共用同一组 `--qp-*` token，
+   三处排版必须一模一样，否则「预览看着好、导出变形」。 */
+.markdown-body {
+  font-size: var(--qp-body-size, 16px);
+  line-height: var(--qp-body-leading, 1.75);
+  color: var(--text);
+  max-width: var(--qp-measure, 46em);
+  margin: 0 auto;
+}
+
+.markdown-body > *:first-child {
+  margin-top: 0;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4 {
+  color: var(--text);
+  line-height: 1.3;
+  letter-spacing: -0.3px;
+  margin: 1.7em 0 0.6em;
+  font-weight: 680;
+}
+
+/* 层级靠字重与留白，不靠描边（PRD D1.3）：
+   v1 的 H1/H2 下边框线在 v2 里去掉，改为上方更大的留白。 */
+.markdown-body h1 {
+  font-size: var(--qp-h1-size, 1.9em);
+  margin: 2.6em 0 0.7em;
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.markdown-body h2 {
+  font-size: var(--qp-h2-size, 1.45em);
+  margin: 2.2em 0 0.6em;
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.markdown-body h3 {
+  font-size: var(--qp-h3-size, 1.22em);
+  margin: 1.9em 0 0.5em;
+}
+
+/* h5 / h6 此前没有显式规则，落到浏览器默认值（13.28px 粗体），
+   与 WYSIWYG 的小号标题完全对不上。这里补齐，让两处同源。 */
+.markdown-body h5 {
+  font-size: var(--qp-h5-size, 1em);
+  font-weight: var(--qp-h5-weight, 620);
+  line-height: 1.3;
+  letter-spacing: -0.3px;
+  margin: 1.7em 0 0.6em;
+}
+
+.markdown-body h6 {
+  font-size: var(--qp-h6-size, 0.94em);
+  font-weight: var(--qp-h6-weight, 620);
+  line-height: 1.3;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin: 1.7em 0 0.6em;
+}
+
+.markdown-body p {
+  margin: 0.75em 0;
+}
+
+.markdown-body a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid var(--accent-soft);
+}
+
+.markdown-body a:hover {
+  border-bottom-color: var(--accent);
+}
+
+.markdown-body code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  padding: 0.16em 0.42em;
+  border-radius: var(--radius-xs);
+  background: var(--bg-hover);
+  color: var(--accent-2);
+}
+
+.markdown-body pre {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  overflow: auto;
+  margin: 1em 0;
+}
+
+.markdown-body pre code {
+  background: none;
+  padding: 0;
+  color: var(--text);
+  font-size: 0.85em;
+  line-height: 1.65;
+}
+
+/*
+ * 预览代码块的语法着色。
+ *
+ * `core/code-highlight.js` 用 lezer 的 `classHighlighter` 产出 `tok-*` 类名，
+ * 颜色取自当前主题的语法色（`--tok-*` 由 `app.js` 的 `applySyntaxPalette()`
+ * 下发，与编辑器 / WYSIWYG / PDF 同一份调色板）。
+ */
+.markdown-body .tok-comment {
+  color: var(--tok-comment, var(--text-faint));
+  font-style: italic;
+}
+
+.markdown-body .tok-keyword,
+.markdown-body .tok-operator,
+.markdown-body .tok-modifier {
+  color: var(--tok-keyword, inherit);
+}
+
+.markdown-body .tok-string,
+.markdown-body .tok-special {
+  color: var(--tok-string, inherit);
+}
+
+.markdown-body .tok-number,
+.markdown-body .tok-bool,
+.markdown-body .tok-literal {
+  color: var(--tok-number, inherit);
+}
+
+.markdown-body .tok-variableName,
+.markdown-body .tok-propertyName,
+.markdown-body .tok-function,
+.markdown-body .tok-className {
+  color: var(--tok-function, inherit);
+}
+
+.markdown-body .tok-typeName,
+.markdown-body .tok-tagName,
+.markdown-body .tok-attributeName {
+  color: var(--tok-type, inherit);
+}
+
+.markdown-body .tok-punctuation,
+.markdown-body .tok-bracket {
+  color: var(--tok-punct, inherit);
+}
+
+.markdown-body blockquote {
+  margin: 1em 0;
+  padding: 2px 0 2px 15px;
+  border-left: 3px solid var(--accent);
+  color: var(--text-dim);
+  background: var(--accent-soft);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 1.4em;
+  margin: 0.7em 0;
+}
+
+.markdown-body li {
+  margin: 0.28em 0;
+}
+
+/* 已完成任务：与 WYSIWYG 的 `.qp-li.is-checked` 表现一致（淡化 + 删除线），
+   否则同一份文档在两种视图里勾选项长相不同。 */
+.markdown-body li:has(> input[type='checkbox']:checked) {
+  opacity: 0.6;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.markdown-body hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 2em 0;
+}
+
+.markdown-body table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+  font-size: 0.92em;
+}
+
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid var(--border);
+  padding: 7px 12px;
+  text-align: left;
+  /* 长不可断串（URL / 连续字符）必须在格内折行：width:100% 只约束常规内容，
+     auto 布局的表格宽度下限 = 格子 min-content 之和，长串会把表格撑出版心
+     （实测右缘超出正文 2500px+）。overflow-wrap:anywhere 同时收缩 min-content
+     把表格锁回版心宽；break-word 不影响 intrinsic 尺寸，不够用。
+     正常英文/中文断行行为与 break-word 一致（仍优先空格/标点）。 */
+  overflow-wrap: anywhere;
+}
+
+.markdown-body th {
+  background: var(--bg-panel);
+  font-weight: 600;
+}
+
+.markdown-body img {
+  max-width: 100%;
+  border-radius: var(--radius-md);
+}
+
+.markdown-body strong {
+  font-weight: 680;
+  color: var(--text);
+}
+
+.markdown-body del {
+  color: var(--text-faint);
+}
+
+/* ------------------------------------------------- 6. 迷你地图（T09 ⑤） */
+/* 绝对定位叠在编辑区右侧；`hidden` 时完全不参与命中测试。 */
+.qp-minimap {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 64px;
+  height: auto;
+  z-index: 4;
+  cursor: pointer;
+  opacity: 0.55;
+  background: linear-gradient(to left, var(--bg-panel), transparent 70%);
+  border-left: 1px solid var(--border);
+  transition: opacity var(--tr);
+}
+
+.qp-minimap:hover {
+  opacity: 0.95;
+}
+
+.qp-minimap[hidden] {
+  display: none;
+}
+
+/* 迷你地图可见时右侧留白，避免遮挡文本右缘 */
+.editor-pane:has(.qp-minimap:not([hidden])) .cm-scroller {
+  padding-right: 68px;
+}

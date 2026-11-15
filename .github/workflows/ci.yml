@@ -1,0 +1,138 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: 单元测试与许可检查
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 依赖许可合规检查
+        run: npm run license:check
+
+      - name: 单元测试
+        run: npm run test:v2:unit
+
+      - name: 插件市场数据与安装包检查
+        run: npm run test:plugins
+
+      - name: 前端构建
+        run: npm run build
+
+  e2e:
+    name: 端到端验收
+    runs-on: windows-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      # test:v2 里有 `import('/src/editor/wysiwyg/image.js')` 这类源码模块的断言，
+      # 只有 dev server 会提供 /src/**。`vite preview` 只服务打包后的 dist，
+      # 换成 preview 会让 T05 直接 `Failed to fetch dynamically imported module`，
+      # 所以这个 job 保持 dev server；「对着 dist 产物跑」的集成测试放在 integration job。
+      # 用 cmd start /b 起服务：子进程不绑在本次 PowerShell 会话的生命周期上，
+      # 避免会话收尾时把服务带走、或残留监听让下一个 --strictPort 撞 10048。
+      - name: 启动开发服务器
+        shell: pwsh
+        run: |
+          cmd /c start /b npx vite --port 4173 --strictPort
+          $ok = $false
+          for ($i = 0; $i -lt 40; $i++) {
+            try {
+              $r = Invoke-WebRequest -Uri "http://localhost:4173/" -UseBasicParsing -TimeoutSec 2
+              if ($r.StatusCode -eq 200) { $ok = $true; break }
+            } catch { }
+            Start-Sleep -Seconds 1
+          }
+          if (-not $ok) { throw "开发服务器未能在 40 秒内启动" }
+
+      - name: 运行端到端测试
+        run: npm run test:v2
+
+      - name: 保留失败截图
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: |
+            shots/
+            test-results/
+          if-no-files-found: ignore
+
+  integration:
+    name: 集成测试（对着 dist 产物）
+    runs-on: windows-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 构建前端产物
+        run: npm run build
+
+      # 独立 job 起 preview：与 e2e job 的 dev server 隔开，不用在同一端口上停/起重绑，
+      # 也让这 7 套依赖服务的用例跑在真正的发布产物上（无 HMR、无 dev 转换）。
+      # 同上：cmd start /b 让 preview 子进程脱离本会话，两个 job 各自 runner 上也不会因
+      # 端口监听残留而 10048。
+      - name: 启动预览服务器
+        shell: pwsh
+        run: |
+          cmd /c start /b npx vite preview --port 4173 --strictPort
+          $ok = $false
+          for ($i = 0; $i -lt 40; $i++) {
+            try {
+              $r = Invoke-WebRequest -Uri "http://localhost:4173/" -UseBasicParsing -TimeoutSec 2
+              if ($r.StatusCode -eq 200) { $ok = $true; break }
+            } catch { }
+            Start-Sleep -Seconds 1
+          }
+          if (-not $ok) { throw "预览服务器未能在 40 秒内启动" }
+
+      - name: 运行集成测试
+        run: npm test
+
+      - name: 保留失败截图
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-screenshots
+          path: |
+            shots/
+            test-results/
+          if-no-files-found: ignore
