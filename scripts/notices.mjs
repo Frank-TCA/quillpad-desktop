@@ -270,6 +270,25 @@ function buildNotices() {
   return lines.join('\n');
 }
 
+/**
+ * 去掉「4. 构建期依赖许可分布」段，供 `--check` 比对时使用。
+ *
+ * 这一段统计的是**本机 node_modules** 的许可分布，而 node_modules 的内容随平台变化：
+ * `@rollup/rollup-win32-x64-msvc` / `@esbuild/win32-x64` 与它们的 linux / darwin 变体
+ * 互斥，`npm ci` 在哪个系统上跑，装进去的就是哪一套。于是「Windows 上生成的清单」
+ * 与「Linux CI 上重新生成的清单」在第 4 段必然不同 —— 这不是依赖漂移，是平台差异，
+ * 不该让 `license:check` 报假警报（CI 首跑就是这样挂掉的）。
+ *
+ * 真正需要守住的是 1 / 2 / 3 / 5 段：那些才是随应用分发、必须与依赖树逐字一致的内容。
+ * 第 4 段只用于给维护者看依赖分布，跨平台比对时整段跳过。
+ *
+ * @param {string} text 已完成换行归一（仅 \n）的清单正文
+ * @return {string}
+ */
+function withoutPlatformStats(text) {
+  return text.replace(/-{10,}\n4\. 构建期依赖许可分布[^\n]*\n-{10,}\n[\s\S]*?(?=-{10,}\n5\. )/, '');
+}
+
 /* ------------------------------------------------------------------- main */
 
 const check = process.argv.includes('--check');
@@ -313,14 +332,14 @@ const notices = buildNotices();
 
 // 5. 清单与依赖树一致（三个落点逐份比对，QA D-1②）
 if (check) {
-  const fresh = notices.replace(/\r\n/g, '\n');
+  const fresh = withoutPlatformStats(notices.replace(/\r\n/g, '\n'));
   for (const target of OUTPUTS) {
     const rel = path.relative(root, target).replace(/\\/g, '/');
     if (!existsSync(target)) {
       problems.push(`缺少 ${rel}，请先运行 node scripts/notices.mjs`);
       continue;
     }
-    const disk = readFileSync(target, 'utf8').replace(/\r\n/g, '\n');
+    const disk = withoutPlatformStats(readFileSync(target, 'utf8').replace(/\r\n/g, '\n'));
     if (disk !== fresh) problems.push(`${rel} 与当前依赖树不一致，请重新生成`);
   }
 } else {
