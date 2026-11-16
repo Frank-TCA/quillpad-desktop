@@ -4,6 +4,7 @@
 
 > 面向 Notepad++ 用户的现代替代品 —— 内置 Typora 级 Markdown 所见即所得、彩色 PDF 导出与插件生态。
 
+[![CI](https://github.com/Frank-TCA/quillpad-desktop/actions/workflows/ci.yml/badge.svg)](https://github.com/Frank-TCA/quillpad-desktop/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Electron](https://img.shields.io/badge/Electron-45-47848F?logo=electron)](https://www.electronjs.org/)
 [![CodeMirror 6](https://img.shields.io/badge/CodeMirror-6-D30707)](https://codemirror.net/)
