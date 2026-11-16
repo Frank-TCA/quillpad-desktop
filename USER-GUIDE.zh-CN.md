@@ -6,9 +6,11 @@
 
 | 文件 | 说明 | 大小 |
 | --- | --- | --- |
-| `QuillPad-Setup-v1.0.0.exe` | 安装版 | 127,331,551 字节 |
-| `QuillPad-v1.0.0-portable.exe` | 便携版 | 115,234,377 字节 |
-| `QuillPad-Uninstaller-v1.0.0.exe` | 独立卸载器（仅安装版需要） | 79,734 字节 |
+| `QuillPad-Setup-v1.0.0.exe` | 安装版 | 约 127 MB |
+| `QuillPad-v1.0.0-portable.exe` | 便携版 | 约 115 MB |
+| `QuillPad-Uninstaller-v1.0.0.exe` | 独立卸载器（仅安装版需要） | 约 80 KB |
+
+> 每个文件的精确字节数与 SHA256 见对应 Release 页面的附件说明。
 
 本项目以 MIT 协议开源：<https://github.com/Frank-TCA/quillpad-desktop>
 

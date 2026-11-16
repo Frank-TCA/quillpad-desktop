@@ -6,9 +6,11 @@ The installers live in `dist/release/` (you can copy them anywhere):
 
 | File | Purpose | Size |
 | --- | --- | --- |
-| `QuillPad-Setup-v1.0.0.exe` | Installer | 127,331,551 bytes |
-| `QuillPad-v1.0.0-portable.exe` | Portable | 115,234,377 bytes |
-| `QuillPad-Uninstaller-v1.0.0.exe` | Standalone uninstaller (installer build only) | 79,734 bytes |
+| `QuillPad-Setup-v1.0.0.exe` | Installer | ~127 MB |
+| `QuillPad-v1.0.0-portable.exe` | Portable | ~115 MB |
+| `QuillPad-Uninstaller-v1.0.0.exe` | Standalone uninstaller (installer build only) | ~80 KB |
+
+> Exact byte counts and SHA256 checksums are listed on the corresponding release page.
 
 QuillPad is open source under the MIT license: <https://github.com/Frank-TCA/quillpad-desktop>
 
