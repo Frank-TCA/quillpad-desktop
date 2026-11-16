@@ -29,6 +29,9 @@ jobs:
       - name: 依赖许可合规检查
         run: npm run license:check
 
+      - name: 双语漏翻闸门
+        run: npm run test:i18n
+
       - name: 单元测试
         run: npm run test:v2:unit
 

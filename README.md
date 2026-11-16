@@ -213,6 +213,7 @@ npm run readme:shots
 - [CHANGELOG.md](CHANGELOG.md) —— 版本变更记录
 - [docs/](docs/) —— 架构图（Mermaid 类图 / 时序图）；`docs/screenshots/` 是 README 用的界面截图（`en/` 为英文界面）
 - [CONTRIBUTING.md](CONTRIBUTING.md) —— 贡献指南
+- [docs/plugin-api.md](docs/plugin-api.md) —— 插件开发：清单字段、权限、API 参考、沙箱限制
 
 ## 贡献
 
@@ -220,7 +221,7 @@ npm run readme:shots
 
 - 🐛 [报告 Bug](https://github.com/Frank-TCA/quillpad-desktop/issues/new?template=bug_report.yml)
 - 💡 [功能建议](https://github.com/Frank-TCA/quillpad-desktop/issues/new?template=feature_request.yml)
-- 🔌 编写插件：插件 API 文档（规划中）
+- 🔌 编写插件：[插件 API](docs/plugin-api.md)（清单字段、7 种权限、9 组 API、沙箱限制）
 
 ## 许可
 

@@ -220,6 +220,7 @@ Every dependency uses a commercially friendly license — **no GPL, AGPL, or SSP
 - [CHANGELOG.md](CHANGELOG.md) — version history
 - [docs/](docs/) — architecture diagrams (Mermaid: class, sequence); `docs/screenshots/` holds the README images (`en/` = English UI)
 - [CONTRIBUTING.md](CONTRIBUTING.md) — contribution guide
+- [docs/plugin-api.md](docs/plugin-api.md) — plugin development: manifest fields, permissions, API reference, sandbox limits
 
 ## Contributing
 
@@ -228,7 +229,7 @@ Issues and pull requests are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING
 
 - 🐛 [Report a bug](https://github.com/Frank-TCA/quillpad-desktop/issues/new?template=bug_report.yml)
 - 💡 [Request a feature](https://github.com/Frank-TCA/quillpad-desktop/issues/new?template=feature_request.yml)
-- 🔌 Writing plugins: plugin API documentation (planned)
+- 🔌 Writing plugins: [plugin API](docs/plugin-api.md) (manifest fields, 7 permissions, 9 API groups, sandbox limits)
 
 ## License
 
