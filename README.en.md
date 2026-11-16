@@ -215,7 +215,8 @@ Every dependency uses a commercially friendly license — **no GPL, AGPL, or SSP
 
 ## Docs
 
-- [USER-GUIDE.zh-CN.md](USER-GUIDE.zh-CN.md) — Chinese user guide: installer / portable / four uninstall entry points / trace cleanup / PDF export / shortcuts
+- [USER-GUIDE.en.md](USER-GUIDE.en.md) — English user guide: installer / portable / four uninstall entry points / trace cleanup / PDF export / shortcuts
+- [USER-GUIDE.zh-CN.md](USER-GUIDE.zh-CN.md) — Chinese user guide (same content, 简体中文)
 - [CHANGELOG.md](CHANGELOG.md) — version history
 - [docs/](docs/) — architecture diagrams (Mermaid: class, sequence); `docs/screenshots/` holds the README images (`en/` = English UI)
 - [CONTRIBUTING.md](CONTRIBUTING.md) — contribution guide

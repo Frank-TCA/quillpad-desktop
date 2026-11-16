@@ -209,6 +209,7 @@ npm run readme:shots
 ## 文档
 
 - [USER-GUIDE.zh-CN.md](USER-GUIDE.zh-CN.md) —— 中文使用说明：安装版 / 便携版 / 四种卸载入口 / 痕迹清理 / PDF 导出 / 快捷键
+- [USER-GUIDE.en.md](USER-GUIDE.en.md) —— English user guide: installer / portable / four uninstall entry points / trace cleanup / PDF export / shortcuts
 - [CHANGELOG.md](CHANGELOG.md) —— 版本变更记录
 - [docs/](docs/) —— 架构图（Mermaid 类图 / 时序图）；`docs/screenshots/` 是 README 用的界面截图（`en/` 为英文界面）
 - [CONTRIBUTING.md](CONTRIBUTING.md) —— 贡献指南
