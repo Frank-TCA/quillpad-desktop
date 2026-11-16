@@ -25,8 +25,9 @@ QuillPad 保留了 Notepad++ 的全部手感 —— 多标签、语法高亮、�
 
 - **Markdown 所见即所得**：像 Typora 一样就地渲染标题、表格、公式、任务项，同时保留源码可编辑性
 - **彩色 PDF 导出**：按当前主题的语法配色渲染，中文字体真子集嵌入，不是截图
+- **中英双语界面**：一键切换，菜单、对话框、状态提示与内置欢迎文档一起换，不用重启
 - **商业友好的插件生态**：MIT/Apache/BSD，运行在 Worker 沙箱里，而不是 DLL 注入
-- **120+ 语言语法高亮**，零配置开箱可用
+- **40 种语言 / 100+ 文件扩展名**，零配置开箱可用
 
 ## 功能一览
 
@@ -35,7 +36,7 @@ QuillPad 保留了 Notepad++ 的全部手感 —— 多标签、语法高亮、�
 | 能力 | 说明 |
 | --- | --- |
 | 三种视图 | 源码 / 所见即所得 / 分栏，`Ctrl+Shift+1/2/3` 直切 |
-| 语法高亮 | 120+ 语言，按语系分组（Web、数据、脚本、系统、文档） |
+| 语法高亮 | 40 种语言、100+ 扩展名，按语系分组（Web、数据、脚本、系统、文档） |
 | 多光标与列选择 | `Ctrl+Alt+↑/↓` 加光标，矩形选区的插入/删除/对齐/编号 |
 | 查找替换 | 正则、全词、大小写、范围内替换、查找历史（20 条） |
 | 宏录制 | 录制 → 回放 → 持久化，跨会话保留 |
@@ -53,7 +54,7 @@ QuillPad 保留了 Notepad++ 的全部手感 —— 多标签、语法高亮、�
 
 ### PDF 导出
 
-- 对话框 13 项设置：页面尺寸、边距、字体、行距、页码、页眉页脚、代码主题
+- 导出对话框十余项设置：文件名与保存位置、纸张（含自定义宽高）、方向、四边距、主题、代码配色、图片最大宽度、页码、目录页、页眉页脚及文字
 - 语法配色**跟随当前主题**（也可指定 github-light / one-dark / solarized）
 - 字体以 `data:` 内联，图片内联或占位 —— 自包含，无外链、无脚本
 - 中文字体（Noto Sans SC）真子集嵌入
@@ -70,13 +71,15 @@ QuillPad 保留了 Notepad++ 的全部手感 —— 多标签、语法高亮、�
 
 ### 界面
 
-- 四套主题：Aurora（暗）/ Ivory（亮）/ Nord（暗）/ Solarized（亮）
+- 四套主题：Aurora（暗）/ Ivory（亮，默认）/ Nord（暗）/ Solarized（亮）
 - 五栏布局：菜单栏 / 工具栏 / 标签栏 / 编辑区 / 状态栏
 - 全上下文右键菜单：编辑区（含 5 色标记）、标签栏（含空白处文件菜单）、工具栏、菜单栏
 - 标签栏溢出时支持滚轮横向滚动与左右箭头导航
 - `Ctrl + 滚轮` 缩放字号
-- 命令面板（`Ctrl+Shift+P`）汇集全部功能
-- 中文界面，完整快捷键速查表
+- 命令面板（`Ctrl+Shift+P`）把内置命令与插件命令收进同一个入口
+- 中英双语界面：标题栏地球按钮，或「帮助 → 界面语言」切换，即时生效、无需重启
+- 内置欢迎文档随界面语言切换（`欢迎.md` / `Welcome.md`），你自己的修改不会被覆盖
+- 完整快捷键速查表（`F1`）
 
 <table>
 <tr>
@@ -148,12 +151,28 @@ npm run test:e2e:full # 完整端到端套件（较慢，需服务在线）
 npm run test:visual   # 截图 + 视觉回归（需服务在线）
 npm run test:v2:unit  # 纯函数单元测试（纯 Node，不需要服务）
 npm run license:check # 依赖 License 合规检查（纯 Node，不需要服务）
+
+# 发布闸门（发版前跑一遍）
+npm run test:i18n        # 双语漏翻静态闸门：有漏翻即 exit 1
+npm run test:plugins     # 插件包数据 / 打包 / 键位（209 项）
+npm run test:desktop     # 桌面壳连通性
+npm run test:plugins:ui  # 插件管理器卸载 + 安装对话框（真实 Electron，14 项）
+npm run test:uninstall   # 卸载痕迹清单（37 项）；加 -- --verify-clean 校验卸载后 49 项残留
+npm run test:installed   # 装机后验收（37 项；跑的是已安装的 exe，需先装好新版）
 ```
 
 `npm test` 串联 11 套，其中 **7 套需要** `http://localhost:4173` 有服务：menu-fix-check /
 smoke / p1-check / find-panel-check / statusbar-check / edit-ops-check / newfile-check；
 没起服务时首条就 `ERR_CONNECTION_REFUSED`。剩下 4 套（v2-unit / data-check /
 plugin-pack-check / plugin-keys-check）是纯 Node，不需要服务。
+
+发布闸门里前两条是纯 Node、可直接进 CI；后面几条要真实 Electron 或已安装的版本
+（`test:installed` 跑的是装好的 exe，不读源码），发版前手工跑一遍。
+
+```bash
+# 重新生成 README 里的界面截图（固定 Ivory Light，中英文各一套，需 preview 服务在线）
+npm run readme:shots
+```
 
 ## 技术栈
 
@@ -174,7 +193,7 @@ plugin-pack-check / plugin-keys-check）是纯 Node，不需要服务。
 .
 ├── src/                     渲染进程源码
 │   ├── app.js               应用装配与生命周期
-│   ├── core/                状态、命令、设置、文件系统、打印
+│   ├── core/                状态、命令、设置、文件系统、打印、i18n
 │   ├── editor/              CodeMirror 扩展（语言、主题、WYSIWYG、标记）
 │   ├── ui/                  自绘界面组件（菜单、工具栏、标签、对话框）
 │   ├── styles/              CSS 变量主题与组件样式
@@ -183,7 +202,7 @@ plugin-pack-check / plugin-keys-check）是纯 Node，不需要服务。
 ├── build/                   图标生成、afterPack 钩子、安装器脚本
 ├── public/                  静态资源（插件包、兼容映射）
 ├── scripts/                 测试与构建辅助脚本
-├── docs/                    架构图（Mermaid 类图 / 时序图）
+├── docs/                    架构图（Mermaid）与 README 界面截图（`en/` 为英文界面）
 └── licenses/                随包分发的许可全文
 ```
 
@@ -191,7 +210,7 @@ plugin-pack-check / plugin-keys-check）是纯 Node，不需要服务。
 
 - [USER-GUIDE.zh-CN.md](USER-GUIDE.zh-CN.md) —— 中文使用说明：安装版 / 便携版 / 四种卸载入口 / 痕迹清理 / PDF 导出 / 快捷键
 - [CHANGELOG.md](CHANGELOG.md) —— 版本变更记录
-- [docs/](docs/) —— 架构图（Mermaid 类图 / 时序图）
+- [docs/](docs/) —— 架构图（Mermaid 类图 / 时序图）；`docs/screenshots/` 是 README 用的界面截图（`en/` 为英文界面）
 - [CONTRIBUTING.md](CONTRIBUTING.md) —— 贡献指南
 
 ## 贡献

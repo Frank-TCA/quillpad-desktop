@@ -15,7 +15,7 @@
 
 ---
 
-![QuillPad main window with WYSIWYG Markdown](docs/screenshots/01-editor.png)
+![QuillPad main window with WYSIWYG Markdown](docs/screenshots/en/01-editor.png)
 
 ## Why QuillPad
 
@@ -29,8 +29,9 @@ to first-class features:
 
 - **WYSIWYG Markdown**: headings, tables, math, and task lists render in place like Typora, while the source stays editable
 - **Colorized PDF export**: rendered with the syntax palette of the current theme and real subsets of the CJK fonts — not a screenshot
+- **English / Chinese UI**: switch with one click — menus, dialogs, toasts, and the built-in welcome document all follow, no restart
 - **Commercially friendly plugin ecosystem**: MIT / Apache / BSD licensed, running inside a Worker sandbox instead of DLL injection
-- **120+ languages** highlighted out of the box, zero configuration
+- **40 languages / 100+ file extensions** highlighted out of the box, zero configuration
 
 ## Features
 
@@ -39,7 +40,7 @@ to first-class features:
 | Capability | Details |
 | --- | --- |
 | Three view modes | Source / WYSIWYG / split, switch with `Ctrl+Shift+1/2/3` |
-| Syntax highlighting | 120+ languages, grouped by family (web, data, scripting, systems, documents) |
+| Syntax highlighting | 40 languages across 100+ extensions, grouped by family (web, data, scripting, systems, documents) |
 | Multi-cursor & column selection | `Ctrl+Alt+↑/↓` to add cursors; rectangular insert, delete, align, and numbering |
 | Find & replace | Regex, whole word, case sensitivity, in-selection replace, 20-entry history |
 | Macro recording | Record → replay → persist, surviving restarts |
@@ -57,7 +58,7 @@ to first-class features:
 
 ### PDF export
 
-- 13 settings in the export dialog: page size, margins, font, line height, page numbers, header, footer, code theme
+- A dozen-plus settings in the export dialog: file name and save location, page size (with custom width/height), orientation, four margins, theme, code theme, max image width, page numbers, table of contents, and header/footer with their text
 - Syntax colors **follow the active theme**, or pin one of github-light / one-dark / solarized
 - Fonts are inlined as `data:` URIs, images inlined or replaced with placeholders — self-contained, no external links, no scripts
 - Real subsets of Noto Sans SC embedded for CJK text
@@ -74,18 +75,20 @@ to first-class features:
 
 ### Interface
 
-- Four themes: Aurora (dark), Ivory (light), Nord (dark), Solarized (light)
+- Four themes: Aurora (dark), Ivory (light, default), Nord (dark), Solarized (light)
 - Five-pane layout: menu bar, toolbar, tab bar, editor, status bar
 - Context menus everywhere: editor (including the 5 marking colors), tab bar (including a file menu on empty space), toolbar, menu bar
 - Tab bar supports horizontal wheel scrolling and left/right arrow navigation when tabs overflow
 - `Ctrl + wheel` to zoom the editor font size
-- Command palette (`Ctrl+Shift+P`) exposing every command
-- Chinese UI with a complete keyboard shortcut reference
+- Command palette (`Ctrl+Shift+P`) pulls built-in and plugin commands into one entry point
+- English / Chinese UI: the globe button in the title bar, or Help → Language — takes effect immediately, no restart
+- The built-in welcome document follows the UI language (`欢迎.md` / `Welcome.md`) and keeps your edits intact
+- Complete keyboard shortcut reference (`F1`)
 
 <table>
 <tr>
-<td width="50%"><img src="docs/screenshots/02-preview-split.png" alt="Split view: source and preview scroll together"></td>
-<td width="50%"><img src="docs/screenshots/03-command-palette.png" alt="Command palette exposing every command"></td>
+<td width="50%"><img src="docs/screenshots/en/02-preview-split.png" alt="Split view: source and preview scroll together"></td>
+<td width="50%"><img src="docs/screenshots/en/03-command-palette.png" alt="Command palette exposing every command"></td>
 </tr>
 <tr>
 <td align="center">Split view: source and preview scroll together</td>
@@ -93,7 +96,7 @@ to first-class features:
 </tr>
 </table>
 
-![Ivory light theme](docs/screenshots/04-theme-ivory.png)
+![Ivory light theme](docs/screenshots/en/04-theme-ivory.png)
 
 ## Download and install
 
@@ -152,6 +155,14 @@ npm run test:e2e:full # full end-to-end suite (slow; needs the server)
 npm run test:visual   # screenshot + visual regression (needs the server)
 npm run test:v2:unit  # pure-function unit tests (plain Node, no server)
 npm run license:check # dependency license compliance (plain Node, no server)
+
+# Release gates (run before shipping)
+npm run test:i18n        # static bilingual gate: exits 1 on any missing translation
+npm run test:plugins     # plugin data / packaging / keybindings (209 checks)
+npm run test:desktop     # desktop shell connectivity
+npm run test:plugins:ui  # plugin manager uninstall + install dialog (real Electron, 14 checks)
+npm run test:uninstall   # uninstall trace manifest (37 checks); add -- --verify-clean for the 49 post-uninstall residue checks
+npm run test:installed   # post-install smoke test (37 checks; runs the installed exe, so install first)
 ```
 
 `npm test` chains 11 suites; **seven of them need** something serving
@@ -159,6 +170,15 @@ npm run license:check # dependency license compliance (plain Node, no server)
 statusbar-check / edit-ops-check / newfile-check. Without a server the very first one
 fails with `ERR_CONNECTION_REFUSED`. The remaining four (v2-unit / data-check /
 plugin-pack-check / plugin-keys-check) are plain Node and need no server.
+
+The first two release gates are plain Node and CI-friendly; the rest need a real Electron
+shell or an installed build (`test:installed` exercises the installed exe, not the source),
+so run them by hand before tagging a release.
+
+```bash
+# Regenerate the README screenshots (always Ivory Light; one set per UI language; needs the preview server)
+npm run readme:shots
+```
 
 ## Tech stack
 
@@ -180,7 +200,7 @@ Every dependency uses a commercially friendly license — **no GPL, AGPL, or SSP
 .
 ├── src/                     Renderer source
 │   ├── app.js               Application wiring and lifecycle
-│   ├── core/                State, commands, settings, filesystem, printing
+│   ├── core/                State, commands, settings, filesystem, printing, i18n
 │   ├── editor/              CodeMirror extensions (languages, themes, WYSIWYG, marking)
 │   ├── ui/                  Hand-rolled UI components (menus, toolbar, tabs, dialogs)
 │   ├── styles/              CSS variable themes and component styles
@@ -188,8 +208,8 @@ Every dependency uses a commercially friendly license — **no GPL, AGPL, or SSP
 ├── desktop/                 Electron main process and preload
 ├── build/                   Icon generation, afterPack hook, installer scripts
 ├── public/                  Static assets (plugin packages, compatibility maps)
-├── scripts/                 Test and build helper scripts
-├── docs/                    Architecture diagrams (Mermaid: class, sequence)
+├── scripts/                 Test, build, and screenshot helper scripts
+├── docs/                    Architecture diagrams (Mermaid) and README screenshots (`en/` = English UI)
 └── licenses/                License texts shipped with the app
 ```
 
@@ -197,7 +217,7 @@ Every dependency uses a commercially friendly license — **no GPL, AGPL, or SSP
 
 - [USER-GUIDE.zh-CN.md](USER-GUIDE.zh-CN.md) — Chinese user guide: installer / portable / four uninstall entry points / trace cleanup / PDF export / shortcuts
 - [CHANGELOG.md](CHANGELOG.md) — version history
-- [docs/](docs/) — architecture diagrams (Mermaid: class, sequence)
+- [docs/](docs/) — architecture diagrams (Mermaid: class, sequence); `docs/screenshots/` holds the README images (`en/` = English UI)
 - [CONTRIBUTING.md](CONTRIBUTING.md) — contribution guide
 
 ## Contributing
