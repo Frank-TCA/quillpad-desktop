@@ -30,7 +30,6 @@ import {
 } from '@codemirror/commands';
 import {
   bracketMatching,
-  foldGutter,
   indentOnInput,
   foldKeymap,
   indentUnit,
@@ -55,9 +54,11 @@ import { createSearchPanel } from '../ui/findbar.js';
 import { textMarks } from './marks.js';
 import { t } from '../core/i18n.js';
 import { bus } from '../core/state.js';
+import { quillpadFoldGutter } from './fold-gutter.js';
 
 /** 大文件阈值：超过后关闭语法高亮。 */
 const BIG_FILE = 2 * 1024 * 1024;
+
 
 /**
  * WYSIWYG 阅读面容器扩展（QA D-2）。
@@ -177,7 +178,7 @@ export class EditorManager {
       highlightActiveLineGutter(),
       highlightSpecialChars(),
       history(),
-      foldGutter(),
+      quillpadFoldGutter(),
       drawSelection(),
       dropCursor(),
       EditorState.allowMultipleSelections.of(true),

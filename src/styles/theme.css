@@ -84,6 +84,10 @@
   --qp-cell-pad: 7px 12px;
   --qp-task-size: 16px;
   --qp-hr-margin: 32px;
+  /* 块级 widget（表格 / 目录 / 文档属性 / 脚注 / 块公式）的上下间距：
+     一律用 padding 表达，margin 会逃出 widget 的 rect，让 CM 少算行高、
+     行号与折叠箭头整列错位。 */
+  --qp-block-gap: 16px;
   --qp-img-radius: 8px;
   --qp-img-max: 100%;
   --qp-toc-size: 13px;

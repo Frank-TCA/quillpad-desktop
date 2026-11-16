@@ -101,9 +101,9 @@ QuillPad 保留了 Notepad++ 的全部手感 —— 多标签、语法高亮、�
 
 | 文件 | 说明 |
 | --- | --- |
-| `QuillPad-Setup-v1.0.0.exe` | 安装版：可选安装目录、桌面/开始菜单快捷方式、右键菜单集成、卸载清理痕迹 |
-| `QuillPad-v1.0.0-portable.exe` | 便携版：单文件免安装，数据写在同级 `QuillPad-Data/`，删掉即彻底清除 |
-| `QuillPad-Uninstaller-v1.0.0.exe` | 独立卸载器（约 80 KB）：自带扫描与深度清理，能连历史版本的安装目录、用户数据、快捷方式与注册表残留一起收掉；仅安装版需要 |
+| `QuillPad-Setup-v1.0.1.exe` | 安装版：可选安装目录、桌面/开始菜单快捷方式、右键菜单集成、卸载清理痕迹 |
+| `QuillPad-v1.0.1-portable.exe` | 便携版：单文件免安装，数据写在同级 `QuillPad-Data/`，删掉即彻底清除 |
+| `QuillPad-Uninstaller-v1.0.1.exe` | 独立卸载器（约 80 KB）：自带扫描与深度清理，能连历史版本的安装目录、用户数据、快捷方式与注册表残留一起收掉；仅安装版需要 |
 
 **卸载方式**：安装版可通过开始菜单「卸载 QuillPad」、安装目录下的 `Uninstall QuillPad.exe`、Windows「设置 → 应用」、或上面的独立卸载器任选其一，四者执行同一份痕迹清单（`build/traces.nsh`），效果一致。便携版不写注册表，直接删除 exe 与 `QuillPad-Data/` 即可。
 

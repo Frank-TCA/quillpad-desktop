@@ -55,6 +55,29 @@
   visibility: hidden;
 }
 
+/* 折叠箭头的**可点区域**撑满整个槽位。
+   CM 只给 `.cm-gutterElement` 一个 18px 宽的槽，里面的字形只有 14px 高：
+   - 内容行的槽高 32~63px，字形以外的区域点了没反应（"箭头不好点"）；
+   - 围栏行的槽只有 4px，字形必然溢出到下一行槽位，被后一个元素盖住 ——
+     看得见、点不到。
+   用绝对定位的伪元素充当命中层（不改变 span 自身的行内排布，字形位置与原来
+   完全一致）；字形用 z-index 抬高，溢出的部分才不会被下一个槽位盖住。 */
+.cm-foldGutter .cm-gutterElement {
+  position: relative;
+}
+
+.cm-foldGutter .cm-gutterElement::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
+
+.cm-foldGutter .cm-gutterElement > span {
+  position: relative;
+  z-index: 1;
+}
+
 /* 引用块上下各有 1em 外边距（预览 blockquote）；空行按同一量级补偿，
    否则引用会比预览「贴」得多。 */
 /* 引用块上下外边距 1em(16px)，与相邻段落 12px 折叠后取 16px */
@@ -95,11 +118,7 @@
   padding-top: calc(var(--qp-code-gap, 16px) - var(--qp-blank-h, 12px));
 }
 
-.cm-line.qp-blank + .cm-line:has(.qp-hr) .qp-hr {
-  margin-top: calc(var(--qp-hr-margin, 32px) - var(--qp-blank-h, 12px));
-}
-
-/* 分隔线之后紧跟标题：hr 的下外边距（32px）已经落在自己那一行的行盒里，
+/* 分隔线之后紧跟标题：hr 行的下内边距（32px）已经落在自己那一行的行盒里，
    标题的 padding-top 只需补差值。否则两段间距相加，会多出一整块空白
    （预览里这两个外边距是折叠取最大值，不是相加）。 */
 .cm-line:has(.qp-hr) + .cm-line.qp-blank + .cm-line.qp-h1 {
@@ -125,9 +144,18 @@
 /* ------------------------------------------------------- 1. 隐藏 / 浮现标记 */
 
 /* 硬规则 1（ARCH §5.1）：隐藏标记**不删 DOM 文本**。
-   用 font-size:0 + opacity:0 让宽度归零，textContent / innerText 完整保留。 */
+   零宽用「行内块 + width:0 + overflow:hidden」实现，**不能**再用 font-size:0：
+   font-size:0 会让 Range 矩形退化成 0 高度，光标定位 / 选区 / 点击换算全部
+   依赖这个矩形，退化的结果是光标画在行基线下方十几像素处、选区边界往下错位
+   （实测 `coordsAtPos(line.from)` 返回 0 高度且偏低 17px，正文里 30/290 个
+   位置受影响，且全部落在行首的隐藏标记上 —— 那正是点选、拖选最常落点的位置）。
+   保持正常字体度量后矩形恢复成整行高度，宽度仍为 0，排版与折行都不变。 */
 .cm-line .qp-md-hide {
-  font-size: 0;
+  display: inline-block;
+  width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  vertical-align: bottom;
   letter-spacing: 0;
   opacity: 0;
   user-select: none;
@@ -524,8 +552,8 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
-  margin: 4px 0;
+  /* 行内 widget 的上下外边距同样会逃出行盒 → 并进 padding */
+  padding: 8px 10px;
   border: 1px dashed var(--border-strong);
   border-radius: 8px;
   color: var(--text-dim);
@@ -547,7 +575,10 @@
 
 .qp-table-wrap {
   position: relative;
-  margin: 1em 0;
+  /* 上下间距用 padding，不用 margin：表格是**块级 widget**（.cm-content 的直接
+     子元素），margin 不计入 widget 的 rect，CM 就会少算这 32px，行号 / 折叠箭头
+     整列跟着错位（实测表格后面 52px 起步，越往下越大）。 */
+  padding: var(--qp-block-gap, 16px) 0;
   /* 宽度由 widget 按 .cm-content 内容列给出像素值（右缘与正文右端对齐，见 table.js） */
 }
 
@@ -587,7 +618,9 @@
 /* 操作浮层：默认隐藏，hover 表格时出现在右上 */
 .qp-table-ops {
   position: absolute;
-  top: -12px;
+  /* 归一化到表格本体上缘：圆角框含 var(--qp-block-gap) 的内边距，
+     浮层要落在距表格内容 -12px 处（= gap - 12px）才和表格贴在一起 */
+  top: calc(var(--qp-block-gap, 16px) - 12px);
   right: 0;
   display: flex;
   gap: 2px;
@@ -645,21 +678,32 @@
 
 /* ------------------------------------------------------------- 9. 分隔线 */
 
+/* 分隔线的上下间距必须用**行盒内边距**表达，不能给 <hr> 加外边距。
+   原因：.cm-line 是块容器，hr 的外边距会折叠出行盒（实测行盒只有 33px，
+   而视觉占位是 20 + 1 + 32 = 53px）。CM 的行高映射只看行盒 rect，于是每一条
+   `---` 都让行号 / 折叠箭头整列往上少算 20px，二十几条分隔线累积到 400px 以上；
+   箭头互相压住（后来的元素盖住先来的），点哪一行都可能命中别的行的元素，
+   表现就是「折叠箭头点不动」。改成 padding 后行盒自己就是真值。 */
 .qp-hr {
   display: block;
   height: 0;
-  margin: var(--qp-hr-margin, 2em) 0;
+  margin: 0;
   border: none;
   border-top: 1px solid var(--border);
 }
 
-/* 承载 <hr> 的那一行本身会贡献一个 28px 行高，必须压平，
-   让间距完全由 hr 的 margin 决定（同预览）。 */
+/* 承载 <hr> 的那一行本身会贡献一个 28px 行高，必须压平（font-size/line-height
+   归零），间距全部由本行的 padding 决定 —— 与预览的 hr 上下 32px 一致。 */
 .cm-line:has(.qp-hr) {
   font-size: 0;
   line-height: 0;
-  padding-top: 0;
-  padding-bottom: 0;
+  padding-top: var(--qp-hr-margin, 32px);
+  padding-bottom: var(--qp-hr-margin, 32px);
+}
+
+/* 前一行已经是 12px 的空行（空行被压扁但仍占高）→ 上间距扣掉这段 */
+.cm-line.qp-blank + .cm-line:has(.qp-hr) {
+  padding-top: calc(var(--qp-hr-margin, 32px) - var(--qp-blank-h, 12px));
 }
 
 .cm-line.qp-table-line,
@@ -673,8 +717,8 @@
 
 .qp-frontmatter {
   position: relative;
-  margin: 8px 0;
-  padding: 8px 12px 8px 14px;
+  /* 同表格：块级 widget 的外边距不会计入 rect，CM 会少算行高 → 整列 gutter 错位 */
+  padding: calc(var(--qp-block-gap, 16px) + 8px) 12px calc(var(--qp-block-gap, 16px) + 8px) 14px;
   max-height: 120px;
   overflow: auto;
   background: var(--bg-panel);
@@ -694,7 +738,8 @@
 
 .qp-frontmatter__edit {
   position: absolute;
-  top: 6px;
+  /* 按钮相对内容区 6px，而内容区上缘距边框多了 var(--qp-block-gap) */
+  top: calc(var(--qp-block-gap, 16px) + 6px);
   right: 8px;
   height: 20px;
   padding: 0 8px;
@@ -721,8 +766,8 @@
 /* ------------------------------------------------------- 11. 目录 / 脚注 */
 
 .qp-toc {
-  margin: 8px 0;
-  padding: 8px 12px;
+  /* 间距进盒子（同表格）：块级 widget 的 margin 不计入 rect */
+  padding: calc(var(--qp-block-gap, 16px) + 8px) 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--bg-panel);
@@ -793,11 +838,23 @@
 }
 
 .qp-footnotes {
-  margin: 24px 0 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
+  /* 原 margin: 24px 0 8px + padding-top: 8px → 全部并进 padding。
+     分隔线（border-top）原本画在 24px 外边距之外，外边距并进盒子后若仍用
+     border-top，线会跟着上移 24px，所以改用 ::before 画在 24px 处。 */
+  position: relative;
+  padding: 32px 0 16px;
+  border-top: none;
   font-size: 0.9em;
   color: var(--text-dim);
+}
+
+.qp-footnotes::before {
+  content: '';
+  position: absolute;
+  top: 24px;
+  left: 0;
+  right: 0;
+  border-top: 1px solid var(--border);
 }
 
 .qp-footnotes__title {
@@ -835,8 +892,8 @@
 
 .qp-math--block {
   display: block;
-  margin: 8px 0;
-  padding: 8px 0;
+  /* 原 margin: 8px 0 + padding: 8px 0 → 合并成 padding，避免外边距逃出行盒 */
+  padding: calc(var(--qp-block-gap, 16px) + 8px) 0;
   text-align: center;
   border-radius: 8px;
   background: var(--bg-panel);

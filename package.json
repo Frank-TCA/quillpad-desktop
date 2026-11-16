@@ -1,6 +1,6 @@
 {
   "name": "quillpad",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "type": "module",
   "description": "QuillPad — 面向 Notepad++ 用户的现代文本/代码编辑器",
@@ -49,6 +49,7 @@
     "license:check": "node scripts/notices.mjs --check",
     "icon:build": "node build/render-icon.mjs && node build/pack-ico.mjs",
     "test:newfile": "node scripts/newfile-check.mjs",
+    "test:fold": "node scripts/fold-check.mjs",
     "test:uninstall": "node scripts/uninstall-check.mjs",
     "test:i18n": "node scripts/i18n-audit.mjs --strict",
     "test:plugins:ui": "node scripts/plugin-manager-check.mjs",
@@ -56,7 +57,7 @@
     "test:plugins": "node scripts/data-check.mjs && node scripts/plugin-pack-check.mjs && node scripts/plugin-keys-check.mjs",
     "plugins:pack": "node scripts/build-community-zips.mjs",
     "readme:shots": "node scripts/readme-shots.mjs",
-    "test": "node scripts/menu-fix-check.mjs && node scripts/smoke.mjs && node scripts/p1-check.mjs && node scripts/find-panel-check.mjs && node scripts/statusbar-check.mjs && node scripts/edit-ops-check.mjs && node scripts/v2-unit.mjs && node scripts/newfile-check.mjs && node scripts/data-check.mjs && node scripts/plugin-pack-check.mjs && node scripts/plugin-keys-check.mjs"
+    "test": "node scripts/menu-fix-check.mjs && node scripts/smoke.mjs && node scripts/p1-check.mjs && node scripts/find-panel-check.mjs && node scripts/statusbar-check.mjs && node scripts/edit-ops-check.mjs && node scripts/fold-check.mjs && node scripts/v2-unit.mjs && node scripts/newfile-check.mjs && node scripts/data-check.mjs && node scripts/plugin-pack-check.mjs && node scripts/plugin-keys-check.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.4",

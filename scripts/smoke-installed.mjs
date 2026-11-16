@@ -1,5 +1,5 @@
 /**
- * QuillPad v1.0.0 · 装机后验收冒烟（对已安装正式版一键跑）
+ * QuillPad · 装机后验收冒烟（对已安装正式版一键跑，版本号自动读取 package.json）
  *
  * 覆盖 6 组断言（默认全量，对已安装应用）：
  *  1. 标题栏「界面语言」按钮：存在 / 排在按钮区最后 / tooltip 中英 /
@@ -19,7 +19,7 @@
  *   node scripts/smoke-installed.mjs              # 全量（启动已安装应用）
  *   node scripts/smoke-installed.mjs --files-only # 只跑第 6 项文件级断言
  *
- * 前置：已安装 QuillPad v1.0.0（%LOCALAPPDATA%\Programs\QuillPad\QuillPad.exe）。
+ * 前置：已安装同版本 QuillPad（%LOCALAPPDATA%\Programs\QuillPad\QuillPad.exe）。
  *       本脚本只读不装，全量模式结束时会把界面语言 / 欢迎文档 / 插件列表复原。
  * 环境坑：WorkBuddy 沙箱 shell 带 ELECTRON_RUN_AS_NODE=1 + NODE_OPTIONS，
  *        spawn 前必须从 env 删掉这两个键，否则 Electron 报 `bad option`。
@@ -35,6 +35,8 @@ import { execSync } from 'node:child_process';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
+/** 当前版本（产物文件名里的版本号），从 package.json 取，避免发版后脚本失效。 */
+const APP_VERSION = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).version;
 const EXE = path.join(
   process.env.LOCALAPPDATA || 'C:\\Users\\hw\\AppData\\Local',
   'Programs', 'QuillPad', 'QuillPad.exe',
@@ -84,12 +86,13 @@ function runFileChecks() {
   }
   // 独立卸载器按设计只有 ~80 KB（README / USER-GUIDE 均如此记载），门槛取 50 KB；
   // 安装包与便携版按常规要求 >1 MB。
-  const artifacts = [
-    ['QuillPad-Setup-v1.0.0.exe', 1024 * 1024],
-    ['QuillPad-v1.0.0-portable.exe', 1024 * 1024],
-    ['QuillPad-Uninstaller-v1.0.0.exe', 50 * 1024],
+  // 文件名里的版本号从 package.json 取，发版后不用再改这个脚本。
+  const ARTIFACTS = [
+    [`QuillPad-Setup-v${APP_VERSION}.exe`, 1024 * 1024],
+    [`QuillPad-v${APP_VERSION}-portable.exe`, 1024 * 1024],
+    [`QuillPad-Uninstaller-v${APP_VERSION}.exe`, 50 * 1024],
   ];
-  for (const [f, min] of artifacts) {
+  for (const [f, min] of ARTIFACTS) {
     const p = path.join(root, 'dist', 'release', f);
     let size = 0;
     try { size = statSync(p).size; } catch { /* 不存在 */ }
@@ -109,7 +112,7 @@ if (filesOnly) {
 /* ================================================ 启动已安装正式版 */
 if (!existsSync(EXE)) {
   console.error(`\n找不到已安装的 QuillPad：${EXE}`);
-  console.error('请先安装 QuillPad v1.0.0 再跑本脚本（或用 --files-only 只验文件级断言）。');
+  console.error('请先安装同版本 QuillPad 再跑本脚本（或用 --files-only 只验文件级断言）。');
   process.exit(1);
 }
 
@@ -311,16 +314,26 @@ async function sectionFoldAlign() {
   await win.evaluate(() => window.quillpad.setViewMode('wysiwyg', { user: true }));
   await win.waitForTimeout(900);
 
-  // 字形矩形：折叠标记是内联 <span>，行号是裸文本（用 Range 取文本行盒）
+  // 字形矩形：只量**文字**（第一个文字节点的 Range），不量元素盒子。
+  // 折叠标记的 span 现在撑满整个槽位（v1.0.1 扩大了可点区域），是 30~63px 高的
+  // inline-block，用 getBoundingClientRect 拿到的是命中区域而不是字形；行号是裸
+  // 文本。两边统一按文字测量，比的才是「字形是否同带」。
   const measure = async () => win.evaluate(() => {
     const glyphRect = (el) => {
-      const span = el.querySelector('span, svg');
-      if (span) return span.getBoundingClientRect();
-      const r = document.createRange();
-      r.selectNodeContents(el);
-      const rects = r.getClientRects();
-      return rects.length ? rects[0] : null;
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        if (!node.nodeValue.trim()) continue;
+        const r = document.createRange();
+        r.selectNodeContents(node);
+        const rects = [...r.getClientRects()].filter((x) => x.height > 0);
+        if (rects.length) return rects[0];
+      }
+      return null;
     };
+    // 行号槽里的「隐藏」元素也要算进来：围栏行 / 空行的行号被 visibility:hidden
+    // 藏掉，但它们的槽位才是折叠箭头的**同一行**。若按可见性过滤，围栏箭头会被
+    // 配到下一行的行号上（槽位差 4px），凭空量出 20px 偏差。
     const nums = [...document.querySelectorAll('.cm-lineNumbers .cm-gutterElement')].filter(
       (el) => el.offsetHeight > 0 && el.textContent.trim(),
     );

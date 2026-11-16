@@ -105,9 +105,9 @@ Get the latest build from [Releases](https://github.com/Frank-TCA/quillpad-deskt
 
 | File | Description |
 | --- | --- |
-| `QuillPad-Setup-v1.0.0.exe` | Installer: choose the install directory, desktop and Start menu shortcuts, shell context-menu integration, trace-cleaning uninstaller |
-| `QuillPad-v1.0.0-portable.exe` | Portable: single file, no installation, data in a sibling `QuillPad-Data/` folder — delete it and nothing is left behind |
-| `QuillPad-Uninstaller-v1.0.0.exe` | Standalone uninstaller (~80 KB): scans and deep-cleans installation directories, user data, shortcuts, and registry leftovers from **previous versions**; only needed for the installer build |
+| `QuillPad-Setup-v1.0.1.exe` | Installer: choose the install directory, desktop and Start menu shortcuts, shell context-menu integration, trace-cleaning uninstaller |
+| `QuillPad-v1.0.1-portable.exe` | Portable: single file, no installation, data in a sibling `QuillPad-Data/` folder — delete it and nothing is left behind |
+| `QuillPad-Uninstaller-v1.0.1.exe` | Standalone uninstaller (~80 KB): scans and deep-cleans installation directories, user data, shortcuts, and registry leftovers from **previous versions**; only needed for the installer build |
 
 **Uninstalling**: for the installer build, use the Start menu "Uninstall QuillPad" entry, `Uninstall QuillPad.exe` in the install directory, Windows Settings → Apps, or the standalone uninstaller above. All four run the same trace manifest (`build/traces.nsh`), so the result is identical. The portable build writes no registry keys — just delete the exe and `QuillPad-Data/`.
 

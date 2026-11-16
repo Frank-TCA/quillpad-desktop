@@ -7,13 +7,14 @@
  *    零宽折叠 / 浮现、行内 widget（图片、任务框、公式、脚注上标、分隔线、TOC、代码块头）。
  *
  * 三条不可动摇的规则：
- *  1. 隐藏标记一律 `Decoration.mark` + `.qp-md-hide`（`font-size:0;opacity:0`），
+ *  1. 隐藏标记一律 `Decoration.mark` + `.qp-md-hide`（零宽行内块，见 wysiwyg.css），
  *     **禁止 `Decoration.replace` 删掉行内文本字符** → `.cm-line.textContent === 源码`；
  *  2. `activeLines` = **所有选区区间覆盖的行**（不是只有 head 行）；
  *  3. `update()` 内同步重算（不放 rAF），否则滚动会闪烁。
  */
 
 import { EditorView, Decoration, ViewPlugin } from '@codemirror/view';
+import { Facet } from '@codemirror/state';
 import {
   scanMarkdown,
   activeLineNumbers,
@@ -37,6 +38,19 @@ import { collectHeadingsFromScan } from './toc.js';
 import { collectFootnotes } from './footnotes.js';
 
 /**
+ * 「所见即所得装饰正在生效」标记。
+ *
+ * 只在本模式的扩展里 provide；source / split 不 provide → 值恒为 false。
+ * 折叠判定（`editor.js` 的 `quillpadFoldable`）据此决定走源码模式的原生规则
+ * 还是所见即所得的结构化规则；`setWysiwyg()` 换掉 compartment 时值随之变化。
+ *
+ * @type {import('@codemirror/state').Facet<boolean, boolean>}
+ */
+export const wysiwygMode = Facet.define({
+  combine: (values) => values.some(Boolean),
+});
+
+/**
  * 生成 WYSIWYG 扩展。
  *
  * @param {object} opts
@@ -57,6 +71,7 @@ export function createWysiwygExtension(opts) {
 
   /** @type {any} */
   const extension = [
+    wysiwygMode.of(true),
     blockField,
     inlinePlugin,
     // 行号跟行内容对齐（标题 / 引用 / 代码块首行有 padding-top，行号会浮在上面）
@@ -78,14 +93,17 @@ export function createWysiwygExtension(opts) {
           return true;
         }
 
-        /* WYSIWYG 用 padding / line-height / margin 折叠模拟预览的块级间距，
-           其中 margin 折叠会把 .cm-line 整体下推却不改变行盒高度。CM 的
-           lineBlock.top 只累加行盒高度，偏差逐块累积（实测从 10px 涨到
-           82px），于是 posAtCoords 把点击归到下面第 1~3 行。
+        /* 点击落点兜底校正（v1.0.1 起已是「保险」，不是主力）。
 
-           不碰样式（会破坏与预览的逐像素对齐），改用 DOM 的真实插入位置
-           反算文档位置：caretRangeFromPoint 读的是浏览器最终布局，
-           posAtDOM 再映射回文档坐标，实测 14/14 命中。 */
+           历史成因：所见即所得曾经用 margin 表达块级间距，margin 会把 .cm-line
+           整体下推却不进它的 rect，CM 的 lineBlock.top 只累加 rect 高度，偏差
+           逐块累积（实测到 82px），于是 posAtCoords 把点击归到下面第 1~3 行。
+           v1.0.1 已把间距全部改成行盒 / widget 自己的 padding（见 wysiwyg.css），
+           行高映射与真实布局一致，`cm` 与 `dom` 现在应当恒等。
+
+           仍保留这段：异步补上尺寸的图片、被外部样式改高的 widget 等边界情况
+           仍可能让两者分叉一格。caretRangeFromPoint 读的是浏览器最终布局，
+           posAtDOM 再映射回文档坐标，代价只有一次比较。 */
         if (event.button !== 0 || event.detail !== 1) return false;
         if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return false;
         // 图片 / 表格 / 公式等整块 widget 有自己的 mousedown（点击进入源码），别抢

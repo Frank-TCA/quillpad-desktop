@@ -1,14 +1,14 @@
-# QuillPad 1.0.0 使用说明
+# QuillPad 1.0.1 使用说明
 
-> 简体中文 · 对应 v1.0.0 · MIT 许可 · 仓库 <https://github.com/Frank-TCA/quillpad-desktop>
+> 简体中文 · 对应 v1.0.1 · MIT 许可 · 仓库 <https://github.com/Frank-TCA/quillpad-desktop>
 
 安装包位于 `dist/release/` 目录（可复制到任意位置使用）：
 
 | 文件 | 说明 | 大小 |
 | --- | --- | --- |
-| `QuillPad-Setup-v1.0.0.exe` | 安装版 | 约 127 MB |
-| `QuillPad-v1.0.0-portable.exe` | 便携版 | 约 115 MB |
-| `QuillPad-Uninstaller-v1.0.0.exe` | 独立卸载器（仅安装版需要） | 约 80 KB |
+| `QuillPad-Setup-v1.0.1.exe` | 安装版 | 约 127 MB |
+| `QuillPad-v1.0.1-portable.exe` | 便携版 | 约 115 MB |
+| `QuillPad-Uninstaller-v1.0.1.exe` | 独立卸载器（仅安装版需要） | 约 80 KB |
 
 > 每个文件的精确字节数与 SHA256 见对应 Release 页面的附件说明。
 
@@ -51,7 +51,7 @@
 
 ## 二、安装版用法（推荐）
 
-1. 双击 `QuillPad-Setup-v1.0.0.exe`。
+1. 双击 `QuillPad-Setup-v1.0.1.exe`。
 2. 首次运行可能弹「Windows 已保护你的电脑」—— 这是未购买代码签名证书的新程序都会有的提示，不是病毒。点「更多信息」→「仍要运行」。
 3. 安装器是中文界面，可选安装目录；`perMachine=false`，装到当前用户目录，不需要管理员权限、不弹 UAC。装完可勾选立即运行。
 4. 会创建开始菜单与桌面快捷方式；卸载程序 `Uninstall QuillPad.exe` 就在安装目录里，不会单独留在下载文件夹。
@@ -67,7 +67,7 @@
 
 ## 三、便携版用法
 
-1. 把 `QuillPad-v1.0.0-portable.exe` 单独放到一个空文件夹（例如 U 盘目录），双击即可运行。它是单文件自解压包，不需要安装、不写注册表、不创建快捷方式。
+1. 把 `QuillPad-v1.0.1-portable.exe` 单独放到一个空文件夹（例如 U 盘目录），双击即可运行。它是单文件自解压包，不需要安装、不写注册表、不创建快捷方式。
 2. 启动要 3–5 秒：单文件版每次会先把自身解压到系统临时目录。
 3. 所有用户数据（会话、主题、最近文件、窗口位置、宏、插件与插件状态、缓存）都写在 exe **同目录**下的 `QuillPad-Data\` 文件夹里。实测：运行后该目录含 `window-state.json` 等 81 个文件；`%APPDATA%\QuillPad` 在便携运行期间没有新增任何文件。
 4. 更换电脑或移动 exe 时，连同 `QuillPad-Data\` 一起拷贝即可带走全部设置。
@@ -78,7 +78,7 @@
 1. 开始菜单 →「卸载 QuillPad」快捷方式；
 2. 安装目录下的 `Uninstall QuillPad.exe`；
 3. Windows「设置 → 应用 → 已安装的应用」（或控制面板「程序和功能」）里选中「QuillPad 文本编辑器」→ 卸载；
-4. 直接双击分发文件 `QuillPad-Uninstaller-v1.0.0.exe`（独立卸载器，约 78 KB）。
+4. 直接双击分发文件 `QuillPad-Uninstaller-v1.0.1.exe`（独立卸载器，约 78 KB）。
 
 四个入口执行的是同一套清理逻辑，效果一致，任选其一。
 
@@ -94,8 +94,8 @@
 命令行用法（脚本 / 批处理）：
 
 ```bat
-QuillPad-Uninstaller-v1.0.0.exe /S          静默卸载，不弹对话框
-QuillPad-Uninstaller-v1.0.0.exe /SCAN /S    只扫描不删除
+QuillPad-Uninstaller-v1.0.1.exe /S          静默卸载，不弹对话框
+QuillPad-Uninstaller-v1.0.1.exe /SCAN /S    只扫描不删除
 ```
 
 退出码：`0` = 干净，`1` = 有痕迹，`2` = 清理时有删不掉的项，`3` = 用户取消。
@@ -117,7 +117,7 @@ QuillPad-Uninstaller-v1.0.0.exe /SCAN /S    只扫描不删除
 
 ### 便携版
 
-不写任何注册表、不建快捷方式，因此**不需要卸载程序**：直接删除 `QuillPad-v1.0.0-portable.exe` 和同目录的 `QuillPad-Data\` 文件夹即可。实测删除 `QuillPad-Data\` 后，exe 所在目录只剩 exe 本身，`%APPDATA%\QuillPad` 无新增文件，系统里不残留用户数据。
+不写任何注册表、不建快捷方式，因此**不需要卸载程序**：直接删除 `QuillPad-v1.0.1-portable.exe` 和同目录的 `QuillPad-Data\` 文件夹即可。实测删除 `QuillPad-Data\` 后，exe 所在目录只剩 exe 本身，`%APPDATA%\QuillPad` 无新增文件，系统里不残留用户数据。
 
 ### 一句话区别
 
