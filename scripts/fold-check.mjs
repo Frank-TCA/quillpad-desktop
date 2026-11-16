@@ -1,13 +1,17 @@
 /**
- * QuillPad · 所见即所得「折叠箭头 / 光标定位」回归检查
+ * QuillPad · 行号栏 / 折叠箭头 / 光标定位回归检查
  *
- * 覆盖四件事（都是 v1.0.0 里被用户报出来的问题）：
- *  1. 行号槽与内容行**逐行对齐**（槽顶 == 行盒顶），折叠槽与行号槽同几何；
- *  2. 折叠箭头只出现在**结构化行**（标题 / 围栏 / 引用 / 表格 / 列表），
- *     代码块内部不再冒出「括号折叠」箭头；
- *  3. 每个箭头都**点得动**：点击后确实折叠，再点一次展开；
- *  4. 光标 / 选区定位不再下偏：每个位置都有正常高度的坐标，
- *     拖选两端落在鼠标所在的行。
+ * v1.0.2 起**所见即所得不再显示行号栏与折叠箭头**（阅读面视图），源码与分栏保留。
+ * 本脚本锁定这个边界，以及 v1.0.1 修好的光标定位：
+ *
+ *  1. 所见即所得下**没有**行号槽 / 折叠槽（`.cm-gutters` 整个不出现）；
+ *  2. 有文字的行，行首光标坐标正常（不是 0 高度、不偏移）；
+ *  3. 拖选两端与鼠标所在行一致；
+ *  4. 源码模式**保留**行号与折叠箭头；
+ *  5. 源码模式行号槽与内容行逐行对齐（原生行为，≤1px）；
+ *  6. 源码模式的折叠箭头点得动（点一下出现折叠占位）；
+ *  7. 源码里折叠过再切到所见即所得，不残留折叠（此时已无箭头可点，必须自动展开）；
+ *  8. 全程无运行时错误。
  *
  * 用法: node scripts/fold-check.mjs [--url http://localhost:4173]
  */
@@ -50,47 +54,53 @@ await context.addInitScript(() => {
 const page = await context.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
-await page.goto(BASE, { waitUntil: 'networkidle' });
-await page.waitForSelector('#tabbar .tab', { timeout: 20000 });
-await page.evaluate(() => window.quillpad.setViewMode('wysiwyg'));
-await page.waitForTimeout(1200);
+page.on('console', (m) => {
+  if (m.type() === 'error') errors.push(`console: ${m.text()}`);
+});
 
-/** 滚动一遍全文档，收集每一行的对齐数据 + 每个折叠箭头所属行。 */
-const scan = await page.evaluate(async () => {
+/** 重新载入并进入指定视图模式。 */
+async function enter(mode) {
+  await page.goto(BASE, { waitUntil: 'networkidle' });
+  await page.waitForSelector('#tabbar .tab', { timeout: 20000 });
+  await page.evaluate((m) => window.quillpad.setViewMode(m), mode);
+  await page.waitForTimeout(900);
+}
+
+/* ------------------------------------------- 1. 所见即所得没有行号 / 折叠槽 */
+await enter('wysiwyg');
+const wy = await page.evaluate(() => {
+  const gutters = document.querySelector('.cm-gutters');
+  const content = document.querySelector('.cm-content');
+  const scroller = document.querySelector('.cm-scroller');
+  return {
+    gutters: gutters ? Math.round(gutters.getBoundingClientRect().width) : null,
+    lineNumbers: !!document.querySelector('.cm-lineNumbers'),
+    foldGutter: !!document.querySelector('.cm-foldGutter'),
+    // 内容列左缘与滚动容器左缘的差：没有行号槽时不应再留出槽宽
+    offset: Math.round(content.getBoundingClientRect().left - scroller.getBoundingClientRect().left),
+  };
+});
+check(
+  '所见即所得下没有行号栏与折叠箭头',
+  wy.gutters === null && !wy.lineNumbers && !wy.foldGutter,
+  `gutters=${wy.gutters} lineNumbers=${wy.lineNumbers} foldGutter=${wy.foldGutter} 内容左移=${wy.offset}px`,
+);
+
+/* ------------------------------------------------- 2. 行首光标坐标（所见即所得） */
+/**
+ * 只在**真正可见的字符**上验光标几何。
+ *
+ * 分隔线（`---` 整行 font-size:0）、围栏行（``` 被 `.qp-md-hide` 零宽折叠）这几类
+ * 位置上的文字矩形本来就是 0 高度，`coordsAtPos` 返回 0 高度是设计使然，不是缺陷；
+ * v1.0.1 修的缺陷是**有文字的行**行首坐标偏低且高度为 0。所以这里跳过被
+ * `.qp-md-hide` 包住的节点，只量第一个可见字符所在位置。
+ */
+const scanWysiwyg = await page.evaluate(async () => {
   const view = window.quillpad.editor.view;
   const doc = view.state.doc;
-  const scroller = view.scrollDOM;
-  const out = { lines: [], folds: [], fenceLines: new Set() };
-
-  // 围栏代码块的行号区间（按 ``` 成对出现算）
-  const fences = [];
-  let open = null;
-  for (let n = 1; n <= doc.lines; n += 1) {
-    if (!/^\s*```/.test(doc.line(n).text)) continue;
-    if (open === null) {
-      open = n;
-    } else {
-      for (let k = open + 1; k < n; k += 1) fences.push(k);
-      open = null;
-    }
-  }
-  out.codeLines = fences;
-
-  const seenLine = new Set();
-  const seenFold = new Set();
-  const numsOf = (gutter) =>
-    Array.from(gutter.querySelectorAll('.cm-gutterElement')).map((el) => {
-      const r = el.getBoundingClientRect();
-      return { el, top: Math.round(r.top), h: Math.round(r.height), text: el.textContent.trim(), hidden: el.style.visibility === 'hidden' };
-    });
-
+  const out = [];
+  const seen = new Set();
   const collect = () => {
-    const num = numsOf(view.dom.querySelector('.cm-lineNumbers'));
-    const numByKey = new Map();
-    for (const n of num) {
-      if (n.hidden || !/^\d+$/.test(n.text)) continue;
-      numByKey.set(`${n.top}/${n.h}`, Number(n.text));
-    }
     for (const el of Array.from(view.contentDOM.querySelectorAll('.cm-line'))) {
       let no;
       try {
@@ -98,55 +108,44 @@ const scan = await page.evaluate(async () => {
       } catch {
         continue;
       }
-      if (seenLine.has(no)) continue;
-      const box = el.getBoundingClientRect();
-      const cs = getComputedStyle(el);
-      // font-size:0 的行（分隔线 / 围栏）没有文字带，光标必然是 0 高度
-      const hasText = parseFloat(cs.fontSize) > 0;
-      const slot = num.find((n) => !n.hidden && n.text === String(no));
-      // 首个可见字符的真实矩形
-      let textTop = null;
+      if (seen.has(no)) continue;
+      // 第一个可见字符（跳过 .qp-md-hide 里的隐藏标记、块级 widget 内部文字与纯空白）
+      const WIDGET = '.qp-md-hide, .qp-code-head, .qp-table-wrap, .qp-toc, .qp-frontmatter, .qp-math--block, .qp-footnotes, .qp-img-wrap';
+      let target = null;
       const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
       let node;
       while ((node = walker.nextNode())) {
         if (!node.nodeValue.trim()) continue;
+        if (node.parentElement && node.parentElement.closest(WIDGET)) continue;
         const range = document.createRange();
         range.setStart(node, 0);
         range.setEnd(node, Math.min(1, node.nodeValue.length));
         const rr = range.getBoundingClientRect();
         if (rr.height > 0) {
-          textTop = Math.round(rr.top);
+          target = { rect: rr, node };
           break;
         }
       }
-      const c = view.coordsAtPos(doc.line(no).from);
-      seenLine.add(no);
-      out.lines.push({
+      seen.add(no);
+      if (!target) continue;
+      let pos;
+      try {
+        pos = view.posAtDOM(target.node, 0);
+      } catch {
+        continue;
+      }
+      const c = view.coordsAtPos(pos);
+      out.push({
         no,
-        boxTop: Math.round(box.top),
-        slotTop: slot ? slot.top : null,
-        textTop,
-        hasText,
+        textTop: Math.round(target.rect.top),
         cmTop: c ? Math.round(c.top) : null,
         cmH: c ? Math.round(c.bottom - c.top) : null,
       });
     }
-    const fold = Array.from(view.dom.querySelectorAll('.cm-foldGutter .cm-gutterElement'));
-    for (const el of fold) {
-      const r = el.getBoundingClientRect();
-      if (el.style.visibility === 'hidden') continue;
-      if (!el.textContent.trim()) continue;
-      const key = `${Math.round(r.top)}/${Math.round(r.height)}`;
-      const no = numByKey.get(key);
-      if (no === undefined || seenFold.has(no)) continue;
-      seenFold.add(no);
-      out.folds.push({ no, top: Math.round(r.top), h: Math.round(r.height), left: Math.round(r.left), w: Math.round(r.width) });
-    }
   };
-
+  const scroller = view.scrollDOM;
   const step = Math.round(scroller.clientHeight * 0.6);
-  const max = scroller.scrollHeight;
-  for (let y = 0; y <= max; y += step) {
+  for (let y = 0; y <= scroller.scrollHeight; y += step) {
     scroller.scrollTop = y;
     view.requestMeasure();
     await new Promise((res) => setTimeout(res, 120));
@@ -157,111 +156,16 @@ const scan = await page.evaluate(async () => {
   await new Promise((res) => setTimeout(res, 200));
   return out;
 });
-
-/* ---------------------------------------------------------------- 1. 对齐 */
-const badSlot = scan.lines.filter((l) => l.slotTop !== null && Math.abs(l.slotTop - l.boxTop) > 1);
+const badCursor = scanWysiwyg.filter((l) => l.cmH === null || l.cmH < 2 || Math.abs(l.cmTop - l.textTop) > 2);
 check(
-  '行号槽与内容行逐行对齐',
-  badSlot.length === 0,
-  badSlot.length ? badSlot.map((l) => `L${l.no} 差${l.slotTop - l.boxTop}px`).join(', ') : `${scan.lines.length} 行全部对齐`,
+  '可见字符处的光标坐标正常（无 0 高度 / 偏移）',
+  scanWysiwyg.length >= 20 && badCursor.length === 0,
+  badCursor.length
+    ? badCursor.map((l) => `L${l.no} h=${l.cmH} 差${l.cmTop - l.textTop}`).join(', ')
+    : `${scanWysiwyg.length} 行全部正常`,
 );
 
-/* ------------------------------------------------------------ 2. 光标几何 */
-// 分隔线 / 围栏这类行 font-size:0、没有文字带，光标本来就是 0 高度（不可见也不可读），
-// 不参与本项断言；真正要保证的是**有文字的行**行首坐标落在文字带上。
-const textRows = scan.lines.filter((l) => l.textTop !== null && l.hasText);
-const degenerate = textRows.filter((l) => l.cmH === null || l.cmH < 2 || Math.abs(l.cmTop - l.textTop) > 2);
-check(
-  '行首光标坐标正常（无 0 高度 / 偏移）',
-  degenerate.length === 0,
-  degenerate.length ? degenerate.map((l) => `L${l.no} h=${l.cmH} 差${l.cmTop - l.textTop}`).join(', ') : `${textRows.length} 行全部正常`,
-);
-
-/* --------------------------------------------------------- 3. 箭头落点合法 */
-const codeSet = new Set(scan.codeLines);
-const inCode = scan.folds.filter((f) => codeSet.has(f.no));
-check(
-  '代码块内部没有多余折叠箭头',
-  inCode.length === 0,
-  inCode.length ? `出现在第 ${inCode.map((f) => f.no).join(', ')} 行` : `共 ${scan.folds.length} 个箭头，全部在结构行上`,
-);
-check('标题仍有折叠箭头', scan.folds.some((f) => f.no === 1) && scan.folds.some((f) => f.no === 24), `箭头行: ${scan.folds.map((f) => f.no).join(',')}`);
-
-/* --------------------------------------------------------- 4. 箭头可点击 */
-/**
- * 把某行滚到可视区中部，返回该行折叠箭头的点击坐标。
- * 分两步走（滚动 → 等一帧 → 再量）：围栏行的槽只有 4px，
- * 滚动后立刻量会拿到重排前的旧坐标，点下去正好落在两个槽的分界线上。
- */
-async function foldRectFor(no) {
-  await page.evaluate((lineNo) => {
-    const view = window.quillpad.editor.view;
-    const block = view.lineBlockAt(view.state.doc.line(lineNo).from);
-    const scroller = view.scrollDOM;
-    const want = Math.max(0, block.top - scroller.clientHeight / 2);
-    if (Math.abs(scroller.scrollTop - want) > 40) {
-      scroller.scrollTop = want;
-      view.requestMeasure();
-    }
-  }, no);
-  await page.waitForTimeout(180);
-  return page.evaluate((lineNo) => {
-    const view = window.quillpad.editor.view;
-    const nums = Array.from(view.dom.querySelectorAll('.cm-lineNumbers .cm-gutterElement'));
-    const numEl = nums.find((el) => el.style.visibility !== 'hidden' && el.textContent.trim() === String(lineNo));
-    if (!numEl) return null;
-    const nr = numEl.getBoundingClientRect();
-    for (const el of Array.from(view.dom.querySelectorAll('.cm-foldGutter .cm-gutterElement'))) {
-      // 只认真正带箭头的元素：同一槽顶还有高度 0 的空元素（空行），按高度配对会配错
-      if (el.style.visibility === 'hidden' || !el.textContent.trim()) continue;
-      const r = el.getBoundingClientRect();
-      if (Math.abs(r.top - nr.top) < 3) {
-        const y = Math.round(r.top + Math.min(Math.max(r.height / 2, 1), Math.max(1, r.height - 1)));
-        return { no: lineNo, x: Math.round(r.left + r.width / 2), y };
-      }
-    }
-    return null;
-  }, no);
-}
-
-const foldLines = scan.folds.map((f) => f.no);
-const foldFail = [];
-const noArrow = [];
-
-/** 重新载入页面并进入所见即所得（每条箭头独立验证，不在折叠状态上做二次操作）。 */
-async function resetPage() {
-  await page.goto(BASE, { waitUntil: 'networkidle' });
-  await page.waitForSelector('#tabbar .tab', { timeout: 20000 });
-  await page.evaluate(() => window.quillpad.setViewMode('wysiwyg'));
-  await page.waitForTimeout(700);
-}
-
-for (const no of foldLines) {
-  await resetPage();
-  const t = await foldRectFor(no);
-  if (!t) {
-    noArrow.push(`L${no}`);
-    continue;
-  }
-  await page.mouse.click(t.x, t.y);
-  await page.waitForTimeout(320);
-  const folded = await page.evaluate(
-    () => window.quillpad.editor.view.contentDOM.querySelectorAll('.cm-foldPlaceholder').length,
-  );
-  if (process.env.FOLD_DEBUG) console.log(`  L${no} @(${t.x},${t.y}) 折叠=${folded}`);
-  if (folded < 1) foldFail.push(`L${no}`);
-}
-check(
-  '可见折叠箭头全部点得动',
-  foldFail.length === 0 && noArrow.length === 0,
-  `${foldLines.length} 个箭头${noArrow.length ? '，找不到: ' + noArrow.join(',') : ''}${foldFail.length ? '，失败: ' + foldFail.join(',') : '，全部点得动'}`,
-);
-
-/* ------------------------------------------------------------ 5. 拖选定位 */
-await page.evaluate(() => {
-  window.quillpad.editor.view.scrollDOM.scrollTop = 0;
-});
-await page.waitForTimeout(300);
+/* ------------------------------------------------------------- 3. 拖选定位 */
 const rows = await page.evaluate(() => {
   const view = window.quillpad.editor.view;
   const doc = view.state.doc;
@@ -288,8 +192,6 @@ const rows = await page.evaluate(() => {
       no,
       left: Math.round(rect ? rect.left : r.left),
       top: Math.round(rect ? rect.top : r.top),
-      h: Math.round(rect ? rect.height : r.height),
-      ok: !!rect,
     });
   }
   return out.sort((a, b) => a.no - b.no);
@@ -317,6 +219,124 @@ if (rows.length >= 2) {
 } else {
   check('拖选落点与鼠标所在行一致', false, `未取到足够的目标行：${JSON.stringify(rows)}`);
 }
+
+/* ------------------------------------------------- 4/5. 源码模式保留且对齐 */
+await enter('source');
+const src = await page.evaluate(async () => {
+  const view = window.quillpad.editor.view;
+  const doc = view.state.doc;
+  const gutters = document.querySelector('.cm-gutters');
+  const nums = () =>
+    Array.from(view.dom.querySelectorAll('.cm-lineNumbers .cm-gutterElement')).map((el) => {
+      const r = el.getBoundingClientRect();
+      return { top: Math.round(r.top), text: el.textContent.trim(), vis: el.style.visibility !== 'hidden' };
+    });
+  const folds = () =>
+    Array.from(view.dom.querySelectorAll('.cm-foldGutter .cm-gutterElement')).filter(
+      (el) => el.style.visibility !== 'hidden' && el.textContent.trim(),
+    ).length;
+
+  let worst = 0;
+  const bad = [];
+  let checked = 0;
+  const seen = new Set();
+  const collect = () => {
+    const slots = nums().filter((n) => n.vis && /^\d+$/.test(n.text));
+    for (const el of Array.from(view.contentDOM.querySelectorAll('.cm-line'))) {
+      let no;
+      try {
+        no = doc.lineAt(view.posAtDOM(el, 0)).number;
+      } catch {
+        continue;
+      }
+      if (seen.has(no)) continue;
+      const slot = slots.find((n) => n.text === String(no));
+      if (!slot) continue;
+      seen.add(no);
+      const box = el.getBoundingClientRect();
+      const diff = Math.abs(slot.top - Math.round(box.top));
+      checked += 1;
+      if (diff > worst) worst = diff;
+      if (diff > 1) bad.push(`L${no} 差${diff}`);
+    }
+  };
+  const scroller = view.scrollDOM;
+  const step = Math.round(scroller.clientHeight * 0.6);
+  for (let y = 0; y <= scroller.scrollHeight; y += step) {
+    scroller.scrollTop = y;
+    view.requestMeasure();
+    await new Promise((res) => setTimeout(res, 120));
+    collect();
+  }
+  scroller.scrollTop = 0;
+  view.requestMeasure();
+  await new Promise((res) => setTimeout(res, 200));
+  return {
+    gutterWidth: gutters ? Math.round(gutters.getBoundingClientRect().width) : 0,
+    numberCount: nums().filter((n) => n.vis && n.text).length,
+    foldCount: folds(),
+    aligned: checked,
+    worst,
+    bad: bad.slice(0, 6),
+  };
+});
+check(
+  '源码模式保留行号栏与折叠箭头',
+  src.gutterWidth > 0 && src.numberCount >= 10 && src.foldCount >= 3,
+  `槽宽=${src.gutterWidth}px 行号=${src.numberCount} 箭头=${src.foldCount}`,
+);
+check(
+  '源码模式行号与内容行逐行对齐（≤1px）',
+  src.aligned >= 10 && src.worst <= 1,
+  `${src.aligned} 行 worst=${src.worst}px${src.bad.length ? ' ' + src.bad.join(',') : ''}`,
+);
+
+/* -------------------------------------------- 6. 源码模式箭头点得动 */
+const arrow = await page.evaluate(() => {
+  const view = window.quillpad.editor.view;
+  const num = Array.from(view.dom.querySelectorAll('.cm-lineNumbers .cm-gutterElement')).find(
+    (el) => el.style.visibility !== 'hidden' && el.textContent.trim() === '1',
+  );
+  if (!num) return null;
+  const nr = num.getBoundingClientRect();
+  for (const el of Array.from(view.dom.querySelectorAll('.cm-foldGutter .cm-gutterElement'))) {
+    if (el.style.visibility === 'hidden' || !el.textContent.trim()) continue;
+    const r = el.getBoundingClientRect();
+    if (Math.abs(r.top - nr.top) < 3) {
+      return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+    }
+  }
+  return null;
+});
+let foldedInSource = 0;
+if (arrow) {
+  await page.mouse.click(arrow.x, arrow.y);
+  await page.waitForTimeout(320);
+  foldedInSource = await page.evaluate(
+    () => window.quillpad.editor.view.contentDOM.querySelectorAll('.cm-foldPlaceholder').length,
+  );
+}
+check(
+  '源码模式折叠箭头点得动',
+  !!arrow && foldedInSource > 0,
+  arrow ? `折叠占位 ${foldedInSource} 个` : '未找到 L1 的箭头',
+);
+
+/* ------------------- 7. 折叠状态不残留到所见即所得（那边已无箭头可点） */
+await page.evaluate(() => window.quillpad.setViewMode('wysiwyg'));
+await page.waitForTimeout(700);
+const leftover = await page.evaluate(() => {
+  const view = window.quillpad.editor.view;
+  return {
+    placeholders: view.contentDOM.querySelectorAll('.cm-foldPlaceholder').length,
+    gutters: !!document.querySelector('.cm-gutters'),
+  };
+});
+check(
+  '切到所见即所得后折叠自动展开、槽位仍不出现',
+  leftover.placeholders === 0 && !leftover.gutters,
+  `折叠占位=${leftover.placeholders} gutters=${leftover.gutters}`,
+);
 
 check('无运行时错误', errors.length === 0, errors.join(' | '));
 

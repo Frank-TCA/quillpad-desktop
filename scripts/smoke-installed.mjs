@@ -8,8 +8,8 @@
  *     成功 toast + 行消失 + pluginList 真删（移植 plugin-manager-check.mjs）
  *  3. 插件安装对话框文件控件双语：EN "Choose File"/"No file chosen"，
  *     ZH 「选择文件」/「未选择任何文件」，选临时 zip 后显示文件名
- *  4. WYSIWYG 折叠箭头与行号对齐：整页滚动采样 checked≥10 且 worst≤2.5px，
- *     源码模式 worst≤2.5px（移植 scripts/.tmp-verify-items.mjs 的 measure）
+ *  4. 行号栏 / 折叠箭头按模式隐显：所见即所得整列不装（无 `.cm-gutters`）；
+ *     源码模式保留行号与折叠箭头，且行号与内容行逐行对齐（checked≥10 且 worst≤2.5px）
  *  5. 欢迎文档双语联动：切英文 → tab 变 Welcome.md 且英文模板且非脏；
  *     切回中文恢复；用户编辑过只改名不覆盖
  *  6. 文件级检查（无需启动应用）：docs/screenshots/ 四张截图存在非空且被
@@ -308,34 +308,37 @@ async function sectionFilePicker() {
   await win.waitForTimeout(300);
 }
 
-/* ================================================ 第 4 项 · 折叠箭头对齐 */
-async function sectionFoldAlign() {
-  console.log('── 第 4 项 · WYSIWYG 折叠箭头与行号对齐');
+/* ============================================ 第 4 项 · 行号栏 / 折叠箭头 */
+async function sectionGutterPolicy() {
+  console.log('── 第 4 项 · 行号栏与折叠箭头按视图模式隐显');
+
+  /* v1.0.2 起：所见即所得是阅读面，不装行号槽与折叠槽（`.cm-gutters` 整个不出现）；
+     源码 / 分栏保留，且是 CodeMirror 原生对齐，不需要任何补偿。 */
   await win.evaluate(() => window.quillpad.setViewMode('wysiwyg', { user: true }));
   await win.waitForTimeout(900);
-
-  // 字形矩形：只量**文字**（第一个文字节点的 Range），不量元素盒子。
-  // 折叠标记的 span 现在撑满整个槽位（v1.0.1 扩大了可点区域），是 30~63px 高的
-  // inline-block，用 getBoundingClientRect 拿到的是命中区域而不是字形；行号是裸
-  // 文本。两边统一按文字测量，比的才是「字形是否同带」。
-  const measure = async () => win.evaluate(() => {
-    const glyphRect = (el) => {
-      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-      let node;
-      while ((node = walker.nextNode())) {
-        if (!node.nodeValue.trim()) continue;
-        const r = document.createRange();
-        r.selectNodeContents(node);
-        const rects = [...r.getClientRects()].filter((x) => x.height > 0);
-        if (rects.length) return rects[0];
-      }
-      return null;
+  const wy = await win.evaluate(() => {
+    const g = document.querySelector('.cm-gutters');
+    return {
+      gutters: g ? Math.round(g.getBoundingClientRect().width) : null,
+      lineNumbers: !!document.querySelector('.cm-lineNumbers'),
+      foldGutter: !!document.querySelector('.cm-foldGutter'),
     };
-    // 行号槽里的「隐藏」元素也要算进来：围栏行 / 空行的行号被 visibility:hidden
-    // 藏掉，但它们的槽位才是折叠箭头的**同一行**。若按可见性过滤，围栏箭头会被
-    // 配到下一行的行号上（槽位差 4px），凭空量出 20px 偏差。
+  });
+  check('4.1 所见即所得不显示行号栏与折叠箭头',
+    wy.gutters === null && !wy.lineNumbers && !wy.foldGutter,
+    `gutters=${wy.gutters} lineNumbers=${wy.lineNumbers} foldGutter=${wy.foldGutter}`);
+
+  await win.evaluate(() => window.quillpad.setViewMode('source', { user: true }));
+  await win.waitForTimeout(800);
+
+  /** 源码模式：行号槽与内容行的逐行对齐（行号槽文本 → 落在同一行盒内）。 */
+  const measure = async () => win.evaluate(() => {
+    const lines = [...document.querySelectorAll('.cm-content .cm-line')].map((el) => {
+      const r = el.getBoundingClientRect();
+      return { top: r.top, bottom: r.bottom };
+    });
     const nums = [...document.querySelectorAll('.cm-lineNumbers .cm-gutterElement')].filter(
-      (el) => el.offsetHeight > 0 && el.textContent.trim(),
+      (el) => el.offsetHeight > 0 && el.style.visibility !== 'hidden' && el.textContent.trim(),
     );
     const folds = [...document.querySelectorAll('.cm-foldGutter .cm-gutterElement')].filter(
       (el) => el.offsetHeight > 0 && el.style.visibility !== 'hidden' && el.innerHTML.trim(),
@@ -343,34 +346,22 @@ async function sectionFoldAlign() {
     let checked = 0;
     let worst = 0;
     const bad = [];
-    for (const f of folds) {
-      const fr = f.getBoundingClientRect();
-      if (fr.bottom < 0 || fr.top > innerHeight) continue;
-      const fb = glyphRect(f);
-      if (!fb) continue;
-      let best = null;
-      let bestD = Infinity;
-      for (const n of nums) {
-        const nr = n.getBoundingClientRect();
-        const d = Math.abs(nr.top - fr.top);
-        if (d < bestD) {
-          bestD = d;
-          best = n;
-        }
-      }
-      if (!best || bestD > 5) continue; // 同行配对（未变换布局顶几乎相等）
-      const nb = glyphRect(best);
-      if (!nb) continue;
-      const diff = Math.abs(nb.top + nb.height / 2 - (fb.top + fb.height / 2));
+    for (const n of nums) {
+      const r = n.getBoundingClientRect();
+      const mid = r.top + r.height / 2;
+      const line = lines.find((l) => mid >= l.top - 0.5 && mid <= l.bottom + 0.5);
+      if (!line) continue;
+      const d = Math.abs(r.top - line.top);
       checked += 1;
-      if (diff > worst) worst = diff;
-      if (diff > 2.5) bad.push(Math.round(diff * 10) / 10);
+      if (d > worst) worst = d;
+      if (d > 2.5) bad.push(Math.round(d * 10) / 10);
     }
-    return { checked, worst: Math.round(worst * 10) / 10, bad: bad.slice(0, 8) };
+    return { checked, worst: Math.round(worst * 10) / 10, bad: bad.slice(0, 8), folds: folds.length };
   });
 
   let totalChecked = 0;
   let totalWorst = 0;
+  let foldTotal = 0;
   const allBad = [];
   const scrollInfo = await win.evaluate(() => {
     const s = document.querySelector('.cm-scroller');
@@ -381,22 +372,23 @@ async function sectionFoldAlign() {
       const s = document.querySelector('.cm-scroller');
       if (s) s.scrollTop = top;
     }, y);
-    await win.waitForTimeout(220);
+    await win.waitForTimeout(200);
     const r = await measure();
     totalChecked += r.checked;
     if (r.worst > totalWorst) totalWorst = r.worst;
+    if (r.folds > foldTotal) foldTotal = r.folds;
     allBad.push(...r.bad);
   }
-  check('4.1 WYSIWYG 折叠箭头字形与行号字形同带（≤2.5px）',
+
+  check('4.2 源码模式保留行号栏与折叠箭头',
+    totalChecked >= 10 && foldTotal >= 1,
+    `行号=${totalChecked} 箭头=${foldTotal}`);
+  check('4.3 源码模式行号与内容行对齐（≤2.5px）',
     totalChecked >= 10 && totalWorst <= 2.5,
     `checked=${totalChecked} worst=${totalWorst}px bad=[${allBad.join(',')}]`);
 
-  await win.evaluate(() => window.quillpad.setViewMode('source', { user: true }));
-  await win.waitForTimeout(600);
-  const srcAlign = await measure();
-  check('4.2 源码模式无回归（≤2.5px）',
-    srcAlign.checked === 0 || srcAlign.worst <= 2.5,
-    `checked=${srcAlign.checked} worst=${srcAlign.worst}px`);
+  await win.evaluate(() => window.quillpad.setViewMode('wysiwyg', { user: true }));
+  await win.waitForTimeout(700);
 }
 
 /* ================================================ 第 5 项 · 欢迎文档双语联动 */
@@ -453,7 +445,7 @@ for (const [tag, fn] of [
   ['第 1 项', sectionLocaleButton],
   ['第 2 项', sectionPluginUninstall],
   ['第 3 项', sectionFilePicker],
-  ['第 4 项', sectionFoldAlign],
+  ['第 4 项', sectionGutterPolicy],
   ['第 5 项', sectionWelcomeDoc],
 ]) {
   try {

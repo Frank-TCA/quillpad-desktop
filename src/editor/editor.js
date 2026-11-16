@@ -32,6 +32,8 @@ import {
   bracketMatching,
   indentOnInput,
   foldKeymap,
+  foldGutter,
+  unfoldAll,
   indentUnit,
   syntaxHighlighting,
   defaultHighlightStyle,
@@ -54,7 +56,6 @@ import { createSearchPanel } from '../ui/findbar.js';
 import { textMarks } from './marks.js';
 import { t } from '../core/i18n.js';
 import { bus } from '../core/state.js';
-import { quillpadFoldGutter } from './fold-gutter.js';
 
 /** 大文件阈值：超过后关闭语法高亮。 */
 const BIG_FILE = 2 * 1024 * 1024;
@@ -123,6 +124,11 @@ export class EditorManager {
     this.wysiwygCompartment = new Compartment();
     /** @type {import('@codemirror/state').Extension} */
     this._wysiwyg = [];
+    /**
+     * 行号槽 + 折叠槽。WYSIWYG 下整列不装（v1.0.2 起所见即所得不显示行号与折叠箭头），
+     * 源码 / 分栏保持原样。
+     */
+    this.gutterCompartment = new Compartment();
     /** v2 · QA D-2：`.cm-content` 的阅读面排版容器（按视图模式切换）。 */
     this.docTypographyCompartment = new Compartment();
     /** v2：专注模式 / 打字机模式（`focus.js`）。 */
@@ -174,11 +180,9 @@ export class EditorManager {
    */
   _baseExtensions() {
     return [
-      lineNumbers(),
-      highlightActiveLineGutter(),
+      this.gutterCompartment.of(this._gutterExtension()),
       highlightSpecialChars(),
       history(),
-      quillpadFoldGutter(),
       drawSelection(),
       dropCursor(),
       EditorState.allowMultipleSelections.of(true),
@@ -226,6 +230,23 @@ export class EditorManager {
    */
   _docTypographyExtension() {
     return this.wysiwygActive ? WYSIWYG_DOC_EXTENSION : [];
+  }
+
+  /**
+   * 当前模式该用的行号槽 / 折叠槽（v1.0.2）。
+   *
+   * 所见即所得是「阅读面」：文档行号与折叠箭头对它没有意义，反而因为块级
+   * widget（表格 / 目录 / 分隔线）高度不一而需要一整套对齐补偿。这里干脆
+   * 整列不装 —— 编辑器根节点上不会出现 `.cm-gutters`，内容区自然左移，
+   * 也不再需要任何「槽位对齐」代码。
+   *
+   * 源码 / 分栏保留行号与折叠，且是 CodeMirror 原生行为（行高一致，无需补偿）。
+   *
+   * @return {import('@codemirror/state').Extension}
+   */
+  _gutterExtension() {
+    if (this.wysiwygActive) return [];
+    return [lineNumbers(), highlightActiveLineGutter(), foldGutter()];
   }
 
   /**
@@ -544,6 +565,12 @@ export class EditorManager {
     // QA D-2：装饰层与阅读面排版容器同进同退，保证三态切换后
     // `.cm-content` 的计算样式与当前模式一致（撤销栈/选区/滚动仍保留）。
     this._reconfigureAll(this.docTypographyCompartment, this._docTypographyExtension());
+    // v1.0.2：行号槽 / 折叠槽只在源码与分栏里存在 —— 所见即所得是阅读面，
+    // 不显示行号，也不显示折叠箭头。
+    this._reconfigureAll(this.gutterCompartment, this._gutterExtension());
+    // 折叠状态存在 state 里，切模式不会自动清掉。进入所见即所得时已没有折叠
+    // 箭头可点，残留的折叠会让内容看上去凭空少了一截，所以在这里一次展开。
+    if (this.wysiwygActive) unfoldAll(this.view);
     this.view.requestMeasure();
     requestAnimationFrame(() => {
       this.view.scrollDOM.scrollTop = top;

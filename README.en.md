@@ -40,7 +40,7 @@ to first-class features:
 
 | Capability | Details |
 | --- | --- |
-| Three view modes | Source / WYSIWYG / split, switch with `Ctrl+Shift+1/2/3` |
+| Three view modes | Source / WYSIWYG / split, switch with `Ctrl+Shift+1/2/3`; WYSIWYG is a pure reading surface with no line-number column and no fold arrows |
 | Syntax highlighting | 40 languages across 100+ extensions, grouped by family (web, data, scripting, systems, documents) |
 | Multi-cursor & column selection | `Ctrl+Alt+↑/↓` to add cursors; rectangular insert, delete, align, and numbering |
 | Find & replace | Regex, whole word, case sensitivity, in-selection replace, 20-entry history |
@@ -105,9 +105,9 @@ Get the latest build from [Releases](https://github.com/Frank-TCA/quillpad-deskt
 
 | File | Description |
 | --- | --- |
-| `QuillPad-Setup-v1.0.1.exe` | Installer: choose the install directory, desktop and Start menu shortcuts, shell context-menu integration, trace-cleaning uninstaller |
-| `QuillPad-v1.0.1-portable.exe` | Portable: single file, no installation, data in a sibling `QuillPad-Data/` folder — delete it and nothing is left behind |
-| `QuillPad-Uninstaller-v1.0.1.exe` | Standalone uninstaller (~80 KB): scans and deep-cleans installation directories, user data, shortcuts, and registry leftovers from **previous versions**; only needed for the installer build |
+| `QuillPad-Setup-v1.0.2.exe` | Installer: choose the install directory, desktop and Start menu shortcuts, shell context-menu integration, trace-cleaning uninstaller |
+| `QuillPad-v1.0.2-portable.exe` | Portable: single file, no installation, data in a sibling `QuillPad-Data/` folder — delete it and nothing is left behind |
+| `QuillPad-Uninstaller-v1.0.2.exe` | Standalone uninstaller (~80 KB): scans and deep-cleans installation directories, user data, shortcuts, and registry leftovers from **previous versions**; only needed for the installer build |
 
 **Uninstalling**: for the installer build, use the Start menu "Uninstall QuillPad" entry, `Uninstall QuillPad.exe` in the install directory, Windows Settings → Apps, or the standalone uninstaller above. All four run the same trace manifest (`build/traces.nsh`), so the result is identical. The portable build writes no registry keys — just delete the exe and `QuillPad-Data/`.
 

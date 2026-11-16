@@ -13,9 +13,9 @@
  * `license:check` 的比对都要求纯数字形式。要给人看的带 `v` 形式用下面的
  * `APP_VERSION_LABEL`。
  */
-export const APP_VERSION = '1.0.1';
+export const APP_VERSION = '1.0.2';
 
-/** 展示用版本号：`v1.0.1`（界面上只要出现版本号，一律用这个）。 */
+/** 展示用版本号：`v1.0.2`（界面上只要出现版本号，一律用这个）。 */
 export const APP_VERSION_LABEL = `v${APP_VERSION}`;
 
 /** 产品名。 */

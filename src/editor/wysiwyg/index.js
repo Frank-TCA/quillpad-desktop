@@ -14,7 +14,6 @@
  */
 
 import { EditorView, Decoration, ViewPlugin } from '@codemirror/view';
-import { Facet } from '@codemirror/state';
 import {
   scanMarkdown,
   activeLineNumbers,
@@ -22,7 +21,6 @@ import {
 } from './scan.js';
 import { markerDecoration, nodeDecoration, widgetDecoration, hiddenMark } from './marks.js';
 import { createBlockField, resolveFeatures } from './blocks.js';
-import { gutterAlignPlugin } from './gutter-align.js';
 import { decoBudget, shouldSkipHeavy } from './perf.js';
 import {
   ImageWidget,
@@ -36,19 +34,6 @@ import {
 import { resolveImageUrl } from './image.js';
 import { collectHeadingsFromScan } from './toc.js';
 import { collectFootnotes } from './footnotes.js';
-
-/**
- * 「所见即所得装饰正在生效」标记。
- *
- * 只在本模式的扩展里 provide；source / split 不 provide → 值恒为 false。
- * 折叠判定（`editor.js` 的 `quillpadFoldable`）据此决定走源码模式的原生规则
- * 还是所见即所得的结构化规则；`setWysiwyg()` 换掉 compartment 时值随之变化。
- *
- * @type {import('@codemirror/state').Facet<boolean, boolean>}
- */
-export const wysiwygMode = Facet.define({
-  combine: (values) => values.some(Boolean),
-});
 
 /**
  * 生成 WYSIWYG 扩展。
@@ -71,11 +56,8 @@ export function createWysiwygExtension(opts) {
 
   /** @type {any} */
   const extension = [
-    wysiwygMode.of(true),
     blockField,
     inlinePlugin,
-    // 行号跟行内容对齐（标题 / 引用 / 代码块首行有 padding-top，行号会浮在上面）
-    gutterAlignPlugin,
     // 被整块替换的区域在光标移动时是原子单位
     EditorView.atomicRanges.of((view) => {
       const value = view.state.field(blockField, false);

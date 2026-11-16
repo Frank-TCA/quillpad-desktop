@@ -44,24 +44,12 @@
   line-height: 0;
 }
 
-/* 渲染态看不见的行（空行、``` 围栏行）要藏掉行号：行号槽按**真实槽高**定位，
-   而这些行被压到 0/4/12/16px，一个行号硬塞进去就和下一行叠在一起（标题 + 空行
-   这种 0 高度的槽更是完全重合）。它们本身也不是内容行，藏掉最干净；
-   源码 / 分栏视图不受影响。
-
-   只作用于 `.cm-lineNumbers`：同一个标记也会落到折叠槽上，全局隐藏的话代码块
-   的折叠箭头会一起消失（围栏行正是可折叠点）。 */
-.cm-lineNumbers .cm-gutterElement.qp-gutter-hidden {
-  visibility: hidden;
-}
-
-/* 折叠箭头的**可点区域**撑满整个槽位。
-   CM 只给 `.cm-gutterElement` 一个 18px 宽的槽，里面的字形只有 14px 高：
-   - 内容行的槽高 32~63px，字形以外的区域点了没反应（"箭头不好点"）；
-   - 围栏行的槽只有 4px，字形必然溢出到下一行槽位，被后一个元素盖住 ——
-     看得见、点不到。
+/* 折叠箭头的**可点区域**撑满整个槽位（源码 / 分栏视图）。
+   v1.0.2 起所见即所得不装行号槽与折叠槽，这两条规则只服务于源码与分栏；
+   留着的理由是槽位仍比字形宽——CM 给 `.cm-gutterElement` 一个 18px 宽的槽，
+   里面的字形只有 14px 高，字形以外的区域点了没反应。
    用绝对定位的伪元素充当命中层（不改变 span 自身的行内排布，字形位置与原来
-   完全一致）；字形用 z-index 抬高，溢出的部分才不会被下一个槽位盖住。 */
+   完全一致）；字形用 z-index 抬高。 */
 .cm-foldGutter .cm-gutterElement {
   position: relative;
 }
@@ -576,8 +564,8 @@
 .qp-table-wrap {
   position: relative;
   /* 上下间距用 padding，不用 margin：表格是**块级 widget**（.cm-content 的直接
-     子元素），margin 不计入 widget 的 rect，CM 就会少算这 32px，行号 / 折叠箭头
-     整列跟着错位（实测表格后面 52px 起步，越往下越大）。 */
+     子元素），margin 不计入 widget 的 rect，CM 的行高映射就会少算这 32px，
+     连带光标 / 选区换算与滚动定位都偏（实测表格后面偏 52px 起步，越往下越大）。 */
   padding: var(--qp-block-gap, 16px) 0;
   /* 宽度由 widget 按 .cm-content 内容列给出像素值（右缘与正文右端对齐，见 table.js） */
 }
@@ -681,9 +669,9 @@
 /* 分隔线的上下间距必须用**行盒内边距**表达，不能给 <hr> 加外边距。
    原因：.cm-line 是块容器，hr 的外边距会折叠出行盒（实测行盒只有 33px，
    而视觉占位是 20 + 1 + 32 = 53px）。CM 的行高映射只看行盒 rect，于是每一条
-   `---` 都让行号 / 折叠箭头整列往上少算 20px，二十几条分隔线累积到 400px 以上；
-   箭头互相压住（后来的元素盖住先来的），点哪一行都可能命中别的行的元素，
-   表现就是「折叠箭头点不动」。改成 padding 后行盒自己就是真值。 */
+   `---` 都让后续行少算 20px，二十几条分隔线就把累积误差推到 400px 以上；
+   v1.0.1 之前这个误差是由行号槽的 transform 补偿暴露出来的。改成 padding 后
+   行盒自己就是真值。 */
 .qp-hr {
   display: block;
   height: 0;
@@ -717,7 +705,9 @@
 
 .qp-frontmatter {
   position: relative;
-  /* 同表格：块级 widget 的外边距不会计入 rect，CM 会少算行高 → 整列 gutter 错位 */
+  /* 块级间距一律用 padding：widget 的外边距不计入自身 rect，CodeMirror 按 rect
+     累加行高时会少算，连带光标 / 选区换算与滚动定位都偏。（v1.0.2 起所见即所得
+     不再有行号槽，但行高映射仍被光标与滚动依赖。） */
   padding: calc(var(--qp-block-gap, 16px) + 8px) 12px calc(var(--qp-block-gap, 16px) + 8px) 14px;
   max-height: 120px;
   overflow: auto;
