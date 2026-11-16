@@ -17,12 +17,44 @@ import { API_METHODS, createSandbox } from './sandbox.js';
 import { validateManifest, staticScan } from './manifest.js';
 import * as state from './state.js';
 import { APP_VERSION } from '../version.js';
+import { t, getLocale } from '../i18n.js';
+import { bus as appBus } from '../state.js';
 
 /** @type {Map<string, object>} 运行中的插件会话 */
 const sessions = new Map();
 
 /** @type {Array<object>} 最近一次 list 的快照 */
 let installed = [];
+
+/**
+ * 界面语言切换后重算插件命令标题。
+ *
+ * app.applyLocale() 的 resetCommands() 刻意保留 `plugin.` 前缀条目，插件命令
+ * 不会跟着重注册；这里按会话里的双语快照重新 defineCommand（同 id 覆盖），
+ * Worker 与插件运行状态完全不动。同时把新语言推给沙箱，让静态 prelude 里的
+ * ETIMEOUT 文案由 __qpLabel() 取对应语言。
+ * @return {void}
+ */
+function refreshLocaleRegistrations() {
+  const locale = getLocale();
+  for (const session of sessions.values()) {
+    for (const [cmdId, reg] of session.commandRegistrations) {
+      unregisterCommand(cmdId);
+      defineCommand({
+        id: cmdId,
+        title: t(reg.zh, reg.en),
+        category: t('插件', 'Plugins'),
+        keys: reg.keys,
+        run: reg.run,
+      });
+    }
+    if (session.sandbox && typeof session.sandbox.post === 'function') {
+      session.sandbox.post({ __qp: 'locale', locale });
+    }
+  }
+}
+
+appBus.on('locale', refreshLocaleRegistrations);
 
 /**
  * 把字节转 base64（走 image.js 的分块实现，2MB 不会爆栈）。
@@ -44,7 +76,7 @@ function b64(bytes) {
 export async function installBuiltin(app, id, opts = {}) {
   const base = new URL('./plugins/', document.baseURI).href;
   const manifestRes = await fetch(`${base}${id}/plugin.json`, { cache: 'no-cache' });
-  if (!manifestRes.ok) return { ok: false, code: 'ENOTFOUND', error: `找不到官方包 ${id}` };
+  if (!manifestRes.ok) return { ok: false, code: 'ENOTFOUND', error: t(`找不到官方包 ${id}`, `Official package not found: ${id}`) };
   const manifest = await manifestRes.json();
   const checked = validateManifest(manifest, { quillpadVersion: APP_VERSION });
   if (!checked.ok) return checked;
@@ -53,7 +85,7 @@ export async function installBuiltin(app, id, opts = {}) {
   const files = [];
   for (const name of [...new Set(names)]) {
     const res = await fetch(`${base}${id}/${name}`, { cache: 'no-cache' });
-    if (!res.ok) return { ok: false, code: 'ESCHEMA', error: `包内缺少 ${name}` };
+    if (!res.ok) return { ok: false, code: 'ESCHEMA', error: t(`包内缺少 ${name}`, `Package is missing ${name}`) };
     const buf = new Uint8Array(await res.arrayBuffer());
     const scan = /\.m?js$/i.test(name) ? staticScan(new TextDecoder().decode(buf), name) : { ok: true };
     if (!scan.ok) return scan;
@@ -89,15 +121,15 @@ export async function installFromZip(app, input = {}) {
     try {
       const resp = await fetch(String(input.url));
       if (!resp.ok) {
-        return { ok: false, code: 'EDOWNLOAD', error: `下载失败: HTTP ${resp.status}` };
+        return { ok: false, code: 'EDOWNLOAD', error: t(`下载失败: HTTP ${resp.status}`, `Download failed: HTTP ${resp.status}`) };
       }
       bytes = new Uint8Array(await resp.arrayBuffer());
     } catch (err) {
-      return { ok: false, code: 'EDOWNLOAD', error: `下载失败: ${(err && err.message) || String(err)}` };
+      return { ok: false, code: 'EDOWNLOAD', error: t(`下载失败: ${(err && err.message) || String(err)}`, `Download failed: ${(err && err.message) || String(err)}`) };
     }
   }
 
-  if (!bytes || !bytes.length) return { ok: false, code: 'EINVALID', error: '安装包为空' };
+  if (!bytes || !bytes.length) return { ok: false, code: 'EINVALID', error: t('安装包为空', 'Package is empty') };
 
   // Uint8Array / number[] → base64
   const zipBase64 = b64(bytes);
@@ -159,11 +191,23 @@ export function startSession(app, plugin) {
    */
   /** @type {Map<string, string>} 插件内部命令 id → 组合键 */
   const declaredKeys = new Map();
+  /** @type {Map<string, object>} 插件内部命令 id → 清单里的命令（含 titleEn） */
+  const declaredCommands = new Map();
   for (const item of (manifest.contributes && manifest.contributes.commands) || []) {
+    if (item && typeof item.id === 'string') declaredCommands.set(item.id, item);
     if (item && typeof item.id === 'string' && typeof item.key === 'string' && item.key) {
       declaredKeys.set(item.id, item.key);
     }
   }
+
+  /** @type {Map<string, object>} 侧栏视图 id → 清单里的声明（含 titleEn） */
+  const declaredViews = new Map();
+  for (const item of (manifest.contributes && manifest.contributes.sidebarViews) || []) {
+    if (item && typeof item.id === 'string') declaredViews.set(item.id, item);
+  }
+
+  /** @type {Map<string, {zh: string, en: string, keys: string[], run: Function}>} 命令双语快照 */
+  const commandRegistrations = new Map();
 
   const storage = {
     get: async (key) => {
@@ -192,18 +236,33 @@ export function startSession(app, plugin) {
           keys.push(...usable);
         }
       }
+      const declaredCmd = declaredCommands.get(String(payload.id)) || {};
+      const titleZh = `${name}：${payload.title || payload.id}`;
+      const titleEn = `${manifest.nameEn || name}: ${payload.titleEn || declaredCmd.titleEn || declaredCmd.title || payload.title || payload.id}`;
+      const run = async () => (sandbox ? sandbox.invoke(String(payload.id), {}) : false);
       defineCommand({
         id: cmdId,
-        title: `${name}：${payload.title || payload.id}`,
-        category: '插件',
+        title: t(titleZh, titleEn),
+        category: t('插件', 'Plugins'),
         keys,
-        run: async () => (sandbox ? sandbox.invoke(String(payload.id), {}) : false),
+        run,
       });
+      // 保存双语快照：applyLocale() 只重注册内置命令，插件命令靠 locale 事件重算标题
+      commandRegistrations.set(cmdId, { zh: titleZh, en: titleEn, keys, run });
       commandIds.add(cmdId);
     } else if (payload.type === 'sidebarView') {
       viewIds.add(String(payload.id));
       if (app && typeof app.registerPluginView === 'function') {
-        app.registerPluginView({ id: `${id}.${payload.id}`, title: payload.title, pluginId: id });
+        const declaredView = declaredViews.get(String(payload.id)) || {};
+        const viewEn = String(payload.titleEn || declaredView.titleEn || '');
+        // 保留 zh 原值 + <字段>En 副本：ui/plugins.js 的 pickLocalized() 在渲染点取值，
+        // 语言切换后无需重新登记视图。
+        app.registerPluginView({
+          id: `${id}.${payload.id}`,
+          title: payload.title,
+          titleEn: viewEn,
+          pluginId: id,
+        });
       }
     }
   };
@@ -232,7 +291,7 @@ export function startSession(app, plugin) {
     if (session) session.alive = false;
     stopSession(id);
     if (app && typeof app.toast === 'function') {
-      app.toast(`插件「${name}」已停用（无响应）`, 'error', 3200);
+      app.toast(t(`插件「${name}」已停用（无响应）`, `Plugin "${name}" was disabled (not responding)`), 'error', 3200);
     }
     if (app && typeof app.emitPluginsChanged === 'function') app.emitPluginsChanged();
     console.warn('[QuillPad] 插件沙箱停用：', id, reason);
@@ -252,7 +311,7 @@ export function startSession(app, plugin) {
     return null;
   }
 
-  const session = { id, manifest, sandbox, rpc, commandIds, viewIds, alive: true, apiMethods: apiMethodNames(methods) };
+  const session = { id, manifest, sandbox, rpc, commandIds, viewIds, commandRegistrations, alive: true, apiMethods: apiMethodNames(methods) };
   sessions.set(id, session);
   return session;
 }
@@ -322,7 +381,7 @@ export async function disable(app, id, reason = '') {
  */
 export async function enable(app, id) {
   const reason = state.getEntry(id);
-  if (reason && reason.blocked) return { ok: false, code: 'EBLOCKED', error: '该插件已被阻止（License 不合规）' };
+  if (reason && reason.blocked) return { ok: false, code: 'EBLOCKED', error: t('该插件已被阻止（License 不合规）', 'This plugin has been blocked (non-compliant license)') };
   await desktop.pluginEnable(id, true, '');
   state.setEntry(id, { enabled: true, disabledReason: '' });
   await refresh(app);

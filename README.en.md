@@ -93,7 +93,7 @@ to first-class features:
 </tr>
 </table>
 
-![Aurora dark theme](docs/screenshots/04-theme-aurora.png)
+![Ivory light theme](docs/screenshots/04-theme-ivory.png)
 
 ## Download and install
 

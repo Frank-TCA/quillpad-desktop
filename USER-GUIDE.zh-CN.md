@@ -6,8 +6,8 @@
 
 | 文件 | 说明 | 大小 |
 | --- | --- | --- |
-| `QuillPad-Setup-v1.0.0.exe` | 安装版 | 127,293,018 字节 |
-| `QuillPad-v1.0.0-portable.exe` | 便携版 | 115,138,299 字节 |
+| `QuillPad-Setup-v1.0.0.exe` | 安装版 | 127,331,552 字节 |
+| `QuillPad-v1.0.0-portable.exe` | 便携版 | 115,234,376 字节 |
 | `QuillPad-Uninstaller-v1.0.0.exe` | 独立卸载器（仅安装版需要） | 79,734 字节 |
 
 本项目以 MIT 协议开源：<https://github.com/Frank-TCA/quillpad-desktop>

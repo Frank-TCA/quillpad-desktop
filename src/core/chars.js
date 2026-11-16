@@ -10,6 +10,8 @@
  * 也让 `scripts/v2-unit.mjs` 能直接断言「总数 ≥ 600」。
  */
 
+import { t } from './i18n.js';
+
 /** 最近使用条数上限（PRD C11）。 */
 export const RECENT_LIMIT = 20;
 
@@ -23,7 +25,10 @@ export const RECENT_KEY = 'quillpad.chars.recent.v1';
 export const CHAR_GROUPS = [
   {
     id: 'punct-cn',
-    name: '中文标点',
+    get name() {
+      return t('中文标点', 'Chinese Punctuation');
+    },
+    nameEn: 'Chinese Punctuation',
     chars:
       '、。〃〈〉《》「」『』【】〔〕〖〗〘〙〚〛〜〝〞〟〰‥…‧﹏' +
       '·×÷±§¶†‡•‥′″‴℃℉№℡™©®°′″‰‱' +
@@ -32,26 +37,38 @@ export const CHAR_GROUPS = [
   },
   {
     id: 'punct-en',
-    name: '西文标点',
+    get name() {
+      return t('西文标点', 'Western Punctuation');
+    },
+    nameEn: 'Western Punctuation',
     chars: '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~ ¡¢£¤¥¦§¨©ª«¬®¯°±²³´µ¶·¸¹º»¼½¾¿',
   },
   {
     id: 'math',
-    name: '数学符号',
+    get name() {
+      return t('数学符号', 'Math Symbols');
+    },
+    nameEn: 'Math Symbols',
     chars:
       '±×÷≠≈≡≤≥≦≧∞∝∵∴∑∏√∛∜∫∬∭∮∂∇∈∉∋∌⊂⊃⊄⊅⊆⊇⊈⊉∩∪∧∨¬⇒⇔∀∃∄∅∆∇' +
       '⌈⌉⌊⌋⟨⟩∥∦∟∠∡∢°′″‴⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿ₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞',
   },
   {
     id: 'arrow',
-    name: '箭头',
+    get name() {
+      return t('箭头', 'Arrows');
+    },
+    nameEn: 'Arrows',
     chars:
       '←↑→↓↔↕↖↗↘↙↚↛↜↝↞↟↠↡↢↣↤↥↦↧↨↩↪↫↬↭↮↯↰↱↲↳↴↵↶↷↸↹↺↻↼↽↾↿⇀⇁⇂⇃⇄⇅⇆⇇⇈⇉⇊⇋⇌⇍⇎⇏' +
       '⇐⇑⇒⇓⇔⇕⇖⇗⇘⇙⇚⇛⇜⇝⇞⇟⇠⇡⇢⇣⇤⇥⇦⇧⇨⇩⇪⇫⇬⇭⇮⇯⇰⇱⇲⇳⇴⇵⇶⇷⇸⇹⇺⇻⇼⇽⇾⇿⟵⟶⟷⟸⟹⟺',
   },
   {
     id: 'number',
-    name: '序号与圈号',
+    get name() {
+      return t('序号与圈号', 'Numbers & Circled');
+    },
+    nameEn: 'Numbers & Circled',
     chars:
       '①①⓪⓫⓬⓭⓮⓯⓰⓱⓲⓳⓴⓵⓶⓷⓸⓹⓺⓻⓼⓽⓾⓿' +
       '⒈⒉⒊⒋⒌⒍⒎⒏⒐⒑⒒⒓⒔⒕⒖⒗⒘⒙⒚⒛' +
@@ -61,12 +78,18 @@ export const CHAR_GROUPS = [
   },
   {
     id: 'currency',
-    name: '货币',
+    get name() {
+      return t('货币', 'Currency');
+    },
+    nameEn: 'Currency',
     chars: '¥$¢£¤₠₡₢₣₤₥₦₧₨₩₪₫€₭₮₯₰₱₲₳₴₵₶₷₸₹₺₻₼₽₾₿￥＄￠￡￢',
   },
   {
     id: 'shape',
-    name: '几何形状',
+    get name() {
+      return t('几何形状', 'Geometric Shapes');
+    },
+    nameEn: 'Geometric Shapes',
     chars:
       '■□▪▫▲△▼▽◆◇○◎●◐◑◒◓◔◕◖◗◘◙◚◛◜◝◞◟◠◡◢◣◤◥◦◧◨◩◪◫◬◭◮◯' +
       '★☆☀☁☂☃☄★☆☇☈☉☊☋☌☍☎☏☐☑☒☓☔☕☖☗☘☙☚☛☜☝☞☟☠☡☢☣☤☥☦☧☨☩☪☫☬☭' +
@@ -74,19 +97,28 @@ export const CHAR_GROUPS = [
   },
   {
     id: 'check',
-    name: '勾叉与提示',
+    get name() {
+      return t('勾叉与提示', 'Checks & Symbols');
+    },
+    nameEn: 'Checks & Symbols',
     chars: '✓✔✗✘✕✖☑☒⚠⚡⚐⚑⚖⚗⚙⚚⚛⚜⛔⛔⛔☺☻☹☹♠♣♥♦♤♧♡♢♨♩♪♫♬♭♮♯',
   },
   {
     id: 'letter',
-    name: '拉丁与希腊',
+    get name() {
+      return t('拉丁与希腊', 'Latin & Greek');
+    },
+    nameEn: 'Latin & Greek',
     chars:
       'ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ' +
       'ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩαβγδεζηθικλμνξοπρστυφχψωϑϕϖϰϱϵ',
   },
   {
     id: 'misc',
-    name: '其他',
+    get name() {
+      return t('其他', 'Other');
+    },
+    nameEn: 'Other',
     chars: '§¶†‡•‣⁃⁌⁍※⁂⁎⁑⁕⁜⌘⌥⇧⌃⌫⌦⏎⏏⏚⌚⌛⏰⏱⏲☯☮☸☽☾♈♉♊♋♌♍♎♏♐♑♒♓',
   },
 ];
@@ -147,7 +179,8 @@ export function searchChars(query) {
       }
     }
   }
-  const matchedGroups = CHAR_GROUPS.filter((g) => g.name.includes(q));
+  const matchedGroups = CHAR_GROUPS.filter((g) =>
+    g.name.includes(q) || String(g.nameEn || '').toLowerCase().includes(q.toLowerCase()));
   if (matchedGroups.length) {
     const out = [];
     const seen = new Set();

@@ -7,6 +7,8 @@
  *  - 本模块负责「编号」与「文末脚注区」的 DOM 构造。
  */
 
+import { t } from '../../core/i18n.js';
+
 /**
  * 汇总文档中的脚注引用与定义。
  *
@@ -48,7 +50,9 @@ export function collectFootnotes(lines, inline, state) {
   const entries = order.map((id, i) => ({
     id,
     index: i + 1,
-    text: defs.has(id) ? defs.get(id).text : '（未找到该脚注的定义）',
+    text: defs.has(id)
+      ? defs.get(id).text
+      : t('（未找到该脚注的定义）', '(Footnote definition not found)'),
     def: defs.get(id) || null,
   }));
 
@@ -98,11 +102,11 @@ export function buildFootnotesElement(entries, onJump) {
   const wrap = document.createElement('section');
   wrap.className = 'qp-footnotes';
   wrap.setAttribute('data-qp-node', 'footnotes');
-  wrap.setAttribute('aria-label', '脚注');
+  wrap.setAttribute('aria-label', t('脚注', 'Footnotes'));
 
   const title = document.createElement('div');
   title.className = 'qp-footnotes__title';
-  title.textContent = '脚注';
+  title.textContent = t('脚注', 'Footnotes');
   wrap.appendChild(title);
 
   const list = document.createElement('ol');
@@ -112,7 +116,7 @@ export function buildFootnotesElement(entries, onJump) {
     li.className = 'qp-footnotes__item';
     li.setAttribute('data-qp-id', item.id);
     li.setAttribute('data-qp-index', String(item.index));
-    li.textContent = item.text || '（空脚注）';
+    li.textContent = item.text || t('（空脚注）', '(Empty footnote)');
     if (item.def) {
       li.addEventListener('click', (e) => {
         e.preventDefault();

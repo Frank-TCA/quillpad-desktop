@@ -1,7 +1,9 @@
 {
   "id": "quillpad.dev-tools",
   "name": "开发者工具包",
+  "nameEn": "Developer Tools",
   "description": "正则练习、JSON 转义、MIME 查询、代码行排序，共 4 条命令 + 1 个侧栏视图。",
+  "descriptionEn": "Regex practice, JSON escaping, MIME lookup and code-line sorting — 4 commands plus 1 sidebar view.",
   "author": "QuillPad 官方",
   "version": "1.0.0",
   "license": "MIT",
@@ -10,13 +12,13 @@
   "permissions": ["editor:read", "editor:write"],
   "contributes": {
     "commands": [
-      { "id": "regex-trainer", "title": "正则匹配练习", "key": "Mod-Alt-Shift-r" },
-      { "id": "json-escape", "title": "JSON 字符串转义", "key": "Mod-Alt-Shift-e" },
-      { "id": "mime-lookup", "title": "MIME 类型查询", "key": "Mod-Alt-Shift-m" },
-      { "id": "line-sorter", "title": "代码行排序", "key": "Mod-Alt-Shift-s" }
+      { "id": "regex-trainer", "title": "正则匹配练习", "titleEn": "Regex Match Trainer", "key": "Mod-Alt-Shift-r" },
+      { "id": "json-escape", "title": "JSON 字符串转义", "titleEn": "Escape JSON String", "key": "Mod-Alt-Shift-e" },
+      { "id": "mime-lookup", "title": "MIME 类型查询", "titleEn": "MIME Type Lookup", "key": "Mod-Alt-Shift-m" },
+      { "id": "line-sorter", "title": "代码行排序", "titleEn": "Sort Code Lines", "key": "Mod-Alt-Shift-s" }
     ],
     "sidebarViews": [
-      { "id": "dev-panel", "title": "开发者面板" }
+      { "id": "dev-panel", "title": "开发者面板", "titleEn": "Developer Panel" }
     ]
   }
 }

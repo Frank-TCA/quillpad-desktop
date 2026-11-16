@@ -9,6 +9,7 @@ import { escapeHtml } from '../core/utils.js';
 import { readDirectory } from '../core/fs.js';
 import { extractSymbols } from '../core/outline.js';
 import { SIDEBAR_MIN, SIDEBAR_MAX, clamp } from '../core/settings.js';
+import { t } from '../core/i18n.js';
 
 /**
  * 初始化侧边栏。
@@ -36,17 +37,17 @@ export function initSidebar(root, resizer, app) {
     const tab = state.sidebarTab;
     root.innerHTML =
       `<div class="sidebar__tabs">` +
-      `<button class="sidebar__tab ${tab === 'files' ? 'is-active' : ''}" data-side-tab="files">文件</button>` +
-      `<button class="sidebar__tab ${tab === 'outline' ? 'is-active' : ''}" data-side-tab="outline">大纲</button>` +
+      `<button class="sidebar__tab ${tab === 'files' ? 'is-active' : ''}" data-side-tab="files">${t('文件', 'Files')}</button>` +
+      `<button class="sidebar__tab ${tab === 'outline' ? 'is-active' : ''}" data-side-tab="outline">${t('大纲', 'Outline')}</button>` +
       // 顶部右侧关闭按钮：隐藏整个侧边栏（含拖拽条），与 view.toggleSidebar 状态互通
       `<button class="mini-btn sidebar__close" data-side-act="close-sidebar" ` +
-      `data-tip="关闭侧边栏" aria-label="关闭侧边栏">${icon('close', 13)}</button>` +
+      `data-tip="${t('关闭侧边栏', 'Close Sidebar')}" aria-label="${t('关闭侧边栏', 'Close Sidebar')}">${icon('close', 13)}</button>` +
       `</div>` +
       `<div class="sidebar__body" id="sidebar-body"></div>` +
       `<div class="sidebar__foot">` +
-      `<span class="sidebar__foot-title">${escapeHtml(dirHandle ? dirHandle.name : '未打开文件夹')}</span>` +
-      `<button class="mini-btn" data-side-act="refresh" data-tip="刷新">${icon('refresh', 13)}</button>` +
-      `<button class="mini-btn" data-side-act="close-folder" data-tip="关闭文件夹">${icon('close', 13)}</button>` +
+      `<span class="sidebar__foot-title">${escapeHtml(dirHandle ? dirHandle.name : t('未打开文件夹', 'No Folder Open'))}</span>` +
+      `<button class="mini-btn" data-side-act="refresh" data-tip="${t('刷新', 'Refresh')}">${icon('refresh', 13)}</button>` +
+      `<button class="mini-btn" data-side-act="close-folder" data-tip="${t('关闭文件夹', 'Close Folder')}">${icon('close', 13)}</button>` +
       `</div>`;
 
     renderBody();
@@ -71,22 +72,22 @@ export function initSidebar(root, resizer, app) {
       const pending = state.folder && state.folder.name;
       if (pending) {
         return (
-          `<div class="tree-empty">上次打开的文件夹<br/><strong style="color:var(--text)">${escapeHtml(
+          `<div class="tree-empty">${t('上次打开的文件夹', 'Last opened folder')}<br/><strong style="color:var(--text)">${escapeHtml(
             pending,
           )}</strong><br/>` +
-          `<button class="btn is-primary" style="margin-top:10px" data-side-act="restore-folder">恢复访问</button>` +
-          `<button class="btn is-ghost" style="margin-top:6px" data-side-act="open-folder">打开其它</button>` +
+          `<button class="btn is-primary" style="margin-top:10px" data-side-act="restore-folder">${t('恢复访问', 'Restore Access')}</button>` +
+          `<button class="btn is-ghost" style="margin-top:6px" data-side-act="open-folder">${t('打开其它', 'Open Another')}</button>` +
           `</div>`
         );
       }
       return (
-        `<div class="tree-empty">还没有打开文件夹<br/>` +
-        `<button class="btn is-ghost" style="margin-top:10px" data-side-act="open-folder">打开文件夹</button>` +
+        `<div class="tree-empty">${t('还没有打开文件夹', 'No folder is open yet.')}<br/>` +
+        `<button class="btn is-ghost" style="margin-top:10px" data-side-act="open-folder">${t('打开文件夹', 'Open Folder')}</button>` +
         `</div>`
       );
     }
     const entries = cache.get('') || [];
-    if (!entries.length) return '<div class="tree-empty">这个文件夹是空的</div>';
+    if (!entries.length) return `<div class="tree-empty">${t('这个文件夹是空的', 'This folder is empty')}</div>`;
     return entries.map((entry) => renderNode(entry, '', 0)).join('');
   }
 
@@ -110,7 +111,7 @@ export function initSidebar(root, resizer, app) {
           : '';
       const loadingHtml =
         isOpen && !children
-          ? `<div class="tree-empty" style="padding:4px 0 4px ${pad + 16}px;text-align:left">加载中…</div>`
+          ? `<div class="tree-empty" style="padding:4px 0 4px ${pad + 16}px;text-align:left">${t('加载中…', 'Loading…')}</div>`
           : '';
       return (
         `<div class="tree-node" data-dir="${escapeHtml(path)}" style="padding-left:${pad}px">` +
@@ -144,9 +145,9 @@ export function initSidebar(root, resizer, app) {
   function renderOutline() {
     outlineRenderTotal += 1;
     const tab = activeTab();
-    if (!tab) return '<div class="tree-empty">打开一个文件后，这里会显示它的结构</div>';
+    if (!tab) return `<div class="tree-empty">${t('打开一个文件后，这里会显示它的结构', 'Open a file to see its structure here.')}</div>`;
     const symbols = extractSymbols(tab.content, tab.language);
-    if (!symbols.length) return '<div class="tree-empty">未能从当前文件中提取到符号</div>';
+    if (!symbols.length) return `<div class="tree-empty">${t('未能从当前文件中提取到符号', 'No symbols could be extracted from the current file.')}</div>`;
     return symbols
       .map(
         (s) =>
@@ -292,7 +293,7 @@ export function initSidebar(root, resizer, app) {
   /** 刷新目录树（保留展开状态）。 */
   async function refresh() {
     if (!dirHandle) {
-      app.toast('还没有打开文件夹', 'info');
+      app.toast(t('还没有打开文件夹', 'No folder is open yet.'), 'info');
       return;
     }
     const keepExpanded = new Set(expanded);
@@ -428,7 +429,7 @@ export function initSidebar(root, resizer, app) {
         await app.openFromHandle(handle, `${dirHandle.name}/${path}`);
         renderBody();
       } else {
-        app.toast('无法读取该文件', 'error');
+        app.toast(t('无法读取该文件', 'This file could not be read.'), 'error');
       }
       return;
     }

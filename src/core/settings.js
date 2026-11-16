@@ -7,6 +7,8 @@
  * 且任何脏值（类型错、越界、枚举外）都会回落到默认值而不是抛错。
  */
 
+import { normalizeLocale } from './i18n.js';
+
 const SETTINGS_KEY = 'quillpad.settings.v1';
 
 /**
@@ -61,6 +63,8 @@ export const DEFAULT_SETTINGS = {
   autoSave: false,
   indentSize: 2,
   useTabs: false,
+  /** 界面语言：'zh-CN' | 'en'。默认中文，老用户升级后看到的界面不变。 */
+  locale: 'zh-CN',
 
   /* ---------------------------- v2 视图模式 ---------------------------- */
   viewMode: 'auto',
@@ -202,6 +206,7 @@ function sanitize(merged) {
   out.autoSave = pickBool(merged.autoSave, d.autoSave);
   out.indentSize = clamp(merged.indentSize, 1, 8);
   out.useTabs = pickBool(merged.useTabs, d.useTabs);
+  out.locale = normalizeLocale(merged.locale);
 
   /* v2 视图模式 */
   out.viewMode = pickEnum(merged.viewMode, VIEW_MODE_PREFERENCES, d.viewMode);

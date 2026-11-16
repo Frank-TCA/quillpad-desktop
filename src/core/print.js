@@ -1,3 +1,5 @@
+
+import { t, getLocale } from './i18n.js';
 /**
  * QuillPad · PDF / 打印管线
  *
@@ -345,7 +347,7 @@ async function renderPrintBody(markdown, doc, opts) {
   /* ---- 3. 图片 ---- */
   for (const img of [...root.querySelectorAll('img')]) {
     const src = img.getAttribute('src') || '';
-    const alt = img.getAttribute('alt') || '图片';
+    const alt = img.getAttribute('alt') || t('图片', 'Image');
     // eslint-disable-next-line no-await-in-loop
     const dataUrl = await inlineOneImage(src, doc.docDir);
     if (dataUrl) {
@@ -356,7 +358,7 @@ async function renderPrintBody(markdown, doc, opts) {
     } else {
       const ph = dom.createElement('span');
       ph.className = 'qp-img-missing';
-      ph.textContent = `[图片无法内联：${alt}]`;
+      ph.textContent = t(`[图片无法内联：${alt}]`, `[Image cannot be inlined: ${alt}]`);
       img.replaceWith(ph);
     }
   }
@@ -402,12 +404,12 @@ export function buildTocHtml(headings) {
     .map(
       (h) =>
         `<li class="qp-toc__item qp-toc__item--${Math.min(3, Math.max(1, h.level))}">` +
-        `<span class="qp-toc__text">${escapeHtml(h.text || '（无标题）')}</span>` +
+        `<span class="qp-toc__text">${escapeHtml(h.text || t('（无标题）', '(Untitled)'))}</span>` +
         `<span class="qp-toc__lead"></span></li>`,
     )
     .join('');
   return (
-    `<nav class="qp-toc"><div class="qp-toc__title">目录</div>` +
+    `<nav class="qp-toc"><div class="qp-toc__title">${t('目录', 'Table of Contents')}</div>` +
     `<ul class="qp-toc__list">${items}</ul></nav>`
   );
 }
@@ -531,7 +533,7 @@ export function buildElectronPrintOptions(opts, doc = {}) {
  */
 export async function buildPrintHtml(doc, opts) {
   const safeOpts = { ...opts };
-  const title = doc.title || doc.name || '未命名';
+  const title = doc.title || doc.name || t('未命名', 'Untitled');
   const isDark = safeOpts.theme === 'dark';
 
   const { bodyHtml, headings } = await renderPrintBody(doc.markdown || '', doc, safeOpts);
@@ -574,7 +576,7 @@ export async function buildPrintHtml(doc, opts) {
       : '100%';
 
   const html =
-    `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">` +
+    `<!doctype html><html lang="${getLocale()}"><head><meta charset="utf-8">` +
     `<title>${escapeHtml(title)}</title>` +
     `<style>${fontFaceCss(fonts)}` +
     `${tokensToCss(tokens).replace(/\}$/, `;${imgMax ? `--qp-img-max:${imgMax};` : ''}${codeVars}}`)}` +
@@ -644,7 +646,7 @@ export function defaultPdfOptions(pdfSettings = {}, tab = null) {
 export function pdfFileNameFor(tab) {
   const name = (tab && (tab.name || tab.path || tab.nativePath)) || '';
   const base = String(name).split(/[\\/]/).pop() || '';
-  if (!base) return '未命名.pdf';
+  if (!base) return t('未命名.pdf', 'Untitled.pdf');
   return `${base.replace(/\.[^.]+$/, '')}.pdf`;
 }
 
@@ -702,23 +704,23 @@ export async function exportPdf(app, tab, opts, ctrl = {}) {
   state.pdfExporting = true;
   try {
     onProgress('parse', 10);
-    if (aborted()) return { ok: false, code: 'EABORT', error: '已取消' };
+    if (aborted()) return { ok: false, code: 'EABORT', error: t('已取消', 'Canceled') };
 
     const doc = {
       markdown: (tab && tab.content) || '',
-      title: opts.fileName ? opts.fileName.replace(/\.pdf$/i, '') : '未命名',
-      name: (tab && tab.name) || '未命名.md',
+      title: opts.fileName ? opts.fileName.replace(/\.pdf$/i, '') : t('未命名', 'Untitled'),
+      name: (tab && tab.name) || t('未命名.md', 'Untitled.md'),
       docDir: app && typeof app.docDirOf === 'function' ? app.docDirOf(tab) : null,
     };
 
     const built = await buildPrintHtml(doc, opts);
-    if (aborted()) return { ok: false, code: 'EABORT', error: '已取消' };
+    if (aborted()) return { ok: false, code: 'EABORT', error: t('已取消', 'Canceled') };
 
     onProgress('layout', 35);
     const printOptions = buildElectronPrintOptions(opts, doc);
 
     onProgress('render', 60);
-    if (aborted()) return { ok: false, code: 'EABORT', error: '已取消' };
+    if (aborted()) return { ok: false, code: 'EABORT', error: t('已取消', 'Canceled') };
 
     const targetPath = opts.targetPath || null;
 
@@ -734,9 +736,9 @@ export async function exportPdf(app, tab, opts, ctrl = {}) {
       });
       onProgress('write', 95);
       if (!res.ok) {
-        return { ok: false, code: res.code || 'EEXPORT', error: res.error || '导出失败', stats: built.stats };
+        return { ok: false, code: res.code || 'EEXPORT', error: res.error || t('导出失败', 'Export failed'), stats: built.stats };
       }
-      if (res.canceled) return { ok: false, code: 'ECANCELED', error: '已取消' };
+      if (res.canceled) return { ok: false, code: 'ECANCELED', error: t('已取消', 'Canceled') };
       return { ok: true, path: res.path, bytes: res.bytes, stats: built.stats };
     }
 
@@ -744,7 +746,7 @@ export async function exportPdf(app, tab, opts, ctrl = {}) {
     const ok = printHtmlInNewWindow(built.html);
     onProgress('write', 95);
     if (!ok) {
-      return { ok: false, code: 'EPRINT', error: '浏览器拦截了打印窗口，请允许弹出窗口后重试', stats: built.stats };
+      return { ok: false, code: 'EPRINT', error: t('浏览器拦截了打印窗口，请允许弹出窗口后重试', 'The browser blocked the print window; allow pop-ups and try again'), stats: built.stats };
     }
     return { ok: true, degraded: true, stats: built.stats };
   } catch (err) {
@@ -766,8 +768,8 @@ export async function printDocument(app, tab, opts) {
   try {
     const doc = {
       markdown: (tab && tab.content) || '',
-      title: (tab && tab.name) || '未命名',
-      name: (tab && tab.name) || '未命名.md',
+      title: (tab && tab.name) || t('未命名', 'Untitled'),
+      name: (tab && tab.name) || t('未命名.md', 'Untitled.md'),
       docDir: app && typeof app.docDirOf === 'function' ? app.docDirOf(tab) : null,
     };
     const built = await buildPrintHtml(doc, opts);
@@ -779,7 +781,7 @@ export async function printDocument(app, tab, opts) {
       return res.ok ? { ok: true } : { ok: false, code: res.code || 'EPRINT', error: res.error };
     }
     const ok = printHtmlInNewWindow(built.html);
-    return ok ? { ok: true, degraded: true } : { ok: false, code: 'EPRINT', error: '打印窗口被拦截' };
+    return ok ? { ok: true, degraded: true } : { ok: false, code: 'EPRINT', error: t('打印窗口被拦截', 'Print window was blocked') };
   } catch (err) {
     return { ok: false, code: 'EINTERNAL', error: (err && err.message) || String(err) };
   }

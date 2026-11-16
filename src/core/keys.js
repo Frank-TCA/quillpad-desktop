@@ -3,6 +3,11 @@
  *
  * 统一把 keydown 事件映射到命令注册表，保证焦点在编辑区内外快捷键都生效。
  * 同时支持两段式快捷键（例如 Ctrl+K 然后 O）。
+ *
+ * 双语说明：本文件只有注释与 console 日志里有中文，没有任何面向用户的文案
+ * （快捷键展示统一由 commands.js 的 chordToLabels() 生成按键符号，不含文字），
+ * 因此不需要 t()。键盘处理器每次 keydown 都重新读 allCommands()，
+ * 切换语言后重注册命令也不会残留旧绑定，更不需要重新安装监听。
  */
 
 import { allCommands, IS_MAC } from './commands.js';

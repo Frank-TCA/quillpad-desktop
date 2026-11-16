@@ -53,6 +53,8 @@ import { getEditorThemeExtension, getSyntaxExtension, buildAppearanceExtension }
 import { loadLanguage, primeFenceLanguages } from './languages.js';
 import { createSearchPanel } from '../ui/findbar.js';
 import { textMarks } from './marks.js';
+import { t } from '../core/i18n.js';
+import { bus } from '../core/state.js';
 
 /** 大文件阈值：超过后关闭语法高亮。 */
 const BIG_FILE = 2 * 1024 * 1024;
@@ -107,6 +109,8 @@ export class EditorManager {
     this._themeId = 'ivory';
     /** @type {import('@codemirror/view').KeyBinding[]} */
     this._appKeymap = [];
+    /** 由 app 层显式传入的占位符文案（为空时由 t() 按当前语言求值）。 */
+    this._placeholderText = '';
 
     this.themeCompartment = new Compartment();
     /** 语法着色：wysiwyg 用中性配色，源码/分屏用全量语法色（见 cm-themes.js）。 */
@@ -129,7 +133,36 @@ export class EditorManager {
       parent: host,
       state: this._buildEmptyState(),
     });
-    this.view.contentDOM.setAttribute('aria-label', '编辑区');
+    this.view.contentDOM.setAttribute('aria-label', t('编辑区', 'Editor'));
+    // 语言切换时 WYSIWYG 的 widget 文案（tooltip / 目录 / 脚注…）是装饰创建时
+    // 求值的，必须制造一次 reconfigure 让 StateField / ViewPlugin 重算。
+    bus.on('locale', () => this.refreshLocale());
+  }
+
+  /**
+   * 语言切换后刷新编辑器内的用户可见文案。
+   *
+   * 走 Compartment.reconfigure 而不是 setState：撤销栈、选区、滚动全部保留；
+   * `tr.reconfigured` 会让块级 StateField 与行内 ViewPlugin 重新计算装饰。
+   * @return {void}
+   */
+  refreshLocale() {
+    this.view.contentDOM.setAttribute('aria-label', t('编辑区', 'Editor'));
+    this._placeholderText = '';
+    this._reconfigureAll(this.appearanceCompartment, this._appearanceExtensions(this._appearance));
+    this.setWysiwyg(this._wysiwyg);
+  }
+
+  /**
+   * 显式设置空文档占位符（app 层切语言时调用）。
+   *
+   * 传空串即可恢复为按当前语言用 `t()` 自动求值。
+   * @param {string} text
+   * @return {void}
+   */
+  setPlaceholder(text) {
+    this._placeholderText = typeof text === 'string' ? text : '';
+    this._reconfigureAll(this.appearanceCompartment, this._appearanceExtensions(this._appearance));
   }
 
   /* -------------------------------------------------------------- 内部构建 */
@@ -158,7 +191,6 @@ export class EditorManager {
       highlightSelectionMatches({ highlightWordAroundCursor: true, minSelectionLength: 1 }),
       search({ top: true, createPanel: createSearchPanel }),
       syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
-      cmPlaceholder('以「Ctrl + N」新建文件，或把文件拖到这里打开'),
       Prec.high(keymap.of([indentWithTab])),
       keymap.of([
         ...closeBracketsKeymap,
@@ -210,13 +242,22 @@ export class EditorManager {
   }
 
   /**
-   * 生成外观扩展（字号 / 缩进 / 换行）。
+   * 生成外观扩展（字号 / 缩进 / 换行 / 空文档占位符）。
+   *
+   * 占位符也挂在这个 compartment 里：它是用户可见文案，切语言时必须能
+   * 通过 `setAppearance()` 触发 `_reconfigureAll` 重新求值 `t()`，否则
+   * 静态扩展里的中文会一直冻结在首次 import 时的语言。
+   *
    * @param {{fontSize: number, indentSize: number, useTabs: boolean, wordWrap: boolean}} opts
    * @return {import('@codemirror/state').Extension[]}
    */
   _appearanceExtensions(opts) {
     const unit = opts.useTabs ? '\t' : ' '.repeat(opts.indentSize);
     return [
+      cmPlaceholder(
+        this._placeholderText ||
+          t('以「Ctrl + N」新建文件，或把文件拖到这里打开', 'Press Ctrl + N to create a file, or drop one here'),
+      ),
       indentUnit.of(unit),
       EditorState.tabSize.of(opts.indentSize),
       ...buildAppearanceExtension(opts),
@@ -381,13 +422,17 @@ export class EditorManager {
   resetContent(tab) {
     const st = this.createState(tab);
     this.states.set(tab.id, st);
+    // 必须先清 loadedLang 再 ensureLanguage：新建的 state 里 langCompartment 是空的，
+    // 而 ensureLanguage 见到「已装载同一语言」会直接早退 —— 顺序反了新 state 就永远
+    // 拿不到语言扩展，markdown 语法树为空，WYSIWYG 装饰与折叠箭头全部消失（切界面
+    // 语言重写欢迎文档后正是这条路径，重启才恢复）。
+    this.loadedLang.delete(tab.id);
     if (tab.id === this.activeTabId) {
       this._suspend = true;
       this.view.setState(st);
       this._suspend = false;
       this.ensureLanguage(tab);
     }
-    this.loadedLang.delete(tab.id);
   }
 
   /* ------------------------------------------------------------------ 语言 */

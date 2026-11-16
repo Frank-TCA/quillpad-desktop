@@ -13,6 +13,7 @@
 import sansUrl from '../assets/fonts/noto-sans-sc-subset.ttf?url';
 import serifUrl from '../assets/fonts/noto-serif-sc-subset.ttf?url';
 import { bytesToBase64 } from '../editor/wysiwyg/image.js';
+import { t } from './i18n.js';
 
 /** `@font-face` 里用的族名（打印页里只有这一个字体源）。 */
 export const PRINT_SANS_FAMILY = 'QPPrintSans';
@@ -88,7 +89,7 @@ async function fetchAsDataUrl(url, mime) {
     const res = await fetch(url, { cache: 'force-cache' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     buf = new Uint8Array(await res.arrayBuffer());
-    if (!buf.length) throw new Error('字体文件为空');
+    if (!buf.length) throw new Error(t('字体文件为空', 'Font file is empty'));
   } catch (err) {
     buf = await readBytesViaBridge(url);
     if (!buf) {

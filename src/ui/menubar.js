@@ -7,6 +7,10 @@
  *   - 新增「插件」顶级菜单（位于「主题」与「帮助」之间，按用户要求的入口位置）
  *   - 菜单栏右键上下文菜单（插件管理器 / 命令面板 / 快捷键 / 关于）
  *   - 菜单适配窗口：窄窗口下溢出项折叠进「⋯」溢出菜单；下拉超高自动滚动
+ *
+ * i18n：菜单布局是**函数**而不是模块级常量 —— 顶层 `t()` 会在 import 期被
+ * 冻结成当时的语言，切换语言后不再更新。改成 `menuLayout()` 后，每次打开菜单
+ * 与重新渲染顶级按钮都读当前语言。
  */
 
 import { openDropdown, openContextMenu, isInsideFloatingMenu } from './dropdown.js';
@@ -20,6 +24,7 @@ import { languageGroups } from '../editor/languages.js';
 import { THEMES } from '../editor/cm-themes.js';
 import { allCommands } from '../core/commands.js';
 import { openPluginManager } from './plugin-manager.js';
+import { t } from '../core/i18n.js';
 
 /**
  * 菜单结构约定：
@@ -27,181 +32,196 @@ import { openPluginManager } from './plugin-manager.js';
  *   - '-'：分隔线
  *   - '@languages' / '@themes' / '@plugins'：动态子菜单
  *   - { sub, items }：静态二级子菜单
+ *
+ * 注意：必须是函数。写成模块级常量的话，`t()` 会在 import 期求值一次，
+ * 之后切换界面语言时菜单标签永远不会变。
+ *
+ * @return {Array<{label: string, items: Array<string|object>}>}
  */
-const MENU_LAYOUT = [
-  {
-    label: '文件',
-    items: [
-      'file.new',
-      'file.open',
-      'file.openFolder',
-      '-',
-      'file.save',
-      'file.saveAs',
-      'file.saveAll',
-      '-',
-      'file.reload',
-      '-',
-      'file.close',
-      'file.closeOthers',
-      'file.closeAll',
-      '-',
-      'file.copyPath',
-      '-',
-      'pdf.export',
-      'pdf.print',
-      '-',
-      'file.refreshFolder',
-      'file.closeFolder',
-    ],
-  },
-  {
-    label: '编辑',
-    items: [
-      'edit.undo',
-      'edit.redo',
-      '-',
-      'edit.cut',
-      'edit.copy',
-      'edit.paste',
-      '-',
-      'edit.selectAll',
-      '-',
-      // 二级子菜单：行操作
-      {
-        sub: '行操作',
-        items: [
-          'edit.duplicateLine',
-          'edit.deleteLine',
-          'edit.moveLineUp',
-          'edit.moveLineDown',
-          '-',
-          'edit.trimTrailing',
-        ],
-      },
-      // 二级子菜单：大小写
-      {
-        sub: '大小写',
-        items: ['edit.upperCase', 'edit.lowerCase', 'edit.titleCase'],
-      },
-      // 二级子菜单：排序与去重
-      {
-        sub: '排序与去重',
-        items: ['edit.sortAsc', 'edit.sortDesc', 'edit.dedupLines'],
-      },
-      // 二级子菜单：缩进
-      {
-        sub: '缩进',
-        items: ['edit.convertIndentSpaces', 'edit.convertIndentTabs'],
-      },
-      // 二级子菜单：列编辑
-      {
-        sub: '列编辑',
-        items: [
-          'edit.columnInsert',
-          'edit.columnDelete',
-          'edit.columnAlign',
-          'edit.columnNumber',
-        ],
-      },
-      '-',
-      'edit.toggleComment',
-      'edit.jumpToBracket',
-      '-',
-      'edit.multiCursorUp',
-      'edit.multiCursorDown',
-      '-',
-      // 二级子菜单：宏
-      {
-        sub: '宏',
-        items: ['macro.record', 'macro.play', 'macro.manage'],
-      },
-      // 二级子菜单：插入
-      {
-        sub: '插入',
-        items: [
-          'insert.char',
-          '-',
-          'insert.math',
-          'insert.footnote',
-          'insert.toc',
-          'markdown.insertImage',
-        ],
-      },
-      // 二级子菜单：表格
-      {
-        sub: '表格',
-        items: [
-          'markdown.table.rowAbove',
-          'markdown.table.rowBelow',
-          'markdown.table.rowDelete',
-          '-',
-          'markdown.table.colLeft',
-          'markdown.table.colRight',
-          'markdown.table.colDelete',
-          '-',
-          'markdown.table.cycleAlign',
-        ],
-      },
-    ],
-  },
-  {
-    label: '搜索',
-    items: [
-      'search.find',
-      'search.replace',
-      'search.findNext',
-      'search.findPrev',
-      '-',
-      'search.gotoLine',
-      'search.findInFiles',
-    ],
-  },
-  {
-    label: '视图',
-    items: [
-      'view.toggleSidebar',
-      'view.wordWrap',
-      '-',
-      'view.fontIncrease',
-      'view.fontDecrease',
-      'view.fontReset',
-      '-',
-      'view.preview',
-      '-',
-      'view.modeSource',
-      'view.modeWysiwyg',
-      'view.modeSplit',
-      '-',
-      'view.zen',
-      'view.focusMode',
-      'view.typewriter',
-      'view.minimap',
-      'view.reduceMotion',
-      '-',
-      'view.autoSave',
-      '-',
-      'view.commandPalette',
-    ],
-  },
-  // 语言：改为按领域分组的二级子菜单（@languageGroups）
-  { label: '语言', items: ['@languageGroups'] },
-  { label: '主题', items: ['@themes'] },
-  // 插件：按用户要求位于「主题」与「帮助」之间
-  // 「打开插件市场」入口已移除——与「插件管理器」进同一对话框，冗余
-  {
-    label: '插件',
-    items: [
-      'plugins.manager',
-      '-',
-      '@plugins',
-      '-',
-      'plugins.installUrl',
-      'plugins.importNpp',
-    ],
-  },
-  { label: '帮助', items: ['help.shortcuts', 'help.about'] },
-];
+function menuLayout() {
+  return [
+    {
+      label: t('文件', 'File'),
+      items: [
+        'file.new',
+        'file.open',
+        'file.openFolder',
+        '-',
+        'file.save',
+        'file.saveAs',
+        'file.saveAll',
+        '-',
+        'file.reload',
+        '-',
+        'file.close',
+        'file.closeOthers',
+        'file.closeAll',
+        '-',
+        'file.copyPath',
+        '-',
+        'pdf.export',
+        'pdf.print',
+        '-',
+        'file.refreshFolder',
+        'file.closeFolder',
+      ],
+    },
+    {
+      label: t('编辑', 'Edit'),
+      items: [
+        'edit.undo',
+        'edit.redo',
+        '-',
+        'edit.cut',
+        'edit.copy',
+        'edit.paste',
+        '-',
+        'edit.selectAll',
+        '-',
+        // 二级子菜单：行操作
+        {
+          sub: t('行操作', 'Lines'),
+          items: [
+            'edit.duplicateLine',
+            'edit.deleteLine',
+            'edit.moveLineUp',
+            'edit.moveLineDown',
+            '-',
+            'edit.trimTrailing',
+          ],
+        },
+        // 二级子菜单：大小写
+        {
+          sub: t('大小写', 'Case'),
+          items: ['edit.upperCase', 'edit.lowerCase', 'edit.titleCase'],
+        },
+        // 二级子菜单：排序与去重
+        {
+          sub: t('排序与去重', 'Sort & Dedupe'),
+          items: ['edit.sortAsc', 'edit.sortDesc', 'edit.dedupLines'],
+        },
+        // 二级子菜单：缩进
+        {
+          sub: t('缩进', 'Indent'),
+          items: ['edit.convertIndentSpaces', 'edit.convertIndentTabs'],
+        },
+        // 二级子菜单：列编辑
+        {
+          sub: t('列编辑', 'Column Editing'),
+          items: [
+            'edit.columnInsert',
+            'edit.columnDelete',
+            'edit.columnAlign',
+            'edit.columnNumber',
+          ],
+        },
+        '-',
+        'edit.toggleComment',
+        'edit.jumpToBracket',
+        '-',
+        'edit.multiCursorUp',
+        'edit.multiCursorDown',
+        '-',
+        // 二级子菜单：宏
+        {
+          sub: t('宏', 'Macro'),
+          items: ['macro.record', 'macro.play', 'macro.manage'],
+        },
+        // 二级子菜单：插入
+        {
+          sub: t('插入', 'Insert'),
+          items: [
+            'insert.char',
+            '-',
+            'insert.math',
+            'insert.footnote',
+            'insert.toc',
+            'markdown.insertImage',
+          ],
+        },
+        // 二级子菜单：表格
+        {
+          sub: t('表格', 'Table'),
+          items: [
+            'markdown.table.rowAbove',
+            'markdown.table.rowBelow',
+            'markdown.table.rowDelete',
+            '-',
+            'markdown.table.colLeft',
+            'markdown.table.colRight',
+            'markdown.table.colDelete',
+            '-',
+            'markdown.table.cycleAlign',
+          ],
+        },
+      ],
+    },
+    {
+      label: t('搜索', 'Search'),
+      items: [
+        'search.find',
+        'search.replace',
+        'search.findNext',
+        'search.findPrev',
+        '-',
+        'search.gotoLine',
+        'search.findInFiles',
+      ],
+    },
+    {
+      label: t('视图', 'View'),
+      items: [
+        'view.toggleSidebar',
+        'view.wordWrap',
+        '-',
+        'view.fontIncrease',
+        'view.fontDecrease',
+        'view.fontReset',
+        '-',
+        'view.preview',
+        '-',
+        'view.modeSource',
+        'view.modeWysiwyg',
+        'view.modeSplit',
+        '-',
+        'view.zen',
+        'view.focusMode',
+        'view.typewriter',
+        'view.minimap',
+        'view.reduceMotion',
+        '-',
+        'view.autoSave',
+        '-',
+        'view.commandPalette',
+      ],
+    },
+    // 语言：改为按领域分组的二级子菜单（@languageGroups）
+    { label: t('语言', 'Language'), items: ['@languageGroups'] },
+    { label: t('主题', 'Theme'), items: ['@themes'] },
+    // 插件：按用户要求位于「主题」与「帮助」之间
+    // 「打开插件市场」入口已移除——与「插件管理器」进同一对话框，冗余
+    {
+      label: t('插件', 'Plugins'),
+      items: [
+        'plugins.manager',
+        '-',
+        '@plugins',
+        '-',
+        'plugins.installUrl',
+        'plugins.importNpp',
+      ],
+    },
+    {
+      label: t('帮助', 'Help'),
+      items: [
+        'help.shortcuts',
+        // 界面语言：放在「关于」附近，不打断既有的帮助项顺序
+        { sub: t('界面语言', 'Language'), items: ['app.locale.zh', 'app.locale.en'] },
+        'help.about',
+      ],
+    },
+  ];
+}
 
 /**
  * 把命令 id 转换为菜单项。
@@ -212,7 +232,7 @@ const MENU_LAYOUT = [
 function commandItem(id, app) {
   const cmd = getCommand(id);
   if (!cmd) {
-    return { label: `未知命令 ${id}`, disabled: true, checked: null };
+    return { label: t('未知命令', 'Unknown command') + ` ${id}`, disabled: true, checked: null };
   }
   return {
     label: cmd.title,
@@ -282,7 +302,7 @@ function pluginCommandItems(app) {
     });
   }
   if (!byPlugin.size) {
-    return [{ label: '（暂无插件命令）', disabled: true, checked: null }];
+    return [{ label: t('（暂无插件命令）', '(No plugin commands)'), disabled: true, checked: null }];
   }
   // 同 languageGroupItems：必须是 dropdown 的 {label, submenu} 形状
   return [...byPlugin.entries()].map(([pluginId, items]) => ({
@@ -304,11 +324,14 @@ function expandMenu(menu, app) {
     if (entry === '-') {
       out.push({ separator: true });
     } else if (entry === '@languageGroups') {
-      out.push({ groupTitle: '切换语法' }, ...languageGroupItems(app));
+      out.push(
+        { groupTitle: t('切换语法', 'Switch Syntax') },
+        ...languageGroupItems(app),
+      );
     } else if (entry === '@themes') {
-      out.push({ groupTitle: '选择主题' }, ...themeItems(app));
+      out.push({ groupTitle: t('选择主题', 'Choose Theme') }, ...themeItems(app));
     } else if (entry === '@plugins') {
-      out.push({ groupTitle: '插件命令' }, ...pluginCommandItems(app));
+      out.push({ groupTitle: t('插件命令', 'Plugin Commands') }, ...pluginCommandItems(app));
     } else if (entry && typeof entry === 'object' && entry.sub) {
       // 二级子菜单：展开 items 中的命令 id
       const subItems = entry.items.map((it) => {
@@ -341,10 +364,29 @@ function expandMenu(menu, app) {
  * @param {object} app
  */
 export function initMenubar(root, app) {
-  root.innerHTML = MENU_LAYOUT.map(
-    (m, i) => `<button class="menubar__item" data-menu="${i}" role="menuitem">${m.label}</button>`,
-  ).join('') + `<button class="menubar__item menubar__overflow" data-menu-overflow ` +
-    `title="更多菜单" aria-label="更多菜单" hidden>⋯</button>`;
+  /**
+   * 重绘顶级菜单按钮。
+   *
+   * 单独抽成函数是为了让切换界面语言后能刷新标签：菜单项内容每次打开菜单都会
+   * 重新算（见 `open()`），但顶级按钮的 innerHTML 只在初始化时写一次。
+   * 语言切换的编排（`applyLocale`）只要调用 `app.refreshMenubar()` 即可。
+   */
+  const renderLabels = () => {
+    // 重绘前先收起已展开的下拉：它的条目是打开那一瞬的语言，留着会新旧混杂
+    close();
+    root.innerHTML =
+      menuLayout()
+        .map(
+          (m, i) =>
+            `<button class="menubar__item" data-menu="${i}" role="menuitem">${m.label}</button>`,
+        )
+        .join('') +
+      `<button class="menubar__item menubar__overflow" data-menu-overflow ` +
+      `title="${t('更多菜单', 'More menus')}" aria-label="${t('更多菜单', 'More menus')}" hidden>⋯</button>`;
+    requestAnimationFrame(fitToWindow);
+  };
+  // 供 app 的语言切换流程调用（app.js 里已有 refreshChrome 这类统一入口）
+  app.refreshMenubar = renderLabels;
 
   let openIndex = -1;
   /** @type {{close: () => void}|null} */
@@ -378,7 +420,7 @@ export function initMenubar(root, app) {
       n.classList.toggle('is-open', n.dataset.menu === String(index));
     });
     const rect = btn.getBoundingClientRect();
-    const items = expandMenu(MENU_LAYOUT[index], app);
+    const items = expandMenu(menuLayout()[index], app);
     handle = openDropdown({
       x: rect.left,
       y: rect.bottom + 2,
@@ -420,22 +462,22 @@ export function initMenubar(root, app) {
     close();
     openContextMenu(e, [
       {
-        label: '插件管理器…',
+        label: t('插件管理器…', 'Plugin Manager…'),
         run: () => openPluginManager(app),
       },
       { separator: true },
       {
-        label: '命令面板',
+        label: t('命令面板', 'Command Palette'),
         keys: [['Ctrl', 'Shift', 'P']],
         run: () => runCommand('view.commandPalette', app),
       },
       { separator: true },
       {
-        label: '快捷键速查',
+        label: t('快捷键速查', 'Keyboard Shortcuts'),
         run: () => runCommand('help.shortcuts', app),
       },
       {
-        label: '关于 QuillPad',
+        label: t('关于 QuillPad', 'About QuillPad'),
         run: () => runCommand('help.about', app),
       },
     ]);
@@ -456,9 +498,10 @@ export function initMenubar(root, app) {
       .map((n) => Number(n.dataset.menu));
     if (!hidden.length) return;
     const rect = anchor.getBoundingClientRect();
+    const layout = menuLayout();
     const items = hidden.map((idx) => ({
-      sub: MENU_LAYOUT[idx].label,
-      items: expandMenu(MENU_LAYOUT[idx], app),
+      sub: layout[idx].label,
+      items: expandMenu(layout[idx], app),
     }));
     handle = openDropdown({
       x: rect.left,
@@ -515,7 +558,7 @@ export function initMenubar(root, app) {
    * 测量策略：先把所有项显示出来量总宽，超出 root 宽度时从右往左隐藏，
    * 保证「文件 / 编辑 / 搜索」等核心菜单优先保留。
    */
-  const fitToWindow = () => {
+  function fitToWindow() {
     const buttons = [...root.querySelectorAll('.menubar__item[data-menu]')];
     const overflowBtn = root.querySelector('[data-menu-overflow]');
     if (!buttons.length || !overflowBtn) return;
@@ -542,15 +585,18 @@ export function initMenubar(root, app) {
     if (visibleCount < 3) {
       buttons.forEach((b, i) => { b.hidden = i >= 3; });
     }
-  };
+  }
 
   // 初次布局 + 窗口尺寸变化时重新适配
-  requestAnimationFrame(fitToWindow);
+  renderLabels();
   let resizeTimer = 0;
   window.addEventListener('resize', () => {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(fitToWindow, 120);
   });
+
+  // 供 app 的 applyLocale 调用：`app.menubar?.render?.()`
+  return { render: renderLabels };
 }
 
-export { MENU_LAYOUT };
+export { menuLayout, menuLayout as MENU_LAYOUT };

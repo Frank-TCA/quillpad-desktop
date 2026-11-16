@@ -6,6 +6,8 @@
  * 未授权返回 `{ok:false, code:'EPERM_*'}`，由 rpc.js 转成 RPC 失败信封。
  */
 
+import { t } from '../i18n.js';
+
 /** 权限 → 错误码映射（唯一来源）。 */
 export const PERMISSION_ERROR = Object.freeze({
   'editor:read': 'EPERM_EDITOR_READ',
@@ -57,7 +59,7 @@ export function createPluginApi(opts = {}) {
   function deny(permission) {
     if (granted.has(permission)) return null;
     const code = PERMISSION_ERROR[permission] || 'EINVALID';
-    return { ok: false, code, message: `缺少权限 ${permission}`, detail: code };
+    return { ok: false, code, message: t(`缺少权限 ${permission}`, `Missing permission: ${permission}`), detail: code };
   }
 
   /**
@@ -73,15 +75,15 @@ export function createPluginApi(opts = {}) {
     'commands.register': async (params = {}) => {
       const id = String((params && params.id) || '');
       const title = String((params && params.title) || id);
-      if (!/^[a-z][a-z0-9-]*$/.test(id)) return { ok: false, code: 'ESCHEMA', message: '命令 id 不合法' };
-      onRegister({ type: 'command', pluginId: manifest.id, id, title });
+      if (!/^[a-z][a-z0-9-]*$/.test(id)) return { ok: false, code: 'ESCHEMA', message: t('命令 id 不合法', 'Invalid command id') };
+      onRegister({ type: 'command', pluginId: manifest.id, id, title, titleEn: String((params && params.titleEn) || '') });
       return { ok: true, id: `plugin.${manifest.id}.${id}` };
     },
     'editor.getSelection': async () => {
       const d = deny('editor:read');
       if (d) return d;
       const v = view();
-      if (!v) return { ok: false, code: 'EINVALID', message: '编辑器不可用' };
+      if (!v) return { ok: false, code: 'EINVALID', message: t('编辑器不可用', 'Editor unavailable') };
       const sel = v.state.selection.main;
       return { text: v.state.sliceDoc(sel.from, sel.to), from: sel.from, to: sel.to };
     },
@@ -95,7 +97,7 @@ export function createPluginApi(opts = {}) {
       const d = deny('editor:write');
       if (d) return d;
       const v = view();
-      if (!v) return { ok: false, code: 'EINVALID', message: '编辑器不可用' };
+      if (!v) return { ok: false, code: 'EINVALID', message: t('编辑器不可用', 'Editor unavailable') };
       const text = String((params && params.text) || '');
       v.dispatch({ ...v.state.replaceSelection(text), scrollIntoView: true });
       return { ok: true };
@@ -137,7 +139,7 @@ export function createPluginApi(opts = {}) {
         await navigator.clipboard.writeText(String((params && params.text) || ''));
         return { ok: true };
       } catch {
-        return { ok: false, code: 'EWRITE', message: '剪贴板写入失败' };
+        return { ok: false, code: 'EWRITE', message: t('剪贴板写入失败', 'Failed to write to the clipboard') };
       }
     },
     'storage.get': async (params = {}) => {
@@ -157,12 +159,12 @@ export function createPluginApi(opts = {}) {
       // G5-2：没有 network 权限时**绝不**发起真实请求，直接给错误码
       const d = deny('network');
       if (d) return d;
-      if (!netFetch) return { ok: false, code: 'EPERM_NETWORK', message: '宿主未提供网络通道' };
+      if (!netFetch) return { ok: false, code: 'EPERM_NETWORK', message: t('宿主未提供网络通道', 'Host does not provide a network channel') };
       try {
         const data = await netFetch(String((params && params.url) || ''), (params && params.options) || {});
         return { ok: true, data };
       } catch (err) {
-        return { ok: false, code: 'ENETWORK', message: '网络请求失败', detail: String((err && err.message) || err) };
+        return { ok: false, code: 'ENETWORK', message: t('网络请求失败', 'Network request failed'), detail: String((err && err.message) || err) };
       }
     },
     'network.fetch': async (params = {}) => methods['net.fetch'](params),
@@ -172,8 +174,8 @@ export function createPluginApi(opts = {}) {
     },
     'ui.registerSidebarView': async (params = {}) => {
       const id = String((params && params.id) || '');
-      if (!id) return { ok: false, code: 'ESCHEMA', message: '视图 id 不能为空' };
-      onRegister({ type: 'sidebarView', pluginId: manifest.id, id, title: String((params && params.title) || id) });
+      if (!id) return { ok: false, code: 'ESCHEMA', message: t('视图 id 不能为空', 'View id cannot be empty') };
+      onRegister({ type: 'sidebarView', pluginId: manifest.id, id, title: String((params && params.title) || id), titleEn: String((params && params.titleEn) || '') });
       return { ok: true };
     },
     'events.on': async (params = {}) => {
@@ -194,7 +196,7 @@ export function createPluginApi(opts = {}) {
 export async function dispatchApi(methods, req) {
   const fn = methods[String(req.method || '')];
   if (typeof fn !== 'function') {
-    return { ok: false, code: 'ENOTFOUND', message: `未知 API：${String(req.method)}` };
+    return { ok: false, code: 'ENOTFOUND', message: t(`未知 API：${String(req.method)}`, `Unknown API: ${String(req.method)}`) };
   }
   return fn(req.params || {});
 }

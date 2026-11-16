@@ -21,6 +21,8 @@ const MAX_FILE_BYTES = 6 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 60 * 1024 * 1024;
 const MAX_ENTRIES = 512;
 const STORAGE_LIMIT = 1024 * 1024;
+const { t } = require('./i18n.cjs');
+
 const ID_RE = /^[a-z0-9]+(\.[a-z0-9-]+)+$/;
 
 /**
@@ -43,7 +45,7 @@ function readLE(buf, at, size) {
  */
 function parseZip(input) {
   const buf = input instanceof Uint8Array ? Buffer.from(input) : Buffer.isBuffer(input) ? input : null;
-  if (!buf || buf.length < 22) return { ok: false, code: 'EUNZIP', error: '不是合法的 zip 文件' };
+  if (!buf || buf.length < 22) return { ok: false, code: 'EUNZIP', error: t('不是合法的 zip 文件', "Not a valid zip file") };
 
   let eocd = -1;
   const min = Math.max(0, buf.length - 22 - 65535);
@@ -53,17 +55,17 @@ function parseZip(input) {
       break;
     }
   }
-  if (eocd < 0) return { ok: false, code: 'EUNZIP', error: '找不到 zip 结束记录' };
+  if (eocd < 0) return { ok: false, code: 'EUNZIP', error: t('找不到 zip 结束记录', "Zip end-of-central-directory record not found") };
 
   const count = readLE(buf, eocd + 10, 2);
   let cursor = readLE(buf, eocd + 16, 4);
-  if (count > MAX_ENTRIES) return { ok: false, code: 'ETOOBIG', error: `条目数超过 ${MAX_ENTRIES}` };
+  if (count > MAX_ENTRIES) return { ok: false, code: 'ETOOBIG', error: t(`条目数超过 ${MAX_ENTRIES}`, `Too many entries (limit ${MAX_ENTRIES})`) };
 
   const files = [];
   let total = 0;
   for (let i = 0; i < count; i += 1) {
     if (cursor + 46 > buf.length || buf.readUInt32LE(cursor) !== 0x02014b50) {
-      return { ok: false, code: 'EUNZIP', error: '中央目录损坏' };
+      return { ok: false, code: 'EUNZIP', error: t('中央目录损坏', "Corrupt zip central directory") };
     }
     const method = readLE(buf, cursor + 10, 2);
     const compressed = readLE(buf, cursor + 20, 4);
@@ -77,31 +79,31 @@ function parseZip(input) {
 
     const unixMode = (externalAttrs >>> 16) & 0xffff;
     const isSymlink = (unixMode & 0o170000) === 0o120000;
-    if (isSymlink) return { ok: false, code: 'EPATH', error: `安装包包含符号链接：${name}` };
+    if (isSymlink) return { ok: false, code: 'EPATH', error: t(`安装包包含符号链接：${name}`, `Package contains a symlink: ${name}`) };
 
-    if (uncompressed > MAX_FILE_BYTES) return { ok: false, code: 'ETOOBIG', error: `单文件超过 6MB：${name}` };
+    if (uncompressed > MAX_FILE_BYTES) return { ok: false, code: 'ETOOBIG', error: t(`单文件超过 6MB：${name}`, `Single file exceeds 6 MB: ${name}`) };
     total += uncompressed;
-    if (total > MAX_TOTAL_BYTES) return { ok: false, code: 'ETOOBIG', error: '解压总量超过 60MB' };
+    if (total > MAX_TOTAL_BYTES) return { ok: false, code: 'ETOOBIG', error: t('解压总量超过 60MB', "Uncompressed size exceeds 60 MB") };
 
     if (localAt + 30 > buf.length || buf.readUInt32LE(localAt) !== 0x04034b50) {
-      return { ok: false, code: 'EUNZIP', error: `本地文件头损坏：${name}` };
+      return { ok: false, code: 'EUNZIP', error: t(`本地文件头损坏：${name}`, `Corrupt local file header: ${name}`) };
     }
     const localNameLen = readLE(buf, localAt + 26, 2);
     const localExtraLen = readLE(buf, localAt + 28, 2);
     const dataAt = localAt + 30 + localNameLen + localExtraLen;
-    if (dataAt + compressed > buf.length) return { ok: false, code: 'EUNZIP', error: '压缩数据越界' };
+    if (dataAt + compressed > buf.length) return { ok: false, code: 'EUNZIP', error: t('压缩数据越界', "Compressed data out of bounds") };
     const raw = buf.subarray(dataAt, dataAt + compressed);
 
     let bytes;
     try {
       if (method === 0) bytes = Buffer.from(raw);
       else if (method === 8) bytes = zlib.inflateRawSync(raw, { maxOutputLength: MAX_FILE_BYTES });
-      else return { ok: false, code: 'EUNZIP', error: `不支持的压缩方式 ${method}` };
+      else return { ok: false, code: 'EUNZIP', error: t(`不支持的压缩方式 ${method}`, `Unsupported compression method ${method}`) };
     } catch (err) {
-      return { ok: false, code: 'EUNZIP', error: `解压失败：${err && err.message}` };
+      return { ok: false, code: 'EUNZIP', error: t(`解压失败：${err && err.message}`, `Extraction failed: ${err && err.message}`) };
     }
     if (bytes.length !== uncompressed) {
-      return { ok: false, code: 'EUNZIP', error: `解压长度不符：${name}` };
+      return { ok: false, code: 'EUNZIP', error: t(`解压长度不符：${name}`, `Uncompressed size mismatch: ${name}`) };
     }
     files.push({ name, bytes });
     cursor += 46 + nameLen + extraLen + commentLen;
@@ -169,10 +171,10 @@ function writeSafeFiles(tmpDir, files, bootstrapSource) {
   for (const file of files) {
     const raw = String(file.name || '');
     if (raw.endsWith('/')) continue; // 目录项
-    if (!isSafeEntryName(raw)) return { ok: false, code: 'EPATH', error: `非法路径：${raw}` };
+    if (!isSafeEntryName(raw)) return { ok: false, code: 'EPATH', error: t(`非法路径：${raw}`, `Illegal path: ${raw}`) };
     const target = path.resolve(tmpDir, raw);
     if (!target.startsWith(path.resolve(tmpDir) + path.sep)) {
-      return { ok: false, code: 'EPATH', error: `路径越界：${raw}` };
+      return { ok: false, code: 'EPATH', error: t(`路径越界：${raw}`, `Path outside plugin directory: ${raw}`) };
     }
     try {
       fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -180,7 +182,7 @@ function writeSafeFiles(tmpDir, files, bootstrapSource) {
       // realpath 复核：防符号链接把写入点甩到目录外
       const real = fs.realpathSync(target);
       if (!real.startsWith(fs.realpathSync(tmpDir) + path.sep) && real !== fs.realpathSync(tmpDir)) {
-        return { ok: false, code: 'EPATH', error: `realpath 越界：${raw}` };
+        return { ok: false, code: 'EPATH', error: t(`realpath 越界：${raw}`, `realpath outside plugin directory: ${raw}`) };
       }
     } catch (err) {
       return { ok: false, code: 'EWRITE', error: (err && err.message) || String(err) };
@@ -239,7 +241,7 @@ function installPlugin(payload = {}) {
   const stateFile = path.resolve(String(payload.stateFile || ''));
   const manifest = payload.manifest || {};
   const id = String(manifest.id || '');
-  if (!ID_RE.test(id)) return { ok: false, code: 'ESCHEMA', error: '插件 id 不合法' };
+  if (!ID_RE.test(id)) return { ok: false, code: 'ESCHEMA', error: t('插件 id 不合法', "Invalid plugin id") };
 
   let files;
   if (payload.zipBytes) {
@@ -249,29 +251,29 @@ function installPlugin(payload = {}) {
   } else if (Array.isArray(payload.files)) {
     files = payload.files.map((f) => ({ name: String(f.name), bytes: Buffer.from(f.bytes || []) }));
   } else {
-    return { ok: false, code: 'EINVALID', error: '没有可安装的内容' };
+    return { ok: false, code: 'EINVALID', error: t('没有可安装的内容', "Nothing to install") };
   }
 
   // sha256 必须在任何写盘之前：篡改 → ESHA256 且已装版本不被覆盖
   const expected = String(payload.expectedSha256 || '').trim();
   if (expected && payload.zipBytes) {
     if (sha256Of(payload.zipBytes).toLowerCase() !== expected.toLowerCase()) {
-      return { ok: false, code: 'ESHA256', error: '下载内容校验失败' };
+      return { ok: false, code: 'ESHA256', error: t('下载内容校验失败', "Downloaded content failed the checksum") };
     }
   }
 
   // 路径检查在写任何文件之前做一遍，避免「前 3 个文件已落盘才发现第 4 个越界」
   for (const f of files) {
     if (String(f.name).endsWith('/')) continue;
-    if (!isSafeEntryName(f.name)) return { ok: false, code: 'EPATH', error: `安装包包含非法路径：${f.name}` };
+    if (!isSafeEntryName(f.name)) return { ok: false, code: 'EPATH', error: t(`安装包包含非法路径：${f.name}`, `Package contains an illegal path: ${f.name}`) };
   }
 
   // plugin.json 必须存在
   const fromZip = files.find((f) => path.posix.normalize(String(f.name).replace(/\\/g, '/')).replace(/^\.\//, '') === 'plugin.json');
-  if (!fromZip) return { ok: false, code: 'ESCHEMA', error: '安装包缺少 plugin.json' };
+  if (!fromZip) return { ok: false, code: 'ESCHEMA', error: t('安装包缺少 plugin.json', "Package is missing plugin.json") };
   const mainName = path.posix.normalize(String(manifest.main || '').replace(/\\/g, '/')).replace(/^\.\//, '');
   if (!files.some((f) => path.posix.normalize(String(f.name).replace(/\\/g, '/')).replace(/^\.\//, '') === mainName)) {
-    return { ok: false, code: 'ESCHEMA', error: `main 指向的文件不存在：${mainName}` };
+    return { ok: false, code: 'ESCHEMA', error: t(`main 指向的文件不存在：${mainName}`, `File referenced by main does not exist: ${mainName}`) };
   }
 
   fs.mkdirSync(pluginsRoot, { recursive: true });
@@ -292,7 +294,7 @@ function installPlugin(payload = {}) {
     // rename 后再复核一次 realpath（S4-5）
     const real = fs.realpathSync(finalDir);
     if (!real.startsWith(fs.realpathSync(pluginsRoot) + path.sep) && real !== fs.realpathSync(pluginsRoot)) {
-      throw new Error('落盘目标越界');
+      throw new Error(t('落盘目标越界', "Install target is outside the plugin directory"));
     }
 
     const state = readState(stateFile);
@@ -396,7 +398,7 @@ function setEnabled(stateFile, id, enabled, reason = '') {
  * @return {{ok: boolean}}
  */
 function uninstallPlugin(pluginsRoot, stateFile, storageRoot, id) {
-  if (!ID_RE.test(String(id || ''))) return { ok: false, code: 'ESCHEMA', error: '插件 id 不合法' };
+  if (!ID_RE.test(String(id || ''))) return { ok: false, code: 'ESCHEMA', error: t('插件 id 不合法', "Invalid plugin id") };
   try {
     fs.rmSync(path.join(pluginsRoot, String(id)), { recursive: true, force: true });
     fs.rmSync(path.join(storageRoot, `${id}.json`), { force: true });
@@ -438,7 +440,7 @@ function storageSet(storageRoot, id, key, value) {
   data[String(key)] = value;
   const text = JSON.stringify(data);
   if (Buffer.byteLength(text, 'utf8') > STORAGE_LIMIT) {
-    return { ok: false, code: 'ESTORAGE_FULL', error: '插件存储已超过 1 MB' };
+    return { ok: false, code: 'ESTORAGE_FULL', error: t('插件存储已超过 1 MB', "Plugin storage exceeds 1 MB") };
   }
   try {
     fs.mkdirSync(storageRoot, { recursive: true });
@@ -546,28 +548,28 @@ function isValidKeyChord(chord) {
  */
 function validateContributedCommands(commands) {
   if (commands === undefined || commands === null) return { ok: true };
-  if (!Array.isArray(commands)) return { ok: false, code: 'ESCHEMA', error: 'contributes.commands 必须是数组' };
+  if (!Array.isArray(commands)) return { ok: false, code: 'ESCHEMA', error: t('contributes.commands 必须是数组', "contributes.commands must be an array") };
   const ids = new Set();
   const keys = new Map();
   for (const cmd of commands) {
     if (!cmd || typeof cmd !== 'object' || Array.isArray(cmd)) {
-      return { ok: false, code: 'ESCHEMA', error: 'contributes.commands 条目必须是对象' };
+      return { ok: false, code: 'ESCHEMA', error: t('contributes.commands 条目必须是对象', "contributes.commands entries must be objects") };
     }
     if (typeof cmd.id !== 'string' || !/^[a-z][a-z0-9-]*$/.test(cmd.id)) {
-      return { ok: false, code: 'ESCHEMA', error: '命令 id 不合法' };
+      return { ok: false, code: 'ESCHEMA', error: t('命令 id 不合法', "Invalid command id") };
     }
     if (typeof cmd.title !== 'string' || !cmd.title.trim()) {
-      return { ok: false, code: 'ESCHEMA', error: `命令 ${cmd.id} 缺少 title` };
+      return { ok: false, code: 'ESCHEMA', error: t(`命令 ${cmd.id} 缺少 title`, `Command ${cmd.id} is missing a title`) };
     }
-    if (ids.has(cmd.id)) return { ok: false, code: 'ESCHEMA', error: `命令 id 重复：${cmd.id}` };
+    if (ids.has(cmd.id)) return { ok: false, code: 'ESCHEMA', error: t(`命令 id 重复：${cmd.id}`, `Duplicate command id: ${cmd.id}`) };
     ids.add(cmd.id);
     if (cmd.key === undefined || cmd.key === null) continue;
     if (!isValidKeyChord(cmd.key)) {
-      return { ok: false, code: 'ESCHEMA', error: `命令 ${cmd.id} 的快捷键不合法：${String(cmd.key)}` };
+      return { ok: false, code: 'ESCHEMA', error: t(`命令 ${cmd.id} 的快捷键不合法：${String(cmd.key)}`, `Invalid shortcut for command ${cmd.id}: ${String(cmd.key)}`) };
     }
     const norm = String(cmd.key).trim().toLowerCase().split('-').sort().join('-');
     if (keys.has(norm)) {
-      return { ok: false, code: 'ESCHEMA', error: `快捷键 ${cmd.key} 在插件内重复（${keys.get(norm)} 与 ${cmd.id}）` };
+      return { ok: false, code: 'ESCHEMA', error: t(`快捷键 ${cmd.key} 在插件内重复（${keys.get(norm)} 与 ${cmd.id}）`, `Shortcut ${cmd.key} is duplicated within the plugin (${keys.get(norm)} and ${cmd.id})`) };
     }
     keys.set(norm, cmd.id);
   }
@@ -586,34 +588,36 @@ function validateContributedCommands(commands) {
  * @return {{ok: boolean, code?: string, error?: string}}
  */
 function validateInstallManifest(m, quillpadVersion = require('./../package.json').version) {
-  const allowed = ['id', 'name', 'description', 'author', 'version', 'license', 'engines', 'main', 'permissions', 'contributes', 'signature'];
+  // 英文字段是界面双语化的本地化副本，不参与校验，但必须放行 —— 否则新包会被
+  // 「未知字段」拒之门外。与渲染层 manifest.js 的 MANIFEST_KEYS 保持一致。
+  const allowed = ['id', 'name', 'nameEn', 'description', 'descriptionEn', 'author', 'version', 'license', 'engines', 'main', 'permissions', 'contributes', 'signature'];
   const licenses = ['MIT', 'Apache-2.0', 'BSD-2-Clause', 'BSD-3-Clause', 'ISC', '0BSD'];
   const perms = ['editor:read', 'editor:write', 'files:read', 'files:write', 'clipboard', 'network', 'settings'];
-  if (!m || typeof m !== 'object' || Array.isArray(m)) return { ok: false, code: 'ESCHEMA', error: '清单必须是对象' };
+  if (!m || typeof m !== 'object' || Array.isArray(m)) return { ok: false, code: 'ESCHEMA', error: t('清单必须是对象', "Manifest must be an object") };
   for (const key of Object.keys(m)) {
-    if (!allowed.includes(key)) return { ok: false, code: 'ESCHEMA', error: `未知字段：${key}` };
+    if (!allowed.includes(key)) return { ok: false, code: 'ESCHEMA', error: t(`未知字段：${key}`, `Unknown field: ${key}`) };
   }
   for (const key of ['id', 'name', 'description', 'author', 'version', 'license', 'main']) {
-    if (typeof m[key] !== 'string' || !m[key].trim()) return { ok: false, code: 'ESCHEMA', error: `字段 ${key} 不合法` };
+    if (typeof m[key] !== 'string' || !m[key].trim()) return { ok: false, code: 'ESCHEMA', error: t(`字段 ${key} 不合法`, `Invalid field: ${key}`) };
   }
-  if (!/^[a-z0-9]+(\.[a-z0-9-]+)+$/.test(m.id)) return { ok: false, code: 'ESCHEMA', error: '插件 id 不合法' };
-  if (m.name.length > 40 || m.description.length > 200) return { ok: false, code: 'ESCHEMA', error: '名称或描述超长' };
-  if (!/^\d+\.\d+\.\d+$/.test(m.version)) return { ok: false, code: 'ESCHEMA', error: 'version 必须是 x.y.z' };
-  if (!licenses.includes(m.license)) return { ok: false, code: 'ELICENSE', error: `License 不在白名单：${m.license}` };
+  if (!/^[a-z0-9]+(\.[a-z0-9-]+)+$/.test(m.id)) return { ok: false, code: 'ESCHEMA', error: t('插件 id 不合法', "Invalid plugin id") };
+  if (m.name.length > 40 || m.description.length > 200) return { ok: false, code: 'ESCHEMA', error: t('名称或描述超长', "Name or description is too long") };
+  if (!/^\d+\.\d+\.\d+$/.test(m.version)) return { ok: false, code: 'ESCHEMA', error: t('version 必须是 x.y.z', "version must be x.y.z") };
+  if (!licenses.includes(m.license)) return { ok: false, code: 'ELICENSE', error: t(`License 不在白名单：${m.license}`, `License not allowlisted: ${m.license}`) };
   const range = m.engines && m.engines.quillpad;
-  if (typeof range !== 'string') return { ok: false, code: 'ESCHEMA', error: 'engines.quillpad 缺失' };
+  if (typeof range !== 'string') return { ok: false, code: 'ESCHEMA', error: t('engines.quillpad 缺失', "engines.quillpad is missing") };
   if (!satisfiesVersion(quillpadVersion, range)) {
     const major = String(range).replace(/[^\d.]/g, '').split('.')[0] || '3';
-    return { ok: false, code: 'EENGINE', error: `需要 QuillPad ${major}.x` };
+    return { ok: false, code: 'EENGINE', error: t(`需要 QuillPad ${major}.x`, `Requires QuillPad ${major}.x`) };
   }
   if (!/\.(js|mjs)$/i.test(m.main) || m.main.includes('..') || m.main.startsWith('/')) {
-    return { ok: false, code: 'ESCHEMA', error: 'main 不合法' };
+    return { ok: false, code: 'ESCHEMA', error: t('main 不合法', "main is invalid") };
   }
   if (!Array.isArray(m.permissions) || m.permissions.some((p) => !perms.includes(p))) {
-    return { ok: false, code: 'ESCHEMA', error: 'permissions 含未知权限' };
+    return { ok: false, code: 'ESCHEMA', error: t('permissions 含未知权限', "permissions contains an unknown permission") };
   }
   if (!m.contributes || typeof m.contributes !== 'object' || Array.isArray(m.contributes)) {
-    return { ok: false, code: 'ESCHEMA', error: 'contributes 不合法' };
+    return { ok: false, code: 'ESCHEMA', error: t('contributes 不合法', "contributes is invalid") };
   }
   const cmdCheck = validateContributedCommands(m.contributes.commands);
   if (!cmdCheck.ok) return cmdCheck;

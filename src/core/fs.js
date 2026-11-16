@@ -9,6 +9,8 @@
  *       保存时再按 tab.eol 还原，这样「转换行尾」只需要改属性即可。
  */
 
+import { t } from './i18n.js';
+
 /** 换行符序列映射。 */
 export const EOL_SEQ = {
   LF: '\n',
@@ -64,7 +66,7 @@ export function decodeBytes(buffer) {
     return { text: normalizeNewlines(text), encoding: 'GBK', hadBom: false };
   } catch {
     const loose = new TextDecoder('utf-8', { fatal: false });
-    return { text: normalizeNewlines(loose.decode(bytes)), encoding: 'UTF-8 (含无法解码字符)', hadBom: false };
+    return { text: normalizeNewlines(loose.decode(bytes)), encoding: t('UTF-8 (含无法解码字符)', 'UTF-8 (with undecodable characters)'), hadBom: false };
   }
 }
 
@@ -193,7 +195,7 @@ export async function pickOpenFiles() {
       excludeAcceptAllOption: false,
       types: [
         {
-          description: '文本 / 代码文件',
+          description: t('文本 / 代码文件', 'Text / code files'),
           accept: {
             'text/plain': [
               '.txt', '.md', '.markdown', '.log', '.ini', '.toml', '.conf', '.env',
@@ -220,14 +222,14 @@ export async function pickOpenFiles() {
  * @param {string} suggestedName
  * @return {Promise<FileSystemFileHandle|null>}
  */
-export async function pickSaveFile(suggestedName = '未命名.txt') {
+export async function pickSaveFile(suggestedName = t('未命名.txt', 'Untitled.txt')) {
   if (!supportsFsa()) return null;
   try {
     return await window.showSaveFilePicker({ suggestedName });
   } catch (err) {
     if (err && err.name === 'AbortError') return null; // 用户取消
     console.warn('[QuillPad] showSaveFilePicker 失败：', err);
-    throw new Error('当前环境无法打开保存对话框，请改用浏览器下载');
+    throw new Error(t('当前环境无法打开保存对话框，请改用浏览器下载', 'This environment cannot open a save dialog; use the browser download instead'));
   }
 }
 
@@ -293,7 +295,7 @@ export function downloadText(name, text) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = name || '未命名.txt';
+  a.download = name || t('未命名.txt', 'Untitled.txt');
   document.body.appendChild(a);
   a.click();
   a.remove();

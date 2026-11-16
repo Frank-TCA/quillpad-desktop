@@ -13,6 +13,7 @@
  */
 
 import { HEARTBEAT_MS, HEARTBEAT_MAX_MISS, RPC_MAX_INFLIGHT } from './rpc.js';
+import { t, getLocale } from '../i18n.js';
 
 /** prelude 要删除的全局（删除失败时再用 defineProperty 兜底遮蔽）。 */
 export const BLOCKED_GLOBALS = Object.freeze([
@@ -57,6 +58,17 @@ export const API_METHODS = Object.freeze([
 ]);
 
 /**
+ * Worker 引导脚本里的用户可见文案：中文原文 → 英文副本。
+ *
+ * prelude 是安装期写死的静态文件，不能在里面 import i18n.js；所以把这张表
+ * 序列化进生成源码，由 __qpLabel() 在运行时按宿主推来的 locale 取值。
+ * 中文原文同时充当稳定 key，保持一字不改。
+ */
+export const PRELUDE_LABELS = Object.freeze({
+  '插件无响应': 'Plugin timed out',
+});
+
+/**
  * 生成 prelude 源码（宿主唯一可控的引导脚本，插件改不到）。
  *
  * @param {string} pluginId
@@ -69,12 +81,17 @@ export function buildPrelude(pluginId, apiMethods = API_METHODS, mainFile = './m
   const main = JSON.stringify(String(mainFile || './main.js'));
   const globals = JSON.stringify(BLOCKED_GLOBALS);
   const methods = JSON.stringify(Array.from(apiMethods || API_METHODS));
+  const labels = JSON.stringify(PRELUDE_LABELS);
+  const timeoutZh = Object.keys(PRELUDE_LABELS)[0];
   return [
     '/* QuillPad 插件引导脚本：由宿主生成，插件无法修改。 */',
     `const PLUGIN_ID = ${id};`,
     `const MAIN_FILE = ${main};`,
     `const BLOCKED = ${globals};`,
     `const METHODS = ${methods};`,
+    `const __qpLabels = ${labels};`,
+    'let __qpLocale = "zh-CN";',
+    'function __qpLabel(zh) { return __qpLocale === "en" ? (__qpLabels[zh] || zh) : zh; }',
     'for (const key of BLOCKED) {',
     '  try { delete self[key]; } catch (e) { /* 不可配置时走下一行 */ }',
     '  try { Object.defineProperty(self, key, { value: undefined, writable: false, configurable: false }); } catch (e) { /* 已存在即忽略 */ }',
@@ -90,7 +107,7 @@ export function buildPrelude(pluginId, apiMethods = API_METHODS, mainFile = './m
     "    const id = 'p' + (++seq) + '-' + Date.now().toString(36);",
     '    const timer = setTimeout(() => {',
     '      pending.delete(id);',
-    "      reject({ code: 'ETIMEOUT', message: '插件无响应' });",
+    `      reject({ code: 'ETIMEOUT', message: __qpLabel(${JSON.stringify(timeoutZh)}) });`,
     '    }, 10000);',
     '    pending.set(id, { resolve, reject, timer });',
     "    __qpPostMessage({ __qp: 'rpc', req: { v: 1, id, method, params: params || {} } });",
@@ -108,9 +125,9 @@ export function buildPrelude(pluginId, apiMethods = API_METHODS, mainFile = './m
     'const api = {};',
     'for (const method of METHODS) {',
     '  if (method === "commands.register") {',
-    '    setPath(api, method, (id, title, run) => {',
+    '    setPath(api, method, (id, title, run, titleEn) => {',
     '      if (typeof run === "function") handlers.set(String(id), run);',
-    "      return call(method, { id: String(id || ''), title: String(title || id || '') });",
+    "      return call(method, { id: String(id || ''), title: String(title || id || ''), titleEn: String(titleEn || '') });",
     '    });',
     '  } else if (method === "editor.replaceSelection" || method === "editor.insertText") {',
     '    setPath(api, method, (text) => call(method, { text: String(text == null ? "" : text) }));',
@@ -128,7 +145,7 @@ export function buildPrelude(pluginId, apiMethods = API_METHODS, mainFile = './m
     '    setPath(api, method, (spec) => {',
     '      const s = spec || {};',
     '      if (typeof s.render === "function") viewRenders.set(String(s.id), s.render);',
-    '      return call(method, { id: String(s.id || ""), title: String(s.title || s.id || "") });',
+    '      return call(method, { id: String(s.id || ""), title: String(s.title || s.id || ""), titleEn: String(s.titleEn || "") });',
     '    });',
     '  } else {',
     '    setPath(api, method, (arg) => call(method, arg && typeof arg === "object" ? arg : {}));',
@@ -138,6 +155,10 @@ export function buildPrelude(pluginId, apiMethods = API_METHODS, mainFile = './m
     'self.quillpad = api;',
     "self.addEventListener('message', (event) => {",
     '  const m = event.data || {};',
+    "  if (m.__qp === 'locale') {",
+    '    __qpLocale = String(m.locale || "zh-CN");',
+    '    return;',
+    '  }',
     "  if (m.__qp === 'rpc-result') {",
     '    const entry = m.msg && pending.get(String(m.msg.id));',
     '    if (!entry) return;',
@@ -254,7 +275,7 @@ export function createSandbox(opts = {}) {
     clearInterval(watchdog);
     for (const entry of invokes.values()) {
       clearTimeout(entry.timer);
-      entry.reject({ code: 'EDEAD', message: '插件已停用（无响应）' });
+      entry.reject({ code: 'EDEAD', message: t('插件已停用（无响应）', 'Plugin disabled (not responding)') });
     }
     invokes.clear();
   }
@@ -300,14 +321,19 @@ export function createSandbox(opts = {}) {
       return;
     }
     if (m.__qp === 'error') {
-      safeOnDead(String(m.message || '插件运行异常'));
+      safeOnDead(String(m.message || t('插件运行异常', 'Plugin runtime error')));
       terminate();
     }
   };
   worker.addEventListener('message', messageHandler);
 
+  // prelude 是安装期写死的静态模板，不能在里面 import i18n.js：把当前界面语言
+  // 推给 Worker，__qpLabel() 才能在超时时选中英文副本。语言切换后由
+  // plugins/host.js 的 locale 监听再次投递。
+  post({ __qp: 'locale', locale: getLocale() });
+
   worker.addEventListener('error', (event) => {
-    safeOnDead(String((event && event.message) || '插件未捕获异常'));
+    safeOnDead(String((event && event.message) || t('插件未捕获异常', 'Uncaught plugin exception')));
     terminate();
   });
 
@@ -317,7 +343,7 @@ export function createSandbox(opts = {}) {
     if (gap <= HEARTBEAT_MS) return;
     missed += 1;
     if (missed <= HEARTBEAT_MAX_MISS) return;
-    safeOnDead(`心跳超时 ${gap}ms`);
+    safeOnDead(t(`心跳超时 ${gap}ms`, `Heartbeat timeout ${gap}ms`));
     terminate();
   }, 1000);
 
@@ -328,13 +354,13 @@ export function createSandbox(opts = {}) {
    * @return {Promise<any>}
    */
   function invoke(commandId, params = {}) {
-    if (!alive) return Promise.reject({ code: 'EDEAD', message: '插件已停用（无响应）' });
+    if (!alive) return Promise.reject({ code: 'EDEAD', message: t('插件已停用（无响应）', 'Plugin disabled (not responding)') });
     invokeSeq += 1;
     const reqId = `i${invokeSeq}`;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         invokes.delete(reqId);
-        reject({ code: 'ETIMEOUT', message: '插件无响应' });
+        reject({ code: 'ETIMEOUT', message: t('插件无响应', 'Plugin timed out') });
       }, 10_000);
       invokes.set(reqId, { resolve, reject, timer });
       post({ __qp: 'invoke', reqId, id: String(commandId), params: params || {} });

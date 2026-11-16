@@ -6,6 +6,7 @@
  */
 
 import { StreamLanguage } from '@codemirror/language';
+import { t } from '../core/i18n.js';
 
 /**
  * 从 legacy-modes 模块里挑出可用的 StreamParser。
@@ -50,7 +51,13 @@ function legacy(importer, prefer) {
 export const LANGUAGES = [
   {
     id: 'plaintext',
-    label: '纯文本',
+    // 语言名是专有名词不翻，但「纯文本」要跟随界面语言。
+    // LANGUAGES 是模块级数组：label 用 getter 在读取点求值，labelEn 供
+    // pickLocalized() 这类按 `<字段>En` 约定取值的渲染点直接命中。
+    get label() {
+      return t('纯文本', 'Plain Text');
+    },
+    labelEn: 'Plain Text',
     exts: ['txt', 'text', 'log', 'csv', 'tsv', 'env', 'gitignore', 'editorconfig'],
     files: ['.gitignore', '.editorconfig', '.env'],
     load: async () => [],
@@ -433,7 +440,7 @@ export function resolveLangId(raw) {
  */
 export function codeTagLabel(raw) {
   const tag = String(raw || '').trim();
-  if (!tag) return '纯文本';
+  if (!tag) return t('纯文本', 'Plain Text');
   const id = resolveLangId(tag);
   return BY_ID.has(id) ? languageLabel(id) : tag;
 }
@@ -510,17 +517,22 @@ export function languageMenuList() {
  * @return {Array<{label: string, items: Array<{id: string, label: string}>}>}
  */
 export function languageGroups() {
-  /** @type {Record<string, string[]>} */
-  const GROUP_IDS = {
-    'Web 前端': ['javascript', 'jsx', 'typescript', 'tsx', 'html', 'vue', 'css', 'scss', 'less'],
-    '数据与配置': ['json', 'yaml', 'toml', 'ini', 'xml', 'sql'],
-    '脚本与 Shell': ['python', 'ruby', 'php', 'perl', 'lua', 'r', 'shell', 'batch', 'powershell'],
-    '系统与编译型': ['java', 'c', 'cpp', 'csharp', 'kotlin', 'scala', 'go', 'rust', 'swift'],
-    '文档与运维': ['markdown', 'latex', 'dockerfile', 'cmake', 'nginx', 'plaintext', 'diff'],
-  };
+  /**
+   * 分组名用 t() 在**函数体内**求值：languageGroups() 是渲染时才调用的，
+   * 写成模块级常量就会在 import 期把语言冻结住。
+   * 语言条目本身的 label（JavaScript / C++ / Python…）是专有名词，不翻。
+   * @type {Array<{label: string, ids: string[]}>}
+   */
+  const GROUP_IDS = [
+    { label: t('Web 前端', 'Web'), ids: ['javascript', 'jsx', 'typescript', 'tsx', 'html', 'vue', 'css', 'scss', 'less'] },
+    { label: t('数据与配置', 'Data'), ids: ['json', 'yaml', 'toml', 'ini', 'xml', 'sql'] },
+    { label: t('脚本与 Shell', 'Scripts'), ids: ['python', 'ruby', 'php', 'perl', 'lua', 'r', 'shell', 'batch', 'powershell'] },
+    { label: t('系统与编译型', 'System'), ids: ['java', 'c', 'cpp', 'csharp', 'kotlin', 'scala', 'go', 'rust', 'swift'] },
+    { label: t('文档与运维', 'Documents'), ids: ['markdown', 'latex', 'dockerfile', 'cmake', 'nginx', 'plaintext', 'diff'] },
+  ];
   const byId = new Map(LANGUAGES.map((l) => [l.id, l]));
   const used = new Set();
-  const groups = Object.entries(GROUP_IDS).map(([label, ids]) => ({
+  const groups = GROUP_IDS.map(({ label, ids }) => ({
     label,
     items: ids
       .filter((id) => byId.has(id))
@@ -535,7 +547,7 @@ export function languageGroups() {
   const rest = LANGUAGES.filter((l) => !used.has(l.id))
     .map((l) => ({ id: l.id, label: l.label }))
     .sort((a, b) => a.label.localeCompare(b.label, 'zh-Hans-CN'));
-  if (rest.length) groups.push({ label: '其他', items: rest });
+  if (rest.length) groups.push({ label: t('其他', 'Other'), items: rest });
   return groups;
 }
 

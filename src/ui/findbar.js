@@ -18,8 +18,9 @@ import {
 } from '../core/utils.js';
 import { collectMatches, pickMatchIndex, syncQuery, replaceAllInView, replaceNextInView, replaceAllInString, makeSearchQuery } from '../core/search.js';
 import { readFileHandle } from '../core/fs.js';
-import { state } from '../core/state.js';
+import { state, bus } from '../core/state.js';
 import { runCommand } from '../core/commands.js';
+import { t } from '../core/i18n.js';
 
 /**
  * 面板按钮的 data-toggle 值 → 搜索选项键名的映射。
@@ -143,6 +144,9 @@ class QuillSearchPanel {
     this.historyIndex = -1;
     this.bind();
     this.restoreQuery();
+    // 面板可能跨语言切换一直开着：监听一次 locale 事件，重算静态文案；
+    // destroy() 里退订，避免面板关闭后残留监听器。
+    this._offLocale = bus.on('locale', () => this.relabel());
   }
 
   /**
@@ -154,31 +158,74 @@ class QuillSearchPanel {
       `<div class="qp-search__row">` +
       `<div class="qp-search__field">` +
       icon('search', 14) +
-      `<input class="qp-search__input" data-role="search" placeholder="查找" spellcheck="false" autocomplete="off" />` +
-      `<button class="qp-toggle" data-toggle="case" title="区分大小写 (Alt+C)">Aa</button>` +
-      `<button class="qp-toggle" data-toggle="word" title="全词匹配 (Alt+W)">W</button>` +
-      `<button class="qp-toggle" data-toggle="regexp" title="正则表达式 (Alt+R)">.*</button>` +
-      `<button class="qp-toggle is-on" data-toggle="wrap" title="循环查找">↻</button>` +
-      `<button class="qp-toggle" data-act="history" title="查找历史（输入框为空时按 ↓ 回填最近一条）">H</button>` +
+      `<input class="qp-search__input" data-role="search" placeholder="${t('查找', 'Find')}" spellcheck="false" autocomplete="off" />` +
+      `<button class="qp-toggle" data-toggle="case" title="${t('区分大小写 (Alt+C)', 'Match Case (Alt+C)')}">Aa</button>` +
+      `<button class="qp-toggle" data-toggle="word" title="${t('全词匹配 (Alt+W)', 'Whole Word (Alt+W)')}">W</button>` +
+      `<button class="qp-toggle" data-toggle="regexp" title="${t('正则表达式 (Alt+R)', 'Regular Expression (Alt+R)')}">.*</button>` +
+      `<button class="qp-toggle is-on" data-toggle="wrap" title="${t('循环查找', 'Wrap Around')}">↻</button>` +
+      `<button class="qp-toggle" data-act="history" title="${t('查找历史（输入框为空时按 ↓ 回填最近一条）', 'Find History (press ↓ with an empty input to recall the most recent entry)')}">H</button>` +
       `</div>` +
       `<span class="qp-search__count" data-role="count">0 / 0</span>` +
-      `<button class="qp-icon-btn" data-act="prev" title="上一个 (Shift+Enter)">${icon('chevronUp', 14)}</button>` +
-      `<button class="qp-icon-btn" data-act="next" title="下一个 (Enter)">${icon('chevronDown', 14)}</button>` +
+      `<button class="qp-icon-btn" data-act="prev" title="${t('上一个 (Shift+Enter)', 'Previous (Shift+Enter)')}">${icon('chevronUp', 14)}</button>` +
+      `<button class="qp-icon-btn" data-act="next" title="${t('下一个 (Enter)', 'Next (Enter)')}">${icon('chevronDown', 14)}</button>` +
       `<span class="qp-search__sep"></span>` +
-      `<button class="qp-icon-btn" data-act="toggle-replace" title="显示替换">${icon('replace', 14)}</button>` +
+      `<button class="qp-icon-btn" data-act="toggle-replace" title="${t('显示替换', 'Show Replace')}">${icon('replace', 14)}</button>` +
       `<span class="qp-search__sep"></span>` +
-      `<button class="qp-icon-btn" data-act="close" title="关闭 (Esc)">${icon('close', 14)}</button>` +
+      `<button class="qp-icon-btn" data-act="close" title="${t('关闭 (Esc)', 'Close (Esc)')}">${icon('close', 14)}</button>` +
       `</div>` +
       `<div class="qp-search__history" data-role="history" hidden></div>` +
       `<div class="qp-search__row" data-row="replace" hidden>` +
       `<div class="qp-search__field">` +
       icon('replace', 14) +
-      `<input class="qp-search__input" data-role="replace" placeholder="替换为（支持 $1 捕获组）" spellcheck="false" autocomplete="off" />` +
+      `<input class="qp-search__input" data-role="replace" placeholder="${t('替换为（支持 $1 捕获组）', 'Replace with (supports $1 capture groups)')}" spellcheck="false" autocomplete="off" />` +
       `</div>` +
-      `<button class="btn is-ghost" data-act="replace-one">替换</button>` +
-      `<button class="btn is-ghost" data-act="replace-all">全部替换</button>` +
+      `<button class="btn is-ghost" data-act="replace-one">${t('替换', 'Replace')}</button>` +
+      `<button class="btn is-ghost" data-act="replace-all">${t('全部替换', 'Replace All')}</button>` +
       `</div>`
     );
+  }
+
+  /**
+   * 界面语言切换后重算面板上的静态文案（不重建 DOM，保住输入焦点与事件绑定）。
+   * @return {void}
+   */
+  relabel() {
+    const search = this.dom.querySelector('[data-role="search"]');
+    if (search) search.placeholder = t('查找', 'Find');
+    const replace = this.dom.querySelector('[data-role="replace"]');
+    if (replace) replace.placeholder = t('替换为（支持 $1 捕获组）', 'Replace with (supports $1 capture groups)');
+
+    const toggleTitles = {
+      case: t('区分大小写 (Alt+C)', 'Match Case (Alt+C)'),
+      word: t('全词匹配 (Alt+W)', 'Whole Word (Alt+W)'),
+      regexp: t('正则表达式 (Alt+R)', 'Regular Expression (Alt+R)'),
+      wrap: t('循环查找', 'Wrap Around'),
+    };
+    this.dom.querySelectorAll('[data-toggle]').forEach((btn) => {
+      const title = toggleTitles[btn.dataset.toggle];
+      if (title) btn.title = title;
+    });
+
+    const actTitles = {
+      history: t('查找历史（输入框为空时按 ↓ 回填最近一条）', 'Find History (press ↓ with an empty input to recall the most recent entry)'),
+      prev: t('上一个 (Shift+Enter)', 'Previous (Shift+Enter)'),
+      next: t('下一个 (Enter)', 'Next (Enter)'),
+      'toggle-replace': t('显示替换', 'Show Replace'),
+      close: t('关闭 (Esc)', 'Close (Esc)'),
+    };
+    this.dom.querySelectorAll('[data-act]').forEach((btn) => {
+      const title = actTitles[btn.dataset.act];
+      if (title) btn.title = title;
+    });
+
+    const replaceOne = this.dom.querySelector('[data-act="replace-one"]');
+    if (replaceOne) replaceOne.textContent = t('替换', 'Replace');
+    const replaceAll = this.dom.querySelector('[data-act="replace-all"]');
+    if (replaceAll) replaceAll.textContent = t('全部替换', 'Replace All');
+
+    // 历史下拉与计数都是动态渲染的，按新语言重绘一次
+    if (this.historyOpen) this.renderHistory();
+    this.renderCount();
   }
 
   /** 恢复上一次的查询（CM 会在多次打开间保留）。 */
@@ -370,8 +417,8 @@ class QuillSearchPanel {
     }
     box.innerHTML =
       `<div class="qp-search__history-head">` +
-      `<span>最近查找</span>` +
-      `<button class="qp-search__history-clear" data-act="clear-history" title="清空查找历史">清空</button>` +
+      `<span>${t('最近查找', 'Recent Finds')}</span>` +
+      `<button class="qp-search__history-clear" data-act="clear-history" title="${t('清空查找历史', 'Clear Find History')}">${t('清空', 'Clear')}</button>` +
       `</div>` +
       list
         .map(
@@ -471,21 +518,21 @@ class QuillSearchPanel {
     const el = this.dom.querySelector('[data-role="count"]');
     if (!el) return;
     if (this.invalidRegexp) {
-      el.textContent = '正则无效';
+      el.textContent = t('正则无效', 'Invalid Regular Expression');
       el.classList.add('is-none');
       el.classList.add('is-error');
       return;
     }
     el.classList.remove('is-error');
     if (!this.matches.length) {
-      el.textContent = this.searchOptions.searchText ? '无结果' : '0 / 0';
+      el.textContent = this.searchOptions.searchText ? t('无结果', 'No Results') : '0 / 0';
       el.classList.toggle('is-none', !!this.searchOptions.searchText);
       return;
     }
     el.classList.remove('is-none');
     const current = this.matches[this.activeMatch] || null;
     if (!current) {
-      el.textContent = `${formatNumber(this.matches.length)} 个`;
+      el.textContent = t(`${formatNumber(this.matches.length)} 个`, `${formatNumber(this.matches.length)} matches`);
       return;
     }
     el.textContent = `${formatNumber(this.activeMatch + 1)} / ${formatNumber(this.matches.length)}`;
@@ -607,6 +654,8 @@ class QuillSearchPanel {
 
   /** 关闭时清理。 */
   destroy() {
+    if (this._offLocale) this._offLocale();
+    this._offLocale = null;
     this.matches = [];
   }
 }
@@ -686,6 +735,8 @@ export class FindInFilesPanel {
     this.running = false;
     /** 自增令牌：保证只有最新一次搜索的结果会被采纳 */
     this.runToken = 0;
+    /** 摘要文案的生成器（语言切换时由 relabel() 重新求值）。 */
+    this.summaryRender = () => '';
     /** 输入即搜索的防抖版本（250ms） */
     this.debouncedRun = debounce(() => this.run(), 250);
     this.build();
@@ -697,27 +748,27 @@ export class FindInFilesPanel {
       `<div class="find-files__head">` +
       `<div class="qp-search__field" style="flex:1;height:26px">` +
       icon('search', 14) +
-      `<input class="qp-search__input" data-role="search" placeholder="在所有打开的文件中查找" spellcheck="false" autocomplete="off" />` +
-      `<button class="qp-toggle" data-toggle="case" title="区分大小写 (Alt+C)">Aa</button>` +
-      `<button class="qp-toggle" data-toggle="word" title="全词匹配 (Alt+W)">W</button>` +
-      `<button class="qp-toggle" data-toggle="regexp" title="正则表达式 (Alt+R)">.*</button>` +
+      `<input class="qp-search__input" data-role="search" placeholder="${t('在所有打开的文件中查找', 'Find in all open files')}" spellcheck="false" autocomplete="off" />` +
+      `<button class="qp-toggle" data-toggle="case" title="${t('区分大小写 (Alt+C)', 'Match Case (Alt+C)')}">Aa</button>` +
+      `<button class="qp-toggle" data-toggle="word" title="${t('全词匹配 (Alt+W)', 'Whole Word (Alt+W)')}">W</button>` +
+      `<button class="qp-toggle" data-toggle="regexp" title="${t('正则表达式 (Alt+R)', 'Regular Expression (Alt+R)')}">.*</button>` +
       `</div>` +
       `<select class="find-files__scope" data-role="scope">` +
-      `<option value="tabs">所有打开的标签</option>` +
-      `<option value="folder">当前文件夹</option>` +
+      `<option value="tabs">${t('所有打开的标签', 'All Open Tabs')}</option>` +
+      `<option value="folder">${t('当前文件夹', 'Current Folder')}</option>` +
       `</select>` +
       `<span class="find-files__summary" data-role="summary"></span>` +
-      `<button class="qp-icon-btn" data-act="close" title="关闭">${icon('close', 14)}</button>` +
+      `<button class="qp-icon-btn" data-act="close" title="${t('关闭', 'Close')}">${icon('close', 14)}</button>` +
       `</div>` +
       `<div class="find-files__head">` +
       `<div class="qp-search__field" style="flex:1;height:26px">` +
       icon('replace', 14) +
-      `<input class="qp-search__input" data-role="replace" placeholder="替换为（支持 $1 捕获组）" spellcheck="false" autocomplete="off" />` +
+      `<input class="qp-search__input" data-role="replace" placeholder="${t('替换为（支持 $1 捕获组）', 'Replace with (supports $1 capture groups)')}" spellcheck="false" autocomplete="off" />` +
       `</div>` +
-      `<button class="btn is-ghost" data-act="replace-all">全部替换</button>` +
+      `<button class="btn is-ghost" data-act="replace-all">${t('全部替换', 'Replace All')}</button>` +
       `</div>` +
       `<div class="find-files__results" data-role="results">` +
-      `<div class="ff-empty">输入关键词即可自动搜索</div>` +
+      `<div class="ff-empty">${t('输入关键词即可自动搜索', 'Type a keyword to search automatically')}</div>` +
       `</div>`;
 
     const searchInput = this.root.querySelector('[data-role="search"]');
@@ -879,11 +930,53 @@ export class FindInFilesPanel {
 
   /**
    * 设置摘要文本。
-   * @param {string} text
+   *
+   * 传函数时它会在每次调用（含语言切换后的 relabel）时重新求值，
+   * 这样 `t()` 永远在渲染点计算，不会把某一种语言缓存下来。
+   * @param {string|(() => string)} render 固定文本，或生成当前语言文案的函数
    */
-  setSummary(text) {
+  setSummary(render) {
+    this.summaryRender = typeof render === 'function' ? render : () => String(render);
     const el = this.root.querySelector('[data-role="summary"]');
-    if (el) el.textContent = text;
+    if (el) el.textContent = this.summaryRender();
+  }
+
+  /**
+   * 界面语言切换后重算静态文案。
+   *
+   * 由 `app.refreshChrome()` 调用：只改属性 / 文本，不重建 DOM，避免重复绑定事件。
+   * 结果区里的空态与「第 N 行」提示是动态渲染的，重绘一次即可（事件委托挂在 root 上）。
+   */
+  relabel() {
+    const search = this.root.querySelector('[data-role="search"]');
+    if (search) search.placeholder = t('在所有打开的文件中查找', 'Find in all open files');
+    const replace = this.root.querySelector('[data-role="replace"]');
+    if (replace) replace.placeholder = t('替换为（支持 $1 捕获组）', 'Replace with (supports $1 capture groups)');
+
+    const toggleTitles = {
+      case: t('区分大小写 (Alt+C)', 'Match Case (Alt+C)'),
+      word: t('全词匹配 (Alt+W)', 'Whole Word (Alt+W)'),
+      regexp: t('正则表达式 (Alt+R)', 'Regular Expression (Alt+R)'),
+    };
+    this.root.querySelectorAll('[data-toggle]').forEach((btn) => {
+      const title = toggleTitles[btn.dataset.toggle];
+      if (title) btn.title = title;
+    });
+
+    const scope = this.root.querySelector('[data-role="scope"]');
+    if (scope) {
+      const tabsOption = scope.querySelector('option[value="tabs"]');
+      const folderOption = scope.querySelector('option[value="folder"]');
+      if (tabsOption) tabsOption.textContent = t('所有打开的标签', 'All Open Tabs');
+      if (folderOption) folderOption.textContent = t('当前文件夹', 'Current Folder');
+    }
+    const closeBtn = this.root.querySelector('[data-act="close"]');
+    if (closeBtn) closeBtn.title = t('关闭', 'Close');
+    const replaceAllBtn = this.root.querySelector('[data-act="replace-all"]');
+    if (replaceAllBtn) replaceAllBtn.textContent = t('全部替换', 'Replace All');
+
+    this.setSummary(this.summaryRender);
+    this.renderResults();
   }
 
   /** 执行搜索。 */
@@ -902,12 +995,12 @@ export class FindInFilesPanel {
     if (!regex) {
       this.groups = [];
       this.renderResults();
-      this.setSummary('正则表达式无效');
+      this.setSummary(() => t('正则表达式无效', 'Invalid regular expression'));
       return;
     }
 
     this.running = true;
-    this.setSummary('搜索中…');
+    this.setSummary(() => t('搜索中…', 'Searching…'));
     const groups = [];
     let total = 0;
 
@@ -953,7 +1046,7 @@ export class FindInFilesPanel {
       if (!sidebar || !sidebar.handle) {
         // 没有打开文件夹时给出明确引导，而不是「没有找到匹配」
         // （否则用户会以为关键词写错了，实际上只是缺一个文件夹）
-        this.setSummary('还没有打开文件夹');
+        this.setSummary(() => t('还没有打开文件夹', 'No folder is open yet'));
         this.running = false;
         this.groups = [];
         this.renderResults();
@@ -979,9 +1072,10 @@ export class FindInFilesPanel {
     // 搜索期间又发起了新的搜索时，丢弃本次过期结果
     if (token !== this.runToken) return;
     this.renderResults();
-    this.setSummary(
-      total ? `${formatNumber(total)} 处匹配 · ${groups.length} 个文件` : '没有找到匹配',
-    );
+    this.setSummary(() => (total
+      ? t(`${formatNumber(total)} 处匹配 · ${groups.length} 个文件`,
+        `${formatNumber(total)} matches · ${groups.length} files`)
+      : t('没有找到匹配', 'No matches found')));
   }
 
   /** 渲染结果列表。 */
@@ -992,15 +1086,15 @@ export class FindInFilesPanel {
     if (this.scope === 'folder' && !this.hasFolder) {
       results.innerHTML =
         `<div class="ff-empty ff-empty--guide">` +
-        `<div class="ff-empty__title">先打开一个文件夹再搜索</div>` +
-        `<div class="ff-empty__hint">「当前文件夹」范围需要先打开一个文件夹（Ctrl+K O）</div>` +
-        `<button class="btn" data-act="open-folder">打开文件夹…</button>` +
+        `<div class="ff-empty__title">${t('先打开一个文件夹再搜索', 'Open a folder before searching')}</div>` +
+        `<div class="ff-empty__hint">${t('「当前文件夹」范围需要先打开一个文件夹（Ctrl+K O）', 'The "Current Folder" scope requires an open folder (Ctrl+K O)')}</div>` +
+        `<button class="btn" data-act="open-folder">${t('打开文件夹…', 'Open Folder…')}</button>` +
         `</div>`;
       return;
     }
     if (!this.groups.length) {
       results.innerHTML = `<div class="ff-empty">${
-        this.searchText ? '没有找到匹配' : '输入关键词即可自动搜索'
+        this.searchText ? t('没有找到匹配', 'No matches found') : t('输入关键词即可自动搜索', 'Type a keyword to search automatically')
       }</div>`;
       return;
     }
@@ -1013,7 +1107,7 @@ export class FindInFilesPanel {
           ? group.hits
               .map(
                 (h, hi) =>
-                  `<div class="ff-hit" data-hit="${gi}:${hi}" title="第 ${h.line} 行">` +
+                  `<div class="ff-hit" data-hit="${gi}:${hi}" title="${t(`第 ${h.line} 行`, `Line ${h.line}`)}">` +
                   `<span class="ff-hit__ln">${h.line}</span>` +
                   `<span class="ff-hit__text">${
                     regex ? highlightHtml(h.text.trim(), regex) : escapeHtml(h.text.trim())
@@ -1072,11 +1166,11 @@ export class FindInFilesPanel {
   async replaceAll() {
     const opts = this.searchOptions;
     if (!opts.searchText) {
-      this.app.toast('请先输入要查找的内容', 'info');
+      this.app.toast(t('请先输入要查找的内容', 'Please enter a search term first.'), 'info');
       return;
     }
     if (this.scope === 'folder') {
-      this.app.toast('文件夹模式的批量替换请逐个文件打开后使用「替换」', 'info', 3200);
+      this.app.toast(t('文件夹模式的批量替换请逐个文件打开后使用「替换」', 'Batch replace is not available in folder mode. Open each file and use "Replace" instead.'), 'info', 3200);
       return;
     }
     let total = 0;
@@ -1092,6 +1186,7 @@ export class FindInFilesPanel {
       }
     }
     await this.run();
-    this.app.toast(`已替换 ${formatNumber(total)} 处，涉及 ${files} 个文件`, total ? 'success' : 'info');
+    this.app.toast(t(`已替换 ${formatNumber(total)} 处，涉及 ${files} 个文件`,
+      `Replaced ${formatNumber(total)} occurrences across ${files} files`), total ? 'success' : 'info');
   }
 }

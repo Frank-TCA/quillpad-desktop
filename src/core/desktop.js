@@ -11,6 +11,8 @@
  *    各自写 try/catch。
  */
 
+import { t } from './i18n.js';
+
 /**
  * 取桌面桥（浏览器里为 null）。
  * @return {object|null}
@@ -116,7 +118,7 @@ async function call(method, ...args) {
   const b = bridge();
   const fn = b && b[method];
   if (typeof fn !== 'function') {
-    return { ok: false, code: 'ENOBRIDGE', error: '当前环境不支持该操作（浏览器模式）' };
+    return { ok: false, code: 'ENOBRIDGE', error: t('当前环境不支持该操作（浏览器模式）', 'This operation is unavailable in browser mode') };
   }
   try {
     const result = await fn.apply(b, args);

@@ -30,7 +30,32 @@
       "category": "文本处理",
       "official": true,
       "commands": 13,
-      "signature": "未验证"
+      "signature": "未验证",
+      "title": "文本处理包",
+      "nameEn": "Text Tools",
+      "titleEn": "Text Tools",
+      "descriptionEn": "Case conversion, sorting, deduplication, empty-line removal, Base64, URL encoding/decoding, JSON formatting and column alignment — 13 commands in total.",
+      "features": [
+        "大小写转换",
+        "行排序 / 去重 / 删除空行",
+        "Base64 编解码",
+        "URL 编解码",
+        "JSON 格式化",
+        "按分隔符对齐列",
+        "列插入 / 删除 / 对齐 / 编号"
+      ],
+      "featuresEn": [
+        "Case conversion",
+        "Sort, deduplicate and remove empty lines",
+        "Base64 encode / decode",
+        "URL encode / decode",
+        "JSON formatting",
+        "Align columns by separator",
+        "Column insert / delete / align / number"
+      ],
+      "authorEn": "QuillPad Official",
+      "categoryEn": "Text Tools",
+      "signatureEn": "Unverified"
     },
     {
       "id": "quillpad.md-tools",
@@ -58,7 +83,26 @@
       "category": "Markdown",
       "official": true,
       "commands": 4,
-      "signature": "未验证"
+      "signature": "未验证",
+      "title": "Markdown 增强包",
+      "nameEn": "Markdown Tools",
+      "titleEn": "Markdown Tools",
+      "descriptionEn": "Normalize table alignment, generate a table of contents, insert footnotes, and count words and reading time — 4 commands in total.",
+      "features": [
+        "规范表格对齐",
+        "生成目录（TOC）",
+        "插入脚注",
+        "字数与阅读时长统计"
+      ],
+      "featuresEn": [
+        "Normalize table alignment",
+        "Generate a table of contents",
+        "Insert footnotes",
+        "Word count and reading time"
+      ],
+      "authorEn": "QuillPad Official",
+      "categoryEn": "Markdown",
+      "signatureEn": "Unverified"
     },
     {
       "id": "quillpad.dev-tools",
@@ -88,7 +132,28 @@
       "official": true,
       "commands": 4,
       "sidebarViews": 1,
-      "signature": "未验证"
+      "signature": "未验证",
+      "title": "开发者工具包",
+      "nameEn": "Developer Tools",
+      "titleEn": "Developer Tools",
+      "descriptionEn": "Regex practice, JSON escaping, MIME lookup and code-line sorting — 4 commands plus 1 sidebar view.",
+      "features": [
+        "正则匹配练习",
+        "JSON 字符串转义",
+        "MIME 类型查询",
+        "代码行排序",
+        "开发者侧栏面板"
+      ],
+      "featuresEn": [
+        "Regex match trainer",
+        "Escape JSON strings",
+        "MIME type lookup",
+        "Sort code lines",
+        "Developer sidebar panel"
+      ],
+      "authorEn": "QuillPad Official",
+      "categoryEn": "Developer",
+      "signatureEn": "Unverified"
     },
     {
       "id": "community.json-formatter",
@@ -108,11 +173,27 @@
         "editor:write"
       ],
       "download": "plugins/community.json-formatter.zip",
-      "sha256": "703a8293f02f544f9e2f283300341d55cdf077aeb6e73fef675b2018035ba4ba",
+      "sha256": "6deddb593aa5410ae412827c870a14d488fc466efcd5a99f7f9cfc28ee3a2464",
       "updatedAt": "2026-10-21",
       "installs": 4300,
       "category": "开发者",
-      "official": false
+      "official": false,
+      "title": "JSON 格式化助手",
+      "nameEn": "JSON Formatter",
+      "titleEn": "JSON Formatter",
+      "descriptionEn": "Format minified JSON or compress it into a single line — 2 commands.",
+      "features": [
+        "一键格式化 JSON",
+        "压缩成单行",
+        "缩进切换与转义修正"
+      ],
+      "featuresEn": [
+        "Format JSON with one click",
+        "Minify to a single line",
+        "Indent toggling and escaping fixes"
+      ],
+      "authorEn": "Community Sample",
+      "categoryEn": "Developer"
     },
     {
       "id": "community.json-schema-lite",
@@ -131,11 +212,25 @@
         "editor:write"
       ],
       "download": "plugins/community.json-schema-lite.zip",
-      "sha256": "10ffa78a092869441ac1c46bd48118286162236285d8309069741e4dee1cc38b",
+      "sha256": "860e25411c50a99ad522025fb5aac586ff4ae32efd86c0383d9209603f998274",
       "updatedAt": "2026-09-30",
       "installs": 2100,
       "category": "开发者",
-      "official": false
+      "official": false,
+      "title": "JSON Schema 速查",
+      "nameEn": "JSON Schema Quick Reference",
+      "titleEn": "JSON Schema Quick Reference",
+      "descriptionEn": "Generate a minimal usable schema snippet for a JSON document.",
+      "features": [
+        "由选中 JSON 生成 Schema",
+        "轻量无依赖"
+      ],
+      "featuresEn": [
+        "Generate a schema from selected JSON",
+        "Lightweight, no dependencies"
+      ],
+      "authorEn": "Community Sample",
+      "categoryEn": "Developer"
     },
     {
       "id": "community.csv-to-json",
@@ -154,11 +249,25 @@
         "editor:write"
       ],
       "download": "plugins/community.csv-to-json.zip",
-      "sha256": "99db0cc756dfc0996c716a9af805dd7aa59f9cb502e61633bb6c62e107313b01",
+      "sha256": "584de12a077a5736ab5ba2c992dbc0808f378d2420712b2f52882a78efc461c6",
       "updatedAt": "2026-08-12",
       "installs": 1500,
       "category": "文本处理",
-      "official": false
+      "official": false,
+      "title": "CSV 转 JSON",
+      "nameEn": "CSV to JSON",
+      "titleEn": "CSV to JSON",
+      "descriptionEn": "Convert the current CSV text into a JSON array.",
+      "features": [
+        "CSV 文本转 JSON 数组",
+        "选中文本或全文均可"
+      ],
+      "featuresEn": [
+        "Convert CSV text to a JSON array",
+        "Works on a selection or the whole document"
+      ],
+      "authorEn": "Community Sample",
+      "categoryEn": "Text Tools"
     },
     {
       "id": "community.line-sorter",
@@ -177,11 +286,28 @@
         "editor:write"
       ],
       "download": "plugins/community.line-sorter.zip",
-      "sha256": "f01b901732f8de275b733919aac4f49d5f0509bb1e069e28241ab5507f6dad8a",
+      "sha256": "692923531b1fb3f6cb8f4cfd732c484b970b2ad1d55acd37808292920f1279d2",
       "updatedAt": "2026-05-02",
       "installs": 3300,
       "category": "文本处理",
-      "official": false
+      "official": false,
+      "title": "行排序增强",
+      "nameEn": "Advanced Line Sorter",
+      "titleEn": "Advanced Line Sorter",
+      "descriptionEn": "Sort by length, number or natural order, with adjacent-line deduplication.",
+      "features": [
+        "按行长 / 行首数字 / 自然序排序",
+        "删除相邻重复行",
+        "可预测的排序结果"
+      ],
+      "featuresEn": [
+        "Sort by line length, leading number or natural order",
+        "Remove adjacent duplicate lines",
+        "Predictable ordering"
+      ],
+      "authorEn": "Community Sample",
+      "categoryEn": "Text Tools"
     }
-  ]
+  ],
+  "sourceEn": "Built-in catalog (available offline; contains no external GPL content)"
 }

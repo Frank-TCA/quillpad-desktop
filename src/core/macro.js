@@ -18,6 +18,7 @@
 import { state } from './state.js';
 import { getCommand, runCommand } from './commands.js';
 import * as desktop from './desktop.js';
+import { t } from './i18n.js';
 
 /** localStorage 兜底键（浏览器模式没有宏文件）。 */
 const MACROS_KEY = 'quillpad.macros.v1';
@@ -155,7 +156,7 @@ export async function stopRecording(name, app) {
 
   const macro = {
     id: `macro-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-    name: (name || '').trim() || `宏 ${macros.length + 1}`,
+    name: (name || '').trim() || t(`宏 ${macros.length + 1}`, `Macro ${macros.length + 1}`),
     createdAt: Date.now(),
     version: 1,
     steps,

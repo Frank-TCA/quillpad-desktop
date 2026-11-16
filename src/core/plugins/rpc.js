@@ -8,6 +8,7 @@
  */
 
 import { rpcError, rpcOk, normalizeFailure } from './errors.js';
+import { t } from '../i18n.js';
 
 export const RPC_TIMEOUT_MS = 10_000;
 export const RPC_NET_TIMEOUT_MS = 30_000;
@@ -67,11 +68,11 @@ export function createRpcHost(opts = {}) {
   async function handle(req) {
     const id = req && req.id ? String(req.id) : '';
     if (!req || req.v !== 1 || typeof req.method !== 'string') {
-      return rpcError(id, 'EINVALID', 'RPC 信封不合法');
+      return rpcError(id, 'EINVALID', t('RPC 信封不合法', 'Invalid RPC envelope'));
     }
     if (inflight >= maxInflight) {
       busyCount += 1;
-      return rpcError(id, 'EBUSY', `并发 ${inflight}/${maxInflight}`);
+      return rpcError(id, 'EBUSY', t(`并发 ${inflight}/${maxInflight}`, `Concurrency ${inflight}/${maxInflight}`));
     }
     inflight += 1;
     const limit = req.method === 'net.fetch' || req.method === 'network.fetch' ? RPC_NET_TIMEOUT_MS : timeoutMs;
@@ -84,7 +85,7 @@ export function createRpcHost(opts = {}) {
         new Promise((_, reject) => {
           timer = setTimeout(() => {
             timedOut = true;
-            reject({ code: 'ETIMEOUT', message: '插件无响应', detail: `${req.method} 超过 ${limit}ms` });
+            reject({ code: 'ETIMEOUT', message: t('插件无响应', 'Plugin timed out'), detail: t(`${req.method} 超过 ${limit}ms`, `${req.method} exceeded ${limit}ms`) });
           }, limit);
         }),
       ]);
@@ -99,7 +100,7 @@ export function createRpcHost(opts = {}) {
       settled += 1;
       if (timedOut || (err && err.code === 'ETIMEOUT')) {
         timeoutCount += 1;
-        return rpcError(id, 'ETIMEOUT', `调用超时（${limit}ms）`);
+        return rpcError(id, 'ETIMEOUT', t(`调用超时（${limit}ms）`, `Call timed out (${limit}ms)`));
       }
       const f = normalizeFailure(err);
       return rpcError(id, f.code, f.detail);
@@ -145,7 +146,7 @@ export function createRpcClient(opts = {}) {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         pending.delete(req.id);
-        reject({ code: 'ETIMEOUT', message: '插件无响应' });
+        reject({ code: 'ETIMEOUT', message: t('插件无响应', 'Plugin timed out') });
       }, timeoutMs);
       pending.set(req.id, { resolve, reject, timer });
       post(req);

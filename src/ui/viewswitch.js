@@ -13,18 +13,47 @@
 import { icon } from './icons.js';
 import { isCommandAvailable, runCommand } from '../core/commands.js';
 import { VIEW_MODE_UI_ORDER } from '../editor/viewmode.js';
+import { t } from '../core/i18n.js';
 
-/** 每段的展示元数据。`cmd` 必须与 `core/actions.js` 中的命令 id 一致。 */
-const SEGMENTS = {
-  source: { label: '源码', cmd: 'view.modeSource', glyph: 'sourceMode', tip: '源码模式' },
-  wysiwyg: {
-    label: '所见即所得',
-    cmd: 'view.modeWysiwyg',
-    glyph: 'wysiwygMode',
-    tip: '所见即所得模式',
-  },
-  split: { label: '分屏', cmd: 'view.modeSplit', glyph: 'splitMode', tip: '分屏模式（左源码 + 右预览）' },
-};
+/**
+ * 每段的展示元数据，文案已按当前界面语言算好。
+ *
+ * 是函数而不是模块级常量：`t()` 必须到渲染 / update 时才求值，否则切换界面语言后
+ * 按钮文字与 tooltip 会一直停留在 import 时的那一种语言。
+ * `cmd` 必须与 `core/actions.js` 中的命令 id 一致。
+ *
+ * @param {'source'|'wysiwyg'|'split'} mode
+ * @return {{label: string, cmd: string, glyph: string, tip: string, tipShortcut: string, tipMarkdownOnly: string}}
+ */
+function segmentMeta(mode) {
+  const all = {
+    source: {
+      label: t('源码', 'Source'),
+      cmd: 'view.modeSource',
+      glyph: 'sourceMode',
+      tip: t('源码模式', 'Source mode'),
+      tipShortcut: t('源码模式 · Ctrl+E', 'Source mode · Ctrl+E'),
+      tipMarkdownOnly: t('仅 Markdown 支持源码模式', 'Only Markdown supports Source mode'),
+    },
+    wysiwyg: {
+      label: t('所见即所得', 'WYSIWYG'),
+      cmd: 'view.modeWysiwyg',
+      glyph: 'wysiwygMode',
+      tip: t('所见即所得模式', 'WYSIWYG mode'),
+      tipShortcut: t('所见即所得模式 · Ctrl+E', 'WYSIWYG mode · Ctrl+E'),
+      tipMarkdownOnly: t('仅 Markdown 支持所见即所得模式', 'Only Markdown supports WYSIWYG mode'),
+    },
+    split: {
+      label: t('分屏', 'Split'),
+      cmd: 'view.modeSplit',
+      glyph: 'splitMode',
+      tip: t('分屏模式（左源码 + 右预览）', 'Split mode (source left + preview right)'),
+      tipShortcut: t('分屏模式（左源码 + 右预览） · Ctrl+E', 'Split mode (source left + preview right) · Ctrl+E'),
+      tipMarkdownOnly: t('仅 Markdown 支持分屏模式（左源码 + 右预览）', 'Only Markdown supports Split mode (source left + preview right)'),
+    },
+  };
+  return all[mode] || all.source;
+}
 
 /**
  * 初始化分段控件。
@@ -34,10 +63,10 @@ const SEGMENTS = {
  */
 export function initViewSwitch(root, app) {
   const html = VIEW_MODE_UI_ORDER.map((mode) => {
-    const seg = SEGMENTS[mode];
+    const seg = segmentMeta(mode);
     return (
       `<button type="button" class="qp-viewswitch__seg" data-mode="${mode}" ` +
-      `data-cmd="${seg.cmd}" data-tip="${seg.tip} · Ctrl+E" aria-label="${seg.tip}" ` +
+      `data-cmd="${seg.cmd}" data-tip="${seg.tipShortcut}" aria-label="${seg.tip}" ` +
       `aria-pressed="false">${icon(seg.glyph, 14)}<span class="qp-viewswitch__label">${seg.label}</span>` +
       `</button>`
     );
@@ -45,7 +74,7 @@ export function initViewSwitch(root, app) {
 
   root.className = 'qp-viewswitch';
   root.setAttribute('role', 'group');
-  root.setAttribute('aria-label', '视图模式');
+  root.setAttribute('aria-label', t('视图模式', 'View Mode'));
   root.innerHTML = html;
 
   root.addEventListener('click', (e) => {
@@ -66,11 +95,12 @@ export function initViewSwitch(root, app) {
       const cmd = btn.dataset.cmd;
       const available = isCommandAvailable(cmd);
       btn.disabled = !available;
-      if (!available) {
-        btn.setAttribute('data-tip', `仅 Markdown 支持${SEGMENTS[btn.dataset.mode].tip}`);
-      } else {
-        btn.setAttribute('data-tip', `${SEGMENTS[btn.dataset.mode].tip} · Ctrl+E`);
-      }
+      const seg = segmentMeta(btn.dataset.mode);
+      btn.setAttribute('data-tip', available ? seg.tipShortcut : seg.tipMarkdownOnly);
+      // 语言切换后按钮文字与 aria-label 也要跟着变（applyLocale() 会调用本 update()）
+      const labelEl = btn.querySelector('.qp-viewswitch__label');
+      if (labelEl) labelEl.textContent = seg.label;
+      btn.setAttribute('aria-label', seg.tip);
     });
     root.dataset.mode = current;
   }
@@ -85,7 +115,7 @@ export function initViewSwitch(root, app) {
  * @return {string}
  */
 export function viewModeLabel(mode) {
-  if (mode === 'source') return '源码';
-  if (mode === 'split') return '分屏';
-  return '所见即所得';
+  if (mode === 'source') return t('源码', 'Source');
+  if (mode === 'split') return t('分屏', 'Split');
+  return t('所见即所得', 'WYSIWYG');
 }

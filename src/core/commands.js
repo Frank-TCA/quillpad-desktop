@@ -5,6 +5,8 @@
  * 保证「一处定义，处处可用」，不会出现按钮和菜单行为不一致的问题。
  */
 
+import { t } from './i18n.js';
+
 /** @type {Map<string, object>} id -> command */
 const registry = new Map();
 
@@ -40,7 +42,9 @@ export function defineCommand(cmd) {
     keys: [],
     chord: '',
     hidden: false,
-    category: '其他',
+    // 默认分类会出现在命令面板里（未显式指定 category 的插件命令用它），
+    // 因此必须在注册时按当前语言求值。
+    category: t('其他', 'Other'),
     title: cmd.id,
     ...cmd,
   };
@@ -160,6 +164,25 @@ export function unregisterCommand(id) {
   const i = order.findIndex((c) => c.id === id);
   if (i >= 0) order.splice(i, 1);
   return true;
+}
+
+/**
+ * 清空内置命令注册表，供界面语言切换后重新注册 —— 命令标题是注册时用 t()
+ * 算出来的，不重注册就不会跟着语言变。
+ *
+ * 插件贡献的命令 id 一律以 `plugin.` 开头，它们由插件宿主动态注册，这里保留：
+ * 否则切换一次语言就会把已启用插件的命令全部抹掉。
+ *
+ * @param {string} [keepPrefix='plugin.'] 保留的命令 id 前缀；传 '' 则全清
+ */
+export function resetCommands(keepPrefix = 'plugin.') {
+  for (const id of [...registry.keys()]) {
+    if (!keepPrefix || !id.startsWith(keepPrefix)) registry.delete(id);
+  }
+  for (let i = order.length - 1; i >= 0; i -= 1) {
+    if (keepPrefix && order[i].id.startsWith(keepPrefix)) continue;
+    order.splice(i, 1);
+  }
 }
 
 /** 是否 macOS（用于快捷键展示，不影响注册）。 */

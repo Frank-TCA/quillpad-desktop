@@ -6,6 +6,8 @@
  * 每级缩进 24px（PRD §4.D2）。
  */
 
+import { t } from '../../core/i18n.js';
+
 /** 目录最多收录的标题层级。 */
 export const TOC_MAX_LEVEL = 3;
 
@@ -40,11 +42,11 @@ export function buildTocElement(headings, opts = {}) {
   const nav = document.createElement('nav');
   nav.className = 'qp-toc';
   nav.setAttribute('data-qp-node', 'toc');
-  nav.setAttribute('aria-label', '目录');
+  nav.setAttribute('aria-label', t('目录', 'Table of Contents'));
 
   const title = document.createElement('div');
   title.className = 'qp-toc__title';
-  title.textContent = '目录';
+  title.textContent = t('目录', 'Table of Contents');
   nav.appendChild(title);
 
   const list = document.createElement('div');
@@ -52,7 +54,7 @@ export function buildTocElement(headings, opts = {}) {
   if (!headings.length) {
     const empty = document.createElement('div');
     empty.className = 'qp-toc__empty';
-    empty.textContent = '文档中还没有标题（H1–H3）';
+    empty.textContent = t('文档中还没有标题（H1–H3）', 'No headings in the document yet (H1–H3)');
     list.appendChild(empty);
   }
   for (const h of headings) {
@@ -80,7 +82,7 @@ export function buildTocElement(headings, opts = {}) {
   edit.type = 'button';
   edit.className = 'qp-toc__edit';
   edit.setAttribute('data-role', 'toc-edit');
-  edit.textContent = '编辑';
+  edit.textContent = t('编辑', 'Edit');
   edit.addEventListener('mousedown', (e) => {
     e.preventDefault();
     e.stopPropagation();

@@ -543,6 +543,23 @@
   font-size: 12px;
 }
 
+/* 自绘文件选择控件（原生 input[type=file] 隐藏，按钮 + 状态文本由页面渲染，
+   文案随界面语言走，不跟系统 locale）。 */
+.qp-install__row .qp-install__file-btn {
+  flex: none;
+  height: 28px;
+  padding: 0 12px;
+}
+
+.qp-install__row .qp-install__file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+}
+
 /* --------------------------------------------------- 插件贡献的侧栏视图 */
 
 .qp-plugin-views {

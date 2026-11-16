@@ -12,21 +12,28 @@ import { viewModeLabel } from './viewswitch.js';
 import { rectInfo } from '../editor/columns.js';
 import { isRecording } from '../core/macro.js';
 import { openMacroManager } from './macrodialog.js';
+import { t } from '../core/i18n.js';
 
 /**
- * 初始化状态栏。
- * @param {HTMLElement} root
- * @param {object} app
+ * 状态栏骨架 HTML。
+ *
+ * 是函数而不是模块级常量：里面的 `t()` 必须在渲染点求值，否则切换界面语言后
+ * 骨架上的提示文字永远是 import 时那一种语言。
+ *
+ * @return {string}
  */
-export function initStatusbar(root, app) {
-  root.innerHTML =
-    `<span class="status-item" data-cell="cursor" data-tip="行 / 列">行 1, 列 1</span>` +
+function skeletonHtml() {
+  return (
+    `<span class="status-item" data-cell="cursor" data-tip="${t('行 / 列', 'Line / Column')}">` +
+    `${t('行', 'Line')} 1, ${t('列', 'Col')} 1</span>` +
     `<span class="status-item" data-cell="selection" hidden></span>` +
-    `<span class="status-item" data-cell="lines" data-tip="总行数">0 行</span>` +
-    `<span class="status-item" data-cell="chars" data-tip="字符数">0 字符</span>` +
-    `<span class="status-item" data-cell="words" data-tip="词数">0 词</span>` +
+    `<span class="status-item" data-cell="lines" data-tip="${t('总行数', 'Total lines')}">0 ${t('行', 'lines')}</span>` +
+    `<span class="status-item" data-cell="chars" data-tip="${t('字符数', 'Character count')}">0 ${t('字符', 'chars')}</span>` +
+    `<span class="status-item" data-cell="words" data-tip="${t('词数', 'Word count')}">0 ${t('词', 'words')}</span>` +
     // v2：列模式提示（Alt+拖拽选出矩形后出现）
-    `<span class="status-item status-item--colmode" data-cell="colmode" hidden data-tip="已进入列（矩形）选择模式">列模式</span>` +
+    `<span class="status-item status-item--colmode" data-cell="colmode" hidden ` +
+    `data-tip="${t('已进入列（矩形）选择模式', 'Column (rectangular) selection mode')}">` +
+    `${t('列模式', 'Column mode')}</span>` +
     // 唯一的分隔线：把左侧「文档信息」与右侧「文档属性」分成两组
     `<span class="status-sep"></span>` +
     `<span class="status-spacer"></span>` +
@@ -34,20 +41,74 @@ export function initStatusbar(root, app) {
     // 这样「状态栏右下角出现红点」的说法与视觉一致。
     // 红点本体是 `.qp-rec-dot`（components.css 里与工具栏共用同一个 7px 呼吸点），
     // 早期版本只写了文字「录制中」、没插这个元素，于是「红点」实际从未渲染出来。
-    `<span class="status-item status-item--macro" data-cell="macro" hidden data-clickable="true" data-tip="正在录制宏，点击停止">` +
-    `<span class="qp-rec-dot" data-rec-dot aria-hidden="true"></span>录制中</span>` +
-    `<span class="status-item" data-cell="lang" data-clickable="true" data-tip="点击切换语言">纯文本</span>` +
+    `<span class="status-item status-item--macro" data-cell="macro" hidden data-clickable="true" ` +
+    `data-tip="${t('正在录制宏，点击停止', 'Recording a macro — click to stop')}">` +
+    `<span class="qp-rec-dot" data-rec-dot aria-hidden="true"></span>${t('录制中', 'Recording')}</span>` +
+    `<span class="status-item" data-cell="lang" data-clickable="true" ` +
+    `data-tip="${t('点击切换语言', 'Click to change language')}">${t('纯文本', 'Plain Text')}</span>` +
     // v2：视图模式胶囊（A1）。插在 lang 之后，不改动既有格与首个格的位置。
-    `<span class="status-item status-item--mode" data-cell="mode" data-clickable="true" data-tip="点击切换视图模式（Ctrl+E）">源码</span>` +
-    `<span class="status-item" data-cell="indent" data-clickable="true" data-tip="点击切换缩进">空格 2</span>` +
-    `<span class="status-item" data-cell="eol" data-clickable="true" data-tip="点击切换换行符">LF</span>` +
-    `<span class="status-item" data-cell="encoding" data-clickable="true" data-tip="文件编码">UTF-8</span>` +
-    `<span class="status-item" data-cell="saved" data-clickable="true" data-tip="点击保存">已保存</span>`;
+    `<span class="status-item status-item--mode" data-cell="mode" data-clickable="true" ` +
+    `data-tip="${t('点击切换视图模式（Ctrl+E）', 'Click to switch view mode (Ctrl+E)')}">` +
+    `${t('源码', 'Source')}</span>` +
+    `<span class="status-item" data-cell="indent" data-clickable="true" ` +
+    `data-tip="${t('点击切换缩进', 'Click to change indentation')}">` +
+    `${t('空格 2', 'Spaces 2')}</span>` +
+    `<span class="status-item" data-cell="eol" data-clickable="true" ` +
+    `data-tip="${t('点击切换换行符', 'Click to change line endings')}">LF</span>` +
+    `<span class="status-item" data-cell="encoding" data-clickable="true" ` +
+    `data-tip="${t('文件编码', 'File encoding')}">UTF-8</span>` +
+    `<span class="status-item" data-cell="saved" data-clickable="true" ` +
+    `data-tip="${t('点击保存', 'Click to save')}">${t('已保存', 'Saved')}</span>`
+  );
+}
+
+/**
+ * 初始化状态栏。
+ * @param {HTMLElement} root
+ * @param {object} app
+ */
+export function initStatusbar(root, app) {
+  root.innerHTML = skeletonHtml();
 
   /** @type {{line: number, column: number, selectionLength: number, lines: number, chars: number}} */
   const cursor = { line: 1, column: 1, selectionLength: 0, lines: 0, chars: 0 };
 
   const cell = (name) => root.querySelector(`[data-cell="${name}"]`);
+
+  /**
+   * 刷新骨架上的静态提示文案与固定文本。
+   *
+   * `update()` 每次都会调它，这样切换界面语言后即使不重建 DOM，
+   * data-tip 与「录制中」这类只写了一次的元素也能跟上。
+   */
+  function applyStaticLabels() {
+    const tips = {
+      cursor: t('行 / 列', 'Line / Column'),
+      lines: t('总行数', 'Total lines'),
+      chars: t('字符数', 'Character count'),
+      words: t('词数', 'Word count'),
+      colmode: t('已进入列（矩形）选择模式', 'Column (rectangular) selection mode'),
+      macro: t('正在录制宏，点击停止', 'Recording a macro — click to stop'),
+      lang: t('点击切换语言', 'Click to change language'),
+      mode: t('点击切换视图模式（Ctrl+E）', 'Click to switch view mode (Ctrl+E)'),
+      indent: t('点击切换缩进', 'Click to change indentation'),
+      eol: t('点击切换换行符', 'Click to change line endings'),
+      encoding: t('文件编码', 'File encoding'),
+      saved: t('点击保存', 'Click to save'),
+    };
+    for (const [name, text] of Object.entries(tips)) {
+      const el = cell(name);
+      if (el) el.dataset.tip = text;
+    }
+    // 列模式格没有子元素，可直接改文本
+    const colCell = cell('colmode');
+    if (colCell) colCell.textContent = t('列模式', 'Column mode');
+    // 宏格内还有红点 span，只能改它后面的文本节点，别把红点洗掉
+    const macroCell = cell('macro');
+    if (macroCell && macroCell.lastChild && macroCell.lastChild.nodeType === 3) {
+      macroCell.lastChild.textContent = t('录制中', 'Recording');
+    }
+  }
 
   /**
    * 更新光标信息。
@@ -56,21 +117,39 @@ export function initStatusbar(root, app) {
   function setCursor(info) {
     Object.assign(cursor, info);
     const c = cell('cursor');
-    if (c) c.textContent = `行 ${formatNumber(info.line)}, 列 ${formatNumber(info.column)}`;
+    if (c) {
+      c.textContent = t(
+        `行 ${formatNumber(info.line)}, 列 ${formatNumber(info.column)}`,
+        `Line ${formatNumber(info.line)}, Col ${formatNumber(info.column)}`,
+      );
+    }
 
     const linesCell = cell('lines');
-    if (linesCell) linesCell.textContent = `${formatNumber(info.lines || 0)} 行`;
+    if (linesCell) {
+      linesCell.textContent = t(
+        `${formatNumber(info.lines || 0)} 行`,
+        `${formatNumber(info.lines || 0)} lines`,
+      );
+    }
 
     const charsCell = cell('chars');
-    if (charsCell) charsCell.textContent = `${formatNumber(info.chars || 0)} 字符`;
+    if (charsCell) {
+      charsCell.textContent = t(
+        `${formatNumber(info.chars || 0)} 字符`,
+        `${formatNumber(info.chars || 0)} chars`,
+      );
+    }
 
     const sel = cell('selection');
     if (sel) {
       if (info.selectionLength > 0) {
         sel.hidden = false;
         const selLines = info.selectionLines || 1;
-        sel.textContent = `选中 ${formatNumber(info.selectionLength)} 字符 / ${formatNumber(selLines)} 行`;
-        sel.dataset.tip = '当前选区字符数 / 行数';
+        sel.textContent = t(
+          `选中 ${formatNumber(info.selectionLength)} 字符 / ${formatNumber(selLines)} 行`,
+          `Selected ${formatNumber(info.selectionLength)} chars / ${formatNumber(selLines)} lines`,
+        );
+        sel.dataset.tip = t('当前选区字符数 / 行数', 'Selected characters / lines');
       } else {
         sel.hidden = true;
       }
@@ -92,8 +171,14 @@ export function initStatusbar(root, app) {
     }
     colCell.hidden = !rect;
     if (rect) {
-      colCell.textContent = `列 ${rect.col + 1} · ${rect.lineCount} 行`;
-      colCell.dataset.tip = `列（矩形）选择：第 ${rect.col + 1} 列起，共 ${rect.lineCount} 行`;
+      colCell.textContent = t(
+        `列 ${rect.col + 1} · ${rect.lineCount} 行`,
+        `Col ${rect.col + 1} · ${rect.lineCount} lines`,
+      );
+      colCell.dataset.tip = t(
+        `列（矩形）选择：第 ${rect.col + 1} 列起，共 ${rect.lineCount} 行`,
+        `Column selection: from column ${rect.col + 1}, ${rect.lineCount} lines`,
+      );
     }
   }
 
@@ -109,26 +194,39 @@ export function initStatusbar(root, app) {
   /** 完整刷新。 */
   function update() {
     const tab = activeTab();
+    // 静态提示与固定文本也在这里重算：切换界面语言后无需重建 DOM
+    applyStaticLabels();
 
     const linesCell = cell('lines');
-    if (linesCell) linesCell.textContent = `${formatNumber(cursor.lines || 0)} 行`;
+    if (linesCell) {
+      linesCell.textContent = t(
+        `${formatNumber(cursor.lines || 0)} 行`,
+        `${formatNumber(cursor.lines || 0)} lines`,
+      );
+    }
 
     const charsCell = cell('chars');
-    if (charsCell) charsCell.textContent = `${formatNumber(cursor.chars || 0)} 字符`;
+    if (charsCell) {
+      charsCell.textContent = t(
+        `${formatNumber(cursor.chars || 0)} 字符`,
+        `${formatNumber(cursor.chars || 0)} chars`,
+      );
+    }
 
     const wordsCell = cell('words');
     if (wordsCell) {
       if (!tab) {
-        wordsCell.textContent = '0 词';
+        wordsCell.textContent = t('0 词', '0 words');
       } else if (tab.content.length > 400000) {
-        wordsCell.textContent = '词数统计已跳过';
+        wordsCell.textContent = t('词数统计已跳过', 'Word count skipped');
       } else {
-        wordsCell.textContent = `${formatNumber(countWords(tab.content))} 词`;
+        const n = formatNumber(countWords(tab.content));
+        wordsCell.textContent = t(`${n} 词`, `${n} words`);
       }
     }
 
     const langCell = cell('lang');
-    if (langCell) langCell.textContent = tab ? languageLabel(tab.language) : '纯文本';
+    if (langCell) langCell.textContent = tab ? languageLabel(tab.language) : t('纯文本', 'Plain Text');
 
     // v2：视图模式胶囊（有效模式，非偏好）
     const modeCell = cell('mode');
@@ -140,13 +238,17 @@ export function initStatusbar(root, app) {
       modeCell.setAttribute('aria-disabled', markdownLike ? 'false' : 'true');
       modeCell.setAttribute(
         'data-tip',
-        markdownLike ? '点击切换视图模式（Ctrl+E）' : '仅 Markdown 支持视图切换',
+        markdownLike
+          ? t('点击切换视图模式（Ctrl+E）', 'Click to switch view mode (Ctrl+E)')
+          : t('仅 Markdown 支持视图切换', 'Only Markdown supports view switching'),
       );
     }
 
     const indentCell = cell('indent');
     if (indentCell) {
-      indentCell.textContent = state.useTabs ? 'Tab' : `空格 ${state.indentSize}`;
+      indentCell.textContent = state.useTabs
+        ? 'Tab'
+        : t(`空格 ${state.indentSize}`, `Spaces ${state.indentSize}`);
     }
 
     const eolCell = cell('eol');
@@ -162,15 +264,17 @@ export function initStatusbar(root, app) {
     if (savedCell) {
       savedCell.classList.remove('is-success', 'is-warning', 'is-danger');
       if (!tab) {
-        savedCell.textContent = '就绪';
+        savedCell.textContent = t('就绪', 'Ready');
       } else if (app.savingTabs.has(tab.id)) {
-        savedCell.textContent = '保存中…';
+        savedCell.textContent = t('保存中…', 'Saving…');
         savedCell.classList.add('is-warning');
       } else if (isDirty(tab)) {
-        savedCell.textContent = state.autoSave ? '自动保存中…' : '未保存';
+        savedCell.textContent = state.autoSave
+          ? t('自动保存中…', 'Auto-saving…')
+          : t('未保存', 'Unsaved');
         savedCell.classList.add('is-warning');
       } else {
-        savedCell.textContent = '已保存';
+        savedCell.textContent = t('已保存', 'Saved');
         savedCell.classList.add('is-success');
       }
     }
@@ -200,7 +304,7 @@ export function initStatusbar(root, app) {
 
     if (name === 'mode') {
       if (activeTab() && activeTab().language !== 'markdown') {
-        app.toast('仅 Markdown 支持切换视图模式', 'info', 2000);
+        app.toast(t('仅 Markdown 支持切换视图模式', 'Only Markdown supports switching view modes'), 'info', 2000);
         return;
       }
       app.cycleViewMode();
@@ -244,7 +348,12 @@ export function initStatusbar(root, app) {
     if (name === 'encoding') {
       const tab = activeTab();
       app.toast(
-        tab ? `当前编码：${tab.encoding}（保存时统一写入 UTF-8）` : '当前编码：UTF-8',
+        tab
+          ? t(
+            `当前编码：${tab.encoding}（保存时统一写入 UTF-8）`,
+            `Current encoding: ${tab.encoding} (files are always written as UTF-8)`,
+          )
+          : t('当前编码：UTF-8', 'Current encoding: UTF-8'),
         'info',
         3200,
       );

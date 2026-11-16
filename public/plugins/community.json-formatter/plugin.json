@@ -1,7 +1,9 @@
 {
   "id": "community.json-formatter",
   "name": "JSON 格式化助手",
+  "nameEn": "JSON Formatter",
   "description": "把压缩的 json 一键格式化、缩进切换与转义修正，共 2 条命令。",
+  "descriptionEn": "Format minified JSON, toggle indentation and fix escaping — 2 commands.",
   "author": "QuillPad 社区示例",
   "version": "1.2.0",
   "license": "Apache-2.0",
@@ -10,8 +12,8 @@
   "permissions": ["editor:read", "editor:write"],
   "contributes": {
     "commands": [
-      { "id": "format", "title": "格式化为 2 空格缩进", "key": "Mod-Alt-Shift-p" },
-      { "id": "minify", "title": "压缩成单行", "key": "Mod-Alt-Shift-u" }
+      { "id": "format", "title": "格式化为 2 空格缩进", "titleEn": "Format with 2-Space Indent", "key": "Mod-Alt-Shift-p" },
+      { "id": "minify", "title": "压缩成单行", "titleEn": "Minify to One Line", "key": "Mod-Alt-Shift-u" }
     ]
   }
 }

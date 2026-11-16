@@ -17,6 +17,7 @@
  */
 
 import { EditorSelection } from '@codemirror/state';
+import { t } from '../core/i18n.js';
 
 /** 制表符宽度（与编辑器设置里的默认缩进一致）。 */
 const TAB_SIZE = 2;
@@ -249,10 +250,43 @@ export function selectRect(view, spec) {
   view.dispatch({ selection: EditorSelection.create(ranges) });
 }
 
-/** 四个命令的注册描述（actions 层直接消费，避免两边写两份 id）。 */
+/**
+ * 四个命令的注册描述（actions 层直接消费，避免两边写两份 id）。
+ *
+ * `title` 用 getter：本数组是模块级常量，若在 import 期把 t() 的结果写死，
+ * 切换语言后动作名不会更新。读取 `.title` 时才按当前语言求值。
+ */
 export const COLUMN_COMMANDS = [
-  { id: 'edit.columnInsert', op: 'insert', title: '列插入文本', args: { text: '' } },
-  { id: 'edit.columnDelete', op: 'delete', title: '删除列', args: {} },
-  { id: 'edit.columnAlign', op: 'align', title: '列对齐', args: {} },
-  { id: 'edit.columnNumber', op: 'number', title: '列编号', args: {} },
+  {
+    id: 'edit.columnInsert',
+    op: 'insert',
+    get title() {
+      return t('列插入文本', 'Insert Column Text');
+    },
+    args: { text: '' },
+  },
+  {
+    id: 'edit.columnDelete',
+    op: 'delete',
+    get title() {
+      return t('删除列', 'Delete Column');
+    },
+    args: {},
+  },
+  {
+    id: 'edit.columnAlign',
+    op: 'align',
+    get title() {
+      return t('列对齐', 'Align Columns');
+    },
+    args: {},
+  },
+  {
+    id: 'edit.columnNumber',
+    op: 'number',
+    get title() {
+      return t('列编号', 'Number Columns');
+    },
+    args: {},
+  },
 ];

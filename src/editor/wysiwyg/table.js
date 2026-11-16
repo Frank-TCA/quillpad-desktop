@@ -15,6 +15,7 @@
 
 import { WidgetType } from '@codemirror/view';
 import { icon } from '../../ui/icons.js';
+import { t } from '../../core/i18n.js';
 import {
   parseTable,
   serializeTable,
@@ -23,15 +24,62 @@ import {
 } from './table-model.js';
 import { applyTableOp } from './table-ops.js';
 
-/** 7 个操作的展示元数据（顺序即浮层顺序）。 */
+/**
+ * 7 个操作的展示元数据（顺序即浮层顺序）。
+ *
+ * `label` 用 getter：本数组在模块顶层，若把 t() 结果写死成字符串，
+ * 切语言后浮层按钮的 tooltip 不会更新。
+ */
 export const TABLE_OP_SPEC = [
-  { op: 'rowAbove', label: '上方插入行', glyph: 'arrowUp' },
-  { op: 'rowBelow', label: '下方插入行', glyph: 'arrowDown' },
-  { op: 'rowDelete', label: '删除行', glyph: 'trash' },
-  { op: 'colLeft', label: '左侧插入列', glyph: 'arrowLeft' },
-  { op: 'colRight', label: '右侧插入列', glyph: 'arrowRight' },
-  { op: 'colDelete', label: '删除列', glyph: 'trash' },
-  { op: 'alignCycle', label: '切换对齐', glyph: 'table' },
+  {
+    op: 'rowAbove',
+    get label() {
+      return t('上方插入行', 'Insert Row Above');
+    },
+    glyph: 'arrowUp',
+  },
+  {
+    op: 'rowBelow',
+    get label() {
+      return t('下方插入行', 'Insert Row Below');
+    },
+    glyph: 'arrowDown',
+  },
+  {
+    op: 'rowDelete',
+    get label() {
+      return t('删除行', 'Delete Row');
+    },
+    glyph: 'trash',
+  },
+  {
+    op: 'colLeft',
+    get label() {
+      return t('左侧插入列', 'Insert Column Left');
+    },
+    glyph: 'arrowLeft',
+  },
+  {
+    op: 'colRight',
+    get label() {
+      return t('右侧插入列', 'Insert Column Right');
+    },
+    glyph: 'arrowRight',
+  },
+  {
+    op: 'colDelete',
+    get label() {
+      return t('删除列', 'Delete Column');
+    },
+    glyph: 'trash',
+  },
+  {
+    op: 'alignCycle',
+    get label() {
+      return t('切换对齐', 'Cycle Alignment');
+    },
+    glyph: 'table',
+  },
 ];
 
 /** 浮层输入框（全局单例，挂在 body）。 */
@@ -51,7 +99,7 @@ function ensureCellInput(handlers) {
   el.type = 'text';
   el.className = 'qp-cell-editor';
   el.setAttribute('data-role', 'cell-editor');
-  el.setAttribute('aria-label', '编辑单元格');
+  el.setAttribute('aria-label', t('编辑单元格', 'Edit Cell'));
   el.spellcheck = false;
   el.hidden = true;
   el.addEventListener('keydown', (e) => {
@@ -395,7 +443,7 @@ export class TableWidget extends WidgetType {
       cell.textContent = unescapeCell(raw);
       const align = this.model.aligns[c];
       if (align) cell.style.textAlign = align;
-      cell.title = '双击编辑单元格';
+      cell.title = t('双击编辑单元格', 'Double-click to edit cell');
       cell.addEventListener('mousedown', (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -553,7 +601,7 @@ export class TableWidget extends WidgetType {
     const bar = document.createElement('div');
     bar.className = 'qp-table-ops';
     bar.setAttribute('role', 'toolbar');
-    bar.setAttribute('aria-label', '表格操作');
+    bar.setAttribute('aria-label', t('表格操作', 'Table Actions'));
     for (const spec of TABLE_OP_SPEC) {
       const btn = document.createElement('button');
       btn.type = 'button';

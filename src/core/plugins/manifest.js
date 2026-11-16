@@ -8,6 +8,7 @@
 
 import { errorOf } from './errors.js';
 import { APP_VERSION } from '../version.js';
+import { t } from '../i18n.js';
 
 /** 允许随 QuillPad 分发的 License（PRD §4.G4）。 */
 export const LICENSE_WHITELIST = Object.freeze([
@@ -32,13 +33,13 @@ export const PERMISSIONS = Object.freeze([
 
 /** 权限的中文名与后果说明（权限确认弹窗用）。 */
 export const PERMISSION_LABELS = Object.freeze({
-  'editor:read': { name: '读取编辑内容', effect: '读取你正在编辑的文本与选区', apis: 'editor.getSelection / editor.getText' },
-  'editor:write': { name: '修改编辑内容', effect: '替换选区、插入文本，会改动当前文档', apis: 'editor.replaceSelection / editor.insertText' },
-  'files:read': { name: '读取文件信息', effect: '读取当前文档路径与内容', apis: 'files.getCurrent' },
-  'files:write': { name: '写入文件', effect: '触发保存或另存，可覆盖磁盘上的文件', apis: 'files.save / files.saveAs' },
-  clipboard: { name: '剪贴板', effect: '读取或写入系统剪贴板', apis: 'clipboard.read / clipboard.write' },
-  network: { name: '网络访问', effect: '该插件可访问网络，可能把文件内容发送到外部服务器', apis: 'net.fetch' },
-  settings: { name: '插件私有存储', effect: '保存插件自己的配置（≤ 1 MB）', apis: 'storage.get / storage.set' },
+  'editor:read': { name: '读取编辑内容', nameEn: 'Read Editor Content', effect: '读取你正在编辑的文本与选区', effectEn: 'Reads the text and selection you are editing', apis: 'editor.getSelection / editor.getText' },
+  'editor:write': { name: '修改编辑内容', nameEn: 'Modify Editor Content', effect: '替换选区、插入文本，会改动当前文档', effectEn: 'Replaces selections and inserts text, changing the current document', apis: 'editor.replaceSelection / editor.insertText' },
+  'files:read': { name: '读取文件信息', nameEn: 'Read File Info', effect: '读取当前文档路径与内容', effectEn: 'Reads the current document path and content', apis: 'files.getCurrent' },
+  'files:write': { name: '写入文件', nameEn: 'Write Files', effect: '触发保存或另存，可覆盖磁盘上的文件', effectEn: 'Triggers Save or Save As and can overwrite files on disk', apis: 'files.save / files.saveAs' },
+  clipboard: { name: '剪贴板', nameEn: 'Clipboard', effect: '读取或写入系统剪贴板', effectEn: 'Reads or writes the system clipboard', apis: 'clipboard.read / clipboard.write' },
+  network: { name: '网络访问', nameEn: 'Network Access', effect: '该插件可访问网络，可能把文件内容发送到外部服务器', effectEn: 'This plugin can access the network and may send file contents to external servers', apis: 'net.fetch' },
+  settings: { name: '插件私有存储', nameEn: 'Private Plugin Storage', effect: '保存插件自己的配置（≤ 1 MB）', effectEn: 'Stores the plugin own configuration (≤ 1 MB)', apis: 'storage.get / storage.set' },
 });
 
 /** 高风险权限（需二次勾选确认）。 */
@@ -48,7 +49,12 @@ export const HIGH_RISK_PERMISSIONS = Object.freeze(['network', 'files:write']);
 const MANIFEST_KEYS = Object.freeze([
   'id',
   'name',
+  'nameEn',
   'description',
+  'descriptionEn',
+  // 本地化副本字段：不参与校验，但必须放行，否则新包会被「未知字段」拒绝。
+  'titleEn',
+  'featuresEn',
   'author',
   'version',
   'license',
@@ -224,94 +230,94 @@ export function validateManifest(raw, ctx = {}) {
     try {
       obj = JSON.parse(raw);
     } catch (err) {
-      return { ok: false, ...errorOf('ESCHEMA', '不是合法 JSON'), field: 'root' };
+      return { ok: false, ...errorOf('ESCHEMA', t('不是合法 JSON', 'Not valid JSON')), field: 'root' };
     }
   }
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
-    return { ok: false, ...errorOf('ESCHEMA', '清单必须是对象'), field: 'root' };
+    return { ok: false, ...errorOf('ESCHEMA', t('清单必须是对象', 'Manifest must be an object')), field: 'root' };
   }
 
   const unknown = Object.keys(obj).filter((k) => !MANIFEST_KEYS.includes(k));
   if (unknown.length) {
-    return { ok: false, ...errorOf('ESCHEMA', `未知字段：${unknown[0]}`), field: unknown[0] };
+    return { ok: false, ...errorOf('ESCHEMA', t(`未知字段：${unknown[0]}`, `Unknown field: ${unknown[0]}`)), field: unknown[0] };
   }
 
   const required = ['id', 'name', 'description', 'author', 'version', 'license', 'engines', 'main', 'permissions', 'contributes'];
   for (const key of required) {
-    if (!(key in obj)) return { ok: false, ...errorOf('ESCHEMA', `缺少字段 ${key}`), field: key };
+    if (!(key in obj)) return { ok: false, ...errorOf('ESCHEMA', t(`缺少字段 ${key}`, `Missing field: ${key}`)), field: key };
   }
 
   for (const key of ['id', 'name', 'description', 'author', 'version', 'license', 'main']) {
     if (typeof obj[key] !== 'string' || !obj[key].trim()) {
-      return { ok: false, ...errorOf('ESCHEMA', `字段 ${key} 必须是非空字符串`), field: key };
+      return { ok: false, ...errorOf('ESCHEMA', t(`字段 ${key} 必须是非空字符串`, `Field ${key} must be a non-empty string`)), field: key };
     }
   }
   if (!ID_RE.test(obj.id)) {
-    return { ok: false, ...errorOf('ESCHEMA', 'id 必须是反向域名式（如 quillpad.dev-tools）'), field: 'id' };
+    return { ok: false, ...errorOf('ESCHEMA', t('id 必须是反向域名式（如 quillpad.dev-tools）', 'id must be reverse-domain style (e.g. quillpad.dev-tools)')), field: 'id' };
   }
   if (obj.name.length > 40) {
-    return { ok: false, ...errorOf('ESCHEMA', 'name 不得超过 40 字'), field: 'name' };
+    return { ok: false, ...errorOf('ESCHEMA', t('name 不得超过 40 字', 'name must not exceed 40 characters')), field: 'name' };
   }
   if (obj.description.length > 200) {
-    return { ok: false, ...errorOf('ESCHEMA', 'description 不得超过 200 字'), field: 'description' };
+    return { ok: false, ...errorOf('ESCHEMA', t('description 不得超过 200 字', 'description must not exceed 200 characters')), field: 'description' };
   }
   if (!VERSION_RE.test(obj.version)) {
-    return { ok: false, ...errorOf('ESCHEMA', 'version 必须是 x.y.z'), field: 'version' };
+    return { ok: false, ...errorOf('ESCHEMA', t('version 必须是 x.y.z', 'version must be x.y.z')), field: 'version' };
   }
   if (!LICENSE_WHITELIST.includes(obj.license)) {
     return { ok: false, ...errorOf('ELICENSE', obj.license), field: 'license' };
   }
   if (!obj.engines || typeof obj.engines !== 'object' || typeof obj.engines.quillpad !== 'string') {
-    return { ok: false, ...errorOf('ESCHEMA', 'engines.quillpad 缺失'), field: 'engines' };
+    return { ok: false, ...errorOf('ESCHEMA', t('engines.quillpad 缺失', 'engines.quillpad is missing')), field: 'engines' };
   }
   const current = String(ctx.quillpadVersion || APP_VERSION);
   if (!satisfies(current, obj.engines.quillpad)) {
     const major = String(obj.engines.quillpad).replace(/[^\d.]/g, '').split('.')[0] || '3';
-    return { ok: false, ...errorOf('EENGINE', `需要 QuillPad ${major}.x`), field: 'engines.quillpad' };
+    return { ok: false, ...errorOf('EENGINE', t(`需要 QuillPad ${major}.x`, `Requires QuillPad ${major}.x`)), field: 'engines.quillpad' };
   }
   if (!/\.(js|mjs)$/i.test(obj.main)) {
-    return { ok: false, ...errorOf('ESCHEMA', 'main 必须是 .js / .mjs'), field: 'main' };
+    return { ok: false, ...errorOf('ESCHEMA', t('main 必须是 .js / .mjs', 'main must be .js / .mjs')), field: 'main' };
   }
   if (obj.main.includes('..') || obj.main.startsWith('/') || /[\\]/.test(obj.main)) {
-    return { ok: false, ...errorOf('EPATH', 'main 路径不合法'), field: 'main' };
+    return { ok: false, ...errorOf('EPATH', t('main 路径不合法', 'Invalid main path')), field: 'main' };
   }
   if (!Array.isArray(obj.permissions)) {
-    return { ok: false, ...errorOf('ESCHEMA', 'permissions 必须是数组'), field: 'permissions' };
+    return { ok: false, ...errorOf('ESCHEMA', t('permissions 必须是数组', 'permissions must be an array')), field: 'permissions' };
   }
   for (const p of obj.permissions) {
     if (!PERMISSIONS.includes(p)) {
-      return { ok: false, ...errorOf('ESCHEMA', `未知权限：${String(p)}`), field: 'permissions' };
+      return { ok: false, ...errorOf('ESCHEMA', t(`未知权限：${String(p)}`, `Unknown permission: ${String(p)}`)), field: 'permissions' };
     }
   }
   const contrib = obj.contributes;
   if (!contrib || typeof contrib !== 'object' || Array.isArray(contrib)) {
-    return { ok: false, ...errorOf('ESCHEMA', 'contributes 必须是对象'), field: 'contributes' };
+    return { ok: false, ...errorOf('ESCHEMA', t('contributes 必须是对象', 'contributes must be an object')), field: 'contributes' };
   }
   for (const key of Object.keys(contrib)) {
     if (!CONTRIBUTION_KEYS.includes(key)) {
-      return { ok: false, ...errorOf('ESCHEMA', `未知贡献项：${key}`), field: `contributes.${key}` };
+      return { ok: false, ...errorOf('ESCHEMA', t(`未知贡献项：${key}`, `Unknown contribution: ${key}`)), field: `contributes.${key}` };
     }
   }
   if (contrib.commands !== undefined) {
     if (!Array.isArray(contrib.commands)) {
-      return { ok: false, ...errorOf('ESCHEMA', 'contributes.commands 必须是数组'), field: 'contributes.commands' };
+      return { ok: false, ...errorOf('ESCHEMA', t('contributes.commands 必须是数组', 'contributes.commands must be an array')), field: 'contributes.commands' };
     }
     /** @type {Map<string, string>} 归一化键位 → 命令 id（同一插件内不许撞车） */
     const keyOwners = new Map();
     const seenIds = new Set();
     for (const cmd of contrib.commands) {
       if (!cmd || typeof cmd.id !== 'string' || !CMD_ID_RE.test(cmd.id) || typeof cmd.title !== 'string') {
-        return { ok: false, ...errorOf('ESCHEMA', '命令 id/title 不合法'), field: 'contributes.commands' };
+        return { ok: false, ...errorOf('ESCHEMA', t('命令 id/title 不合法', 'Invalid command id/title')), field: 'contributes.commands' };
       }
       if (seenIds.has(cmd.id)) {
-        return { ok: false, ...errorOf('ESCHEMA', `命令 id 重复：${cmd.id}`), field: 'contributes.commands' };
+        return { ok: false, ...errorOf('ESCHEMA', t(`命令 id 重复：${cmd.id}`, `Duplicate command id: ${cmd.id}`)), field: 'contributes.commands' };
       }
       seenIds.add(cmd.id);
       if (cmd.key === undefined || cmd.key === null) continue;
       if (!isValidKeyChord(cmd.key)) {
         return {
           ok: false,
-          ...errorOf('ESCHEMA', `命令 ${cmd.id} 的快捷键不合法：${String(cmd.key)}（须形如 Mod-Alt-u）`),
+          ...errorOf('ESCHEMA', t(`命令 ${cmd.id} 的快捷键不合法：${String(cmd.key)}（须形如 Mod-Alt-u）`, `Invalid shortcut for command ${cmd.id}: ${String(cmd.key)} (expected e.g. Mod-Alt-u)`)),
           field: `contributes.commands.${cmd.id}.key`,
         };
       }
@@ -319,7 +325,7 @@ export function validateManifest(raw, ctx = {}) {
       if (keyOwners.has(norm)) {
         return {
           ok: false,
-          ...errorOf('ESCHEMA', `快捷键 ${cmd.key} 在插件内重复（${keyOwners.get(norm)} 与 ${cmd.id}）`),
+          ...errorOf('ESCHEMA', t(`快捷键 ${cmd.key} 在插件内重复（${keyOwners.get(norm)} 与 ${cmd.id}）`, `Shortcut ${cmd.key} is duplicated within the plugin (${keyOwners.get(norm)} and ${cmd.id})`)),
           field: `contributes.commands.${cmd.id}.key`,
         };
       }
@@ -328,7 +334,7 @@ export function validateManifest(raw, ctx = {}) {
   }
   for (const key of ['menus', 'sidebarViews', 'statusItems', 'themes', 'languages']) {
     if (contrib[key] !== undefined && !Array.isArray(contrib[key])) {
-      return { ok: false, ...errorOf('ESCHEMA', `contributes.${key} 必须是数组`), field: `contributes.${key}` };
+      return { ok: false, ...errorOf('ESCHEMA', t(`contributes.${key} 必须是数组`, `contributes.${key} must be an array`)), field: `contributes.${key}` };
     }
   }
   return { ok: true, manifest: obj };

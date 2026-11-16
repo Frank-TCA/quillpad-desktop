@@ -1,7 +1,9 @@
 {
   "id": "quillpad.text-tools",
   "name": "文本处理包",
+  "nameEn": "Text Tools",
   "description": "大小写、排序、去重、去空行、Base64、URL 编解码、JSON 格式化与列对齐，共 13 条命令。",
+  "descriptionEn": "Case conversion, sorting, deduplication, empty-line removal, Base64, URL encoding/decoding, JSON formatting and column alignment — 13 commands in total.",
   "author": "QuillPad 官方",
   "version": "1.0.0",
   "license": "MIT",
@@ -10,19 +12,19 @@
   "permissions": ["editor:read", "editor:write"],
   "contributes": {
     "commands": [
-      { "id": "upper", "title": "转为大写", "key": "Mod-Alt-u" },
-      { "id": "lower", "title": "转为小写", "key": "Mod-Alt-l" },
-      { "id": "title-case", "title": "标题式大小写", "key": "Mod-Alt-t" },
-      { "id": "sort-asc", "title": "行升序排序", "key": "Mod-Alt-a" },
-      { "id": "sort-desc", "title": "行降序排序", "key": "Mod-Alt-d" },
-      { "id": "dedupe", "title": "删除重复行", "key": "Mod-Alt-e" },
-      { "id": "remove-empty", "title": "删除空行", "key": "Mod-Alt-x" },
-      { "id": "reverse", "title": "反转行序", "key": "Mod-Alt-r" },
-      { "id": "base64-encode", "title": "Base64 编码", "key": "Mod-Alt-b" },
-      { "id": "base64-decode", "title": "Base64 解码", "key": "Mod-Alt-Shift-b" },
-      { "id": "url-encode", "title": "URL 编码", "key": "Mod-Alt-q" },
-      { "id": "json-format", "title": "JSON 格式化", "key": "Mod-Alt-f" },
-      { "id": "align-columns", "title": "按分隔符对齐列", "key": "Mod-Alt-m" }
+      { "id": "upper", "title": "转为大写", "titleEn": "To Uppercase", "key": "Mod-Alt-u" },
+      { "id": "lower", "title": "转为小写", "titleEn": "To Lowercase", "key": "Mod-Alt-l" },
+      { "id": "title-case", "title": "标题式大小写", "titleEn": "Title Case", "key": "Mod-Alt-t" },
+      { "id": "sort-asc", "title": "行升序排序", "titleEn": "Sort Lines Ascending", "key": "Mod-Alt-a" },
+      { "id": "sort-desc", "title": "行降序排序", "titleEn": "Sort Lines Descending", "key": "Mod-Alt-d" },
+      { "id": "dedupe", "title": "删除重复行", "titleEn": "Remove Duplicate Lines", "key": "Mod-Alt-e" },
+      { "id": "remove-empty", "title": "删除空行", "titleEn": "Remove Empty Lines", "key": "Mod-Alt-x" },
+      { "id": "reverse", "title": "反转行序", "titleEn": "Reverse Line Order", "key": "Mod-Alt-r" },
+      { "id": "base64-encode", "title": "Base64 编码", "titleEn": "Base64 Encode", "key": "Mod-Alt-b" },
+      { "id": "base64-decode", "title": "Base64 解码", "titleEn": "Base64 Decode", "key": "Mod-Alt-Shift-b" },
+      { "id": "url-encode", "title": "URL 编码", "titleEn": "URL Encode", "key": "Mod-Alt-q" },
+      { "id": "json-format", "title": "JSON 格式化", "titleEn": "Format JSON", "key": "Mod-Alt-f" },
+      { "id": "align-columns", "title": "按分隔符对齐列", "titleEn": "Align Columns by Separator", "key": "Mod-Alt-m" }
     ]
   }
 }

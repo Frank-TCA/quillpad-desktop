@@ -15,6 +15,7 @@ import { buildTocElement } from './toc.js';
 import { buildFootnoteRefElement, buildFootnotesElement } from './footnotes.js';
 import { codeTagLabel } from '../languages.js';
 import { isLocalImageUrl, loadImageSrc } from './image-src.js';
+import { t } from '../../core/i18n.js';
 
 /** 需要拦截的事件类型（子组件冒泡到 CM 的都在这里）。 */
 const STOP_EVENTS = [
@@ -89,7 +90,7 @@ export class ImageWidget extends WidgetType {
  */
 function buildImageNode(info) {
   if (!info.resolved) {
-    return buildMissingImage(info.alt || info.src, '相对路径未解析');
+    return buildMissingImage(info.alt || info.src, t('相对路径未解析', 'Relative path not resolved'));
   }
   const img = document.createElement('img');
   img.className = 'qp-img';
@@ -121,7 +122,7 @@ function buildImageNode(info) {
     img.replaceWith(buildMissingImage(info.alt || info.src, reason));
     scheduleMeasure(view);
   };
-  img.addEventListener('error', () => fail('图片未能加载'));
+  img.addEventListener('error', () => fail(t('图片未能加载', 'Image failed to load')));
   img.addEventListener('load', () => scheduleMeasure(viewOf(img)));
 
   if (isLocalImageUrl(info.url)) {
@@ -129,7 +130,7 @@ function buildImageNode(info) {
     loadImageSrc(info.url).then((src) => {
       if (failed) return;
       if (!src) {
-        fail('图片未能加载');
+        fail(t('图片未能加载', 'Image failed to load'));
         return;
       }
       img.removeAttribute('data-qp-loading');
@@ -181,7 +182,7 @@ export class ImageRowWidget extends WidgetType {
     const box = document.createElement('div');
     box.className = 'qp-img-row';
     box.setAttribute('data-qp-node', 'image-row');
-    box.title = '点击编辑图片源码';
+    box.title = t('点击编辑图片源码', 'Click to edit the image source');
     for (const info of this.opts.items || []) {
       // 预览里同一段落的多张图片是**空格分隔**的 inline 内容，这里显式补空格，
       // 宽度与折行位置才能和 `<p>` 里一致。
@@ -223,8 +224,8 @@ export function buildMissingImage(label, reason) {
     `<span class="qp-img-missing__reason"></span>`;
   const l = box.querySelector('.qp-img-missing__label');
   const r = box.querySelector('.qp-img-missing__reason');
-  if (l) l.textContent = label || '图片';
-  if (r) r.textContent = reason || '相对路径未解析';
+  if (l) l.textContent = label || t('图片', 'Image');
+  if (r) r.textContent = reason || t('相对路径未解析', 'Relative path not resolved');
   return box;
 }
 
@@ -254,7 +255,12 @@ export class TaskCheckboxWidget extends WidgetType {
     box.setAttribute('role', 'checkbox');
     box.setAttribute('aria-checked', this.checked ? 'true' : 'false');
     box.setAttribute('tabindex', '0');
-    box.setAttribute('aria-label', this.checked ? '已完成（点击取消）' : '未完成（点击完成）');
+    box.setAttribute(
+      'aria-label',
+      this.checked
+        ? t('已完成（点击取消）', 'Completed (click to uncheck)')
+        : t('未完成（点击完成）', 'Not completed (click to check)'),
+    );
     box.innerHTML = `<span class="qp-task__box">${this.checked ? icon('check', 11) : ''}</span>`;
     const activate = (e) => {
       e.preventDefault();
@@ -379,7 +385,7 @@ export class MathBlockWidget extends WidgetType {
     el.className = 'qp-math qp-math--block';
     el.setAttribute('data-qp-node', 'math-block');
     el.setAttribute('role', 'button');
-    el.title = '点击编辑公式源码';
+    el.title = t('点击编辑公式源码', 'Click to edit the formula source');
     renderMath(el, this.opts.tex, true);
     shieldEvents(el);
     el.addEventListener('mousedown', (e) => {
@@ -430,7 +436,7 @@ export class CodeHeadWidget extends WidgetType {
     // 围栏标记常是扩展名式别名（```bash / ```js），先归一成语言 id 再取显示名，
     // 否则一律落到「纯文本」。
     label.textContent = codeTagLabel(this.opts.lang);
-    label.title = '切换代码语言';
+    label.title = t('切换代码语言', 'Switch Code Language');
     label.addEventListener('mousedown', (e) => e.preventDefault());
     label.addEventListener('click', (e) => {
       e.preventDefault();
@@ -442,8 +448,8 @@ export class CodeHeadWidget extends WidgetType {
     copy.type = 'button';
     copy.className = 'qp-code-head__copy';
     copy.setAttribute('data-role', 'code-copy');
-    copy.setAttribute('aria-label', '复制代码');
-    copy.title = '复制代码（不含围栏）';
+    copy.setAttribute('aria-label', t('复制代码', 'Copy Code'));
+    copy.title = t('复制代码（不含围栏）', 'Copy code (without fences)');
     copy.innerHTML = icon('copyCode', 14);
     copy.addEventListener('mousedown', (e) => e.preventDefault());
     copy.addEventListener('click', (e) => {
@@ -517,8 +523,10 @@ export class FrontmatterWidget extends WidgetType {
     hint.type = 'button';
     hint.className = 'qp-frontmatter__edit';
     hint.setAttribute('data-role', 'frontmatter-edit');
-    hint.textContent = collapsed ? '编辑' : '收起';
-    hint.title = collapsed ? '展开源码编辑' : '光标移出后自动折叠';
+    hint.textContent = collapsed ? t('编辑', 'Edit') : t('收起', 'Collapse');
+    hint.title = collapsed
+      ? t('展开源码编辑', 'Expand to edit the source')
+      : t('光标移出后自动折叠', 'Collapses automatically when the cursor leaves');
     hint.addEventListener('mousedown', (e) => e.preventDefault());
     hint.addEventListener('click', (e) => {
       e.preventDefault();

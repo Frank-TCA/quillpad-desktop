@@ -25,7 +25,13 @@ import { loadCatalog } from '../core/plugins/catalog.js';
 import { EXPECTED_NOTICE, noticeHtml } from '../core/plugins/notice.js';
 // 市场区复用 plugins.js 的实现。反向依赖由 plugins.js 对本模块的「动态 import」
 // 解开（见 initPluginUI / app.openPluginMarket），两者之间不存在启动期静态环。
-import { marketHtml, bindMarket, pluginViewsHtml } from './plugins.js';
+import {
+  marketHtml,
+  bindMarket,
+  pluginViewsHtml,
+  localizedField,
+} from './plugins.js';
+import { t } from '../core/i18n.js';
 
 /** 当前打开的管理器弹窗（同时只允许一个）。 */
 let currentManager = null;
@@ -40,20 +46,20 @@ function installedRowsHtml(app, catalogItems) {
   const all = pluginState.allState();
   const ids = Object.keys(all);
   if (!ids.length) {
-    return `<div class="qp-pm__empty" data-pm-empty="true">暂无已安装插件<br/>` +
-      `<span>从下方插件市场安装，或从 URL / Notepad++ 导入。</span></div>`;
+    return `<div class="qp-pm__empty" data-pm-empty="true">${t('暂无已安装插件', 'No plugins installed')}<br/>` +
+      `<span>${t('从下方插件市场安装，或从 URL / Notepad++ 导入。', 'Install one from the Plugin Marketplace below, or import from a URL / Notepad++.')}</span></div>`;
   }
   return ids.map((id) => {
     const entry = all[id] || {};
     const meta = catalogItems.find((p) => p.id === id) || {};
-    const name = meta.name || id;
+    const name = localizedField(meta, 'name') || id;
     const version = entry.version || meta.version || '';
     const disabled = entry.enabled === false;
     const blocked = !!entry.blocked;
     const crashed = entry.disabledReason === 'crashed';
-    const stateLabel = blocked ? '已阻止（License 不合规）'
-      : crashed ? '已停用（无响应）'
-        : disabled ? '已禁用' : '已启用';
+    const stateLabel = blocked ? t('已阻止（License 不合规）', 'Blocked (Non-compliant License)')
+      : crashed ? t('已停用（无响应）', 'Disabled (Not Responding)')
+        : disabled ? t('已禁用', 'Disabled') : t('已启用', 'Enabled');
     const stateClass = blocked ? 'is-danger' : crashed ? 'is-danger' : disabled ? 'is-warn' : 'is-ok';
     return (
       `<div class="qp-pm__row" data-pm-row data-plugin-id="${escapeHtml(id)}" ` +
@@ -61,20 +67,20 @@ function installedRowsHtml(app, catalogItems) {
       `<div class="qp-pm__info">` +
       `<div class="qp-pm__name">${escapeHtml(name)}</div>` +
       `<div class="qp-pm__meta">${escapeHtml(id)}${version ? ` · v${escapeHtml(version)}` : ''}` +
-      `${meta.official ? ' · 官方' : ''}</div>` +
+      `${meta.official ? ` · ${t('官方', 'Official')}` : ''}</div>` +
       `</div>` +
       `<div class="qp-pm__state ${stateClass}">${escapeHtml(stateLabel)}</div>` +
       `<div class="qp-pm__ops">` +
       (blocked ? '' :
         (disabled
-          ? `<button class="btn is-ghost" data-pm-action="enable">启用</button>`
-          : `<button class="btn is-ghost" data-pm-action="disable">禁用</button>`)) +
+          ? `<button class="btn is-ghost" data-pm-action="enable">${t('启用', 'Enable')}</button>`
+          : `<button class="btn is-ghost" data-pm-action="disable">${t('禁用', 'Disable')}</button>`)) +
       // 与市场「安装」按钮同一套实心样式（同等高度、圆角、600 字重），
       // 只把强调色换成 danger 以标明破坏性操作。
       // 不要写成 is-ghost + is-danger：.btn.is-ghost 在样式表中排在 .btn.is-danger 之后，
       // 权重相同（都是 0,2,0）时背景被覆盖成透明，而 color:#fff 仍生效，
       // 结果就是「白字 + 透明底」，在浅色主题下等于看不见。
-      `<button class="btn is-danger" data-pm-action="uninstall">卸载</button>` +
+      `<button class="btn is-danger" data-pm-action="uninstall">${t('卸载', 'Uninstall')}</button>` +
       `</div></div>`
     );
   }).join('');
@@ -91,8 +97,8 @@ function managerHtml(app, catalogItems) {
     `<div class="qp-pm">` +
     `<div class="qp-pm__list" data-role="pm-list">${installedRowsHtml(app, catalogItems)}</div>` +
     `<div class="qp-pm__entries">` +
-    `<button class="btn is-ghost" data-pm-open-url>从 URL / 本地安装</button>` +
-    `<button class="btn is-ghost" data-pm-open-npp>从 Notepad++ 导入</button>` +
+    `<button class="btn is-ghost" data-pm-open-url>${t('从 URL / 本地安装', 'Install from URL / Local File')}</button>` +
+    `<button class="btn is-ghost" data-pm-open-npp>${t('从 Notepad++ 导入', 'Import from Notepad++')}</button>` +
     `</div>` +
     `<div class="qp-pm__boundary" data-role="boundary">${noticeHtml(escapeHtml)}</div>` +
     `</div>`
@@ -119,16 +125,16 @@ export function openPluginManager(app, opts = {}) {
   modal.setAttribute('data-dialog', 'plugin-manager');
   modal.setAttribute('role', 'dialog');
   modal.setAttribute('aria-modal', 'true');
-  modal.setAttribute('aria-label', '插件管理器');
+  modal.setAttribute('aria-label', t('插件管理器', 'Plugin Manager'));
   modal.innerHTML =
     `<div class="modal__head">` +
-    `<span class="modal__title">插件管理器</span>` +
-    `<button class="qp-plugin__close" data-role="close" aria-label="关闭">${icon('close', 14)}</button>` +
+    `<span class="modal__title">${t('插件管理器', 'Plugin Manager')}</span>` +
+    `<button class="qp-plugin__close" data-role="close" aria-label="${t('关闭', 'Close')}">${icon('close', 14)}</button>` +
     `</div>` +
     `<div class="modal__body qp-plugin__body">` +
-    `<div class="qp-pm__installed" data-pm-installed><div class="qp-pm__loading">正在加载…</div></div>` +
+    `<div class="qp-pm__installed" data-pm-installed><div class="qp-pm__loading">${t('正在加载…', 'Loading…')}</div></div>` +
     `<div class="qp-pm__market-wrap" data-pm-market-wrap>` +
-    `<div class="qp-pm__market-title">插件市场</div>` +
+    `<div class="qp-pm__market-title">${t('插件市场', 'Plugin Marketplace')}</div>` +
     `<div class="qp-pm__market" data-pm-market></div>` +
     `</div>` +
     `<div class="qp-pm__views" data-pm-views></div>` +
@@ -176,7 +182,9 @@ export function openPluginManager(app, opts = {}) {
     const isFirst = !wrap.dataset.qpMarketReady;
     wrap.innerHTML = marketHtml(app, catalog, {
       query: isFirst ? String(opts.query || '') : (prevSearch ? prevSearch.value : ''),
-      category: prevCat ? prevCat.value : '全部',
+      // 单参数 t() 恒返回中文原文：分类 value 是内部筛选值，必须始终与 catalog 的
+      // 中文 category 对齐；展示名由 plugins.js 的 categoryLabel() 按当前语言另算。
+      category: prevCat ? prevCat.value : t('全部'),
       sort: prevSort ? prevSort.value : 'recommended',
     });
     wrap.dataset.qpMarketReady = 'true';
@@ -201,18 +209,21 @@ export function openPluginManager(app, opts = {}) {
 
   // 事件委托只绑定一次（覆盖已安装段的按钮；市场区事件由 bindMarket 自理）
   modal.querySelector('.qp-plugin__body').addEventListener('click', async (e) => {
-    const t = e.target;
-    if (t.closest('[data-pm-open-url]')) {
+    // 注意：这里不要用 `t` 命名事件目标——它会遮蔽 i18n 的 t()，
+    // 导致回调里所有 toast 文案调用抛 `t is not a function`，而 async 监听器
+    // 又吞掉异常：卸载实际执行了，但无 toast、列表不刷新（按钮看起来「没反应」）。
+    const target = e.target;
+    if (target.closest('[data-pm-open-url]')) {
       close();
       if (typeof app.openInstallFromUrl === 'function') app.openInstallFromUrl();
       return;
     }
-    if (t.closest('[data-pm-open-npp]')) {
+    if (target.closest('[data-pm-open-npp]')) {
       close();
       if (typeof app.openNppImport === 'function') app.openNppImport();
       return;
     }
-    const btn = t.closest('[data-pm-action]');
+    const btn = target.closest('[data-pm-action]');
     if (!btn) return;
     const row = btn.closest('[data-pm-row]');
     if (!row) return;
@@ -220,16 +231,22 @@ export function openPluginManager(app, opts = {}) {
     const action = btn.dataset.pmAction;
     if (action === 'disable') {
       const res = await host.disable(app, id);
-      toast(res && res.ok === false ? `禁用失败：${res.error || res.code}` : '已禁用插件',
-        res && res.ok === false ? 'error' : 'info');
+      toast(res && res.ok === false
+        ? t(`禁用失败：${res.error || res.code}`, `Could not disable: ${res.error || res.code}`)
+        : t('已禁用插件', 'Plugin disabled'),
+      res && res.ok === false ? 'error' : 'info');
     } else if (action === 'enable') {
       const res = await host.enable(app, id);
-      toast(res && res.ok === false ? `启用失败：${res.error || res.code}` : '已启用插件',
-        res && res.ok === false ? 'error' : 'info');
+      toast(res && res.ok === false
+        ? t(`启用失败：${res.error || res.code}`, `Could not enable: ${res.error || res.code}`)
+        : t('已启用插件', 'Plugin enabled'),
+      res && res.ok === false ? 'error' : 'info');
     } else if (action === 'uninstall') {
       const res = await host.uninstall(app, id);
-      toast(res && res.ok === false ? `卸载失败：${res.error || res.code}` : '已卸载插件',
-        res && res.ok === false ? 'error' : 'info');
+      toast(res && res.ok === false
+        ? t(`卸载失败：${res.error || res.code}`, `Could not uninstall: ${res.error || res.code}`)
+        : t('已卸载插件', 'Plugin uninstalled'),
+      res && res.ok === false ? 'error' : 'info');
     }
     if (typeof app.emitPluginsChanged === 'function') app.emitPluginsChanged();
     await rerender();

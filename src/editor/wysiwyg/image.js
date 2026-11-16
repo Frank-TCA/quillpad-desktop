@@ -10,6 +10,7 @@
 
 import { state } from '../../core/state.js';
 import { writeAsset as writeAssetShared } from '../../core/assets.js';
+import { t } from '../../core/i18n.js';
 
 /** data URL 降级的上限（2MB，PRD A6）。 */
 export const DATA_URL_LIMIT = 2 * 1024 * 1024;
@@ -154,7 +155,7 @@ async function readBytes(file) {
  * @return {Promise<{ok: boolean, markdown?: string, error?: string, degraded?: boolean}>}
  */
 export async function insertMarkdownImage(app, input) {
-  if (!input) return { ok: false, error: '没有可插入的图片' };
+  if (!input) return { ok: false, error: t('没有可插入的图片', 'No image to insert') };
   const name = input.name || 'image.png';
   const ext = extOf(name);
   const assetName = makeAssetName(ext);
@@ -178,11 +179,14 @@ export async function insertMarkdownImage(app, input) {
   if (bytes.byteLength > DATA_URL_LIMIT) {
     return {
       ok: false,
-      error: `图片过大（${(bytes.byteLength / 1024 / 1024).toFixed(1)}MB），请先「另存为」到磁盘再插入`,
+      error: t(
+        `图片过大（${(bytes.byteLength / 1024 / 1024).toFixed(1)}MB），请先「另存为」到磁盘再插入`,
+        `Image is too large (${(bytes.byteLength / 1024 / 1024).toFixed(1)} MB). Save the file to disk first.`,
+      ),
     };
   }
   const accepted = await confirmDataUrlInsert(app, name);
-  if (!accepted) return { ok: false, error: '已取消插入' };
+  if (!accepted) return { ok: false, error: t('已取消插入', 'Insertion canceled') };
   const dataUrl = `data:image/${ext === 'jpg' ? 'jpeg' : ext};base64,${bytesToBase64(bytes)}`;
   const md = `![${name}](${dataUrl})`;
   insertMarkdown(app, md);
@@ -196,9 +200,13 @@ export async function insertMarkdownImage(app, input) {
  * @return {Promise<boolean>}
  */
 async function confirmDataUrlInsert(app, name) {
-  const message =
+  const message = t(
     `「${name}」需要落到文档同目录的 assets/ 下，但当前文档尚未保存到磁盘。\n\n` +
-    '是否改为以 data URL 内联插入（≤2MB）？\n（推荐先「另存为」再插入图片）';
+      '是否改为以 data URL 内联插入（≤2MB）？\n（推荐先「另存为」再插入图片）',
+    `"${name}" should be saved under assets/ next to the document, but the document ` +
+      'has not been saved to disk yet.\n\nInsert it inline as a data URL instead (≤2 MB)?\n' +
+      '(Recommended: use "Save As" before inserting images.)',
+  );
   try {
     if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
       return window.confirm(message);

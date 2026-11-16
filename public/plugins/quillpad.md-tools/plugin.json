@@ -1,7 +1,9 @@
 {
   "id": "quillpad.md-tools",
   "name": "Markdown 增强包",
+  "nameEn": "Markdown Tools",
   "description": "表格对齐规范化、TOC 生成、脚注插入、中英字数与阅读时长统计，共 4 条命令。",
+  "descriptionEn": "Normalize table alignment, generate a table of contents, insert footnotes, and count words and reading time — 4 commands in total.",
   "author": "QuillPad 官方",
   "version": "1.0.0",
   "license": "MIT",
@@ -10,10 +12,10 @@
   "permissions": ["editor:read", "editor:write"],
   "contributes": {
     "commands": [
-      { "id": "normalize-table", "title": "规范表格对齐", "key": "Mod-Alt-g" },
-      { "id": "generate-toc", "title": "生成目录", "key": "Mod-Alt-o" },
-      { "id": "insert-footnote", "title": "插入脚注", "key": "Mod-Alt-n" },
-      { "id": "word-count", "title": "字数与阅读时长", "key": "Mod-Alt-w" }
+      { "id": "normalize-table", "title": "规范表格对齐", "titleEn": "Normalize Table Alignment", "key": "Mod-Alt-g" },
+      { "id": "generate-toc", "title": "生成目录", "titleEn": "Generate Table of Contents", "key": "Mod-Alt-o" },
+      { "id": "insert-footnote", "title": "插入脚注", "titleEn": "Insert Footnote", "key": "Mod-Alt-n" },
+      { "id": "word-count", "title": "字数与阅读时长", "titleEn": "Word Count & Reading Time", "key": "Mod-Alt-w" }
     ]
   }
 }

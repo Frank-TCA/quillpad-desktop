@@ -8,6 +8,8 @@
  * @module editor/markdown-format
  */
 
+import { t } from '../core/i18n.js';
+
 /**
  * 给选区两端加行内标记；已包裹则反向解包（toggle）。
  *
@@ -184,7 +186,7 @@ export function insertBlock(view, text) {
 export function insertLink(view) {
   const { state } = view;
   const sel = state.selection.main;
-  const label = state.sliceDoc(sel.from, sel.to) || '链接文字';
+  const label = state.sliceDoc(sel.from, sel.to) || t('链接文字', 'Link Text');
   const text = `[${label}](url)`;
   const urlFrom = sel.from + label.length + 3; // '[' + label + ']('
   const urlTo = urlFrom + 3; // 'url'

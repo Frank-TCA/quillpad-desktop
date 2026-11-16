@@ -19,6 +19,28 @@ contextBridge.exposeInMainWorld('quillpadDesktop', {
   /** @return {Promise<boolean>} 当前是否处于最大化状态 */
   isMaximized: () => ipcRenderer.invoke('qp:is-maximized'),
   /**
+   * 切换界面语言时同步给主进程（原生对话框标题、文件过滤器、错误提示用）。
+   * @param {string} locale 'zh-CN' | 'en'
+   * @return {Promise<{ok: boolean, locale: string}>}
+   */
+  setLocale: (locale) => ipcRenderer.invoke('app:set-locale', locale),
+  /**
+   * 读取主进程当前语言（启动时对齐用）。
+   * @return {Promise<{ok: boolean, locale: string}>}
+   */
+  getLocale: () => ipcRenderer.invoke('app:get-locale'),
+  /**
+   * 订阅「其它窗口切换了语言」。发起切换的那个窗口不会收到自己的广播，
+   * 所以回调里不需要再调一次 setLocale。
+   * @param {(locale: string) => void} callback
+   * @return {() => void} 取消订阅
+   */
+  onLocaleChange: (callback) => {
+    const handler = (_event, locale) => callback(String(locale || ''));
+    ipcRenderer.on('app:locale-changed', handler);
+    return () => ipcRenderer.removeListener('app:locale-changed', handler);
+  },
+  /**
    * 订阅最大化状态变化。
    * @param {(maximized: boolean) => void} callback
    * @return {() => void} 取消订阅

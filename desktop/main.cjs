@@ -11,12 +11,18 @@
  *    上次关联过的文件在下次启动时才能继续直接写回。
  */
 
-const { app, BrowserWindow, Menu, dialog, ipcMain, session, shell, screen } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, session, shell, screen, webContents } = require('electron');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { createStaticServer, listen } = require('./server.cjs');
 const pluginFs = require('./plugin-fs.cjs');
+const i18n = require('./i18n.cjs');
+
+// 主进程侧的 t()：与渲染层 `src/core/i18n.js` 同语义（原文即键，英文缺失回落中文）。
+// 注意：`t` 每次调用都读模块内当前语言，因此可以直接解构出来用；
+// 但**不要**把 t() 的结果存进模块级常量 —— 那样切换语言后不会更新。
+const { t } = i18n;
 
 const APP_NAME = 'QuillPad';
 const DIST_DIR = path.join(__dirname, '..', 'dist');
@@ -70,7 +76,7 @@ function collectFileArgs(argv) {
 async function readTextFile(filePath) {
   try {
     const stat = await fs.promises.stat(filePath);
-    if (!stat.isFile()) return { ok: false, error: '目标不是文件' };
+    if (!stat.isFile()) return { ok: false, error: t('目标不是文件', 'Target is not a file') };
     const bytes = await fs.promises.readFile(filePath);
     return {
       ok: true,
@@ -96,7 +102,7 @@ async function readTextFile(filePath) {
 async function writeTextFile(filePath, text, opts = {}) {
   try {
     const stat = await fs.promises.stat(filePath);
-    if (!stat.isFile()) return { ok: false, error: '目标不是文件' };
+    if (!stat.isFile()) return { ok: false, error: t('目标不是文件', 'Target is not a file') };
     const payload = (opts.bom ? '\uFEFF' : '') + String(text);
     await fs.promises.writeFile(filePath, payload, 'utf8');
     const after = await fs.promises.stat(filePath);
@@ -332,15 +338,18 @@ async function confirmClose(win) {
 
   const { response } = await dialog.showMessageBox(win, {
     type: 'warning',
-    buttons: ['取消', '不保存，直接退出'],
+    buttons: [t('取消', 'Cancel'), t('不保存，直接退出', "Don't Save and Quit")],
     defaultId: 0,
     cancelId: 0,
     noLink: true,
     title: APP_NAME,
-    message: `有 ${dirty} 个文件还没保存`,
-    detail:
+    message: t(`有 ${dirty} 个文件还没保存`, `${dirty} unsaved ${dirty === 1 ? 'file' : 'files'}`),
+    detail: t(
       '未保存的修改会随会话一起保留，下次启动 QuillPad 时会自动恢复；' +
-      '已关联到磁盘的文件，需要在应用里保存才会真正写回磁盘。',
+        '已关联到磁盘的文件，需要在应用里保存才会真正写回磁盘。',
+      'Unsaved changes are kept with this session and restored the next time QuillPad starts. ' +
+        'Files linked to disk are only written back after you save them in the app.',
+    ),
   });
 
   if (response === 1) {
@@ -351,6 +360,10 @@ async function confirmClose(win) {
 
 // -------------------------------------------------------------------- 生命周期
 async function boot() {
+  // 语言必须最先加载：后面所有原生对话框、错误提示都要用它决定文案。
+  // 此时 userData 已在模块顶层重定向完成（便携版指向 exe 同目录）。
+  i18n.loadLocale(app.getPath('userData'));
+
   // 任务栏分组 / 通知归属需要稳定的 AppUserModelID（与 NSIS 安装器写入的一致）
   app.setAppUserModelId('com.quillpad.desktop');
 
@@ -443,7 +456,7 @@ function dumpPdfDebug(html) {
  */
 async function renderPdfInHiddenWindow(html, options) {
   if (typeof html !== 'string' || html.length < 32) {
-    return { ok: false, code: 'EHTML', error: '打印 HTML 为空' };
+    return { ok: false, code: 'EHTML', error: t('打印 HTML 为空', 'Print HTML is empty') };
   }
 
   const tempHtml = makePrintTempPath();
@@ -498,19 +511,24 @@ async function renderPdfInHiddenWindow(html, options) {
 async function resolvePdfTarget(payload) {
   const explicit = payload && typeof payload.filePath === 'string' ? payload.filePath.trim() : '';
   if (explicit) {
-    if (!path.isAbsolute(explicit)) return { ok: false, code: 'EPATH', error: '目标路径必须是绝对路径' };
+    if (!path.isAbsolute(explicit)) {
+      return { ok: false, code: 'EPATH', error: t('目标路径必须是绝对路径', 'Target path must be absolute') };
+    }
     const dir = path.dirname(explicit);
     try {
       const stat = await fs.promises.stat(dir);
-      if (!stat.isDirectory()) return { ok: false, code: 'EPATH', error: '目标目录不存在' };
+      if (!stat.isDirectory()) {
+        return { ok: false, code: 'EPATH', error: t('目标目录不存在', 'Target directory does not exist') };
+      }
     } catch {
-      return { ok: false, code: 'EPATH', error: '目标目录不存在' };
+      return { ok: false, code: 'EPATH', error: t('目标目录不存在', 'Target directory does not exist') };
     }
     return { ok: true, path: explicit };
   }
 
-  const suggested = String((payload && payload.suggestedName) || '未命名.pdf');
-  const safeName = path.basename(suggested).replace(/[\\/:*?"<>|]/g, '_') || '未命名.pdf';
+  const fallbackName = t('未命名.pdf', 'Untitled.pdf');
+  const suggested = String((payload && payload.suggestedName) || fallbackName);
+  const safeName = path.basename(suggested).replace(/[\\/:*?"<>|]/g, '_') || fallbackName;
   const dir = payload && typeof payload.directory === 'string' && path.isAbsolute(payload.directory)
     ? payload.directory
     : app.getPath('documents');
@@ -522,9 +540,9 @@ async function resolvePdfTarget(payload) {
   }
 
   const res = await dialog.showSaveDialog(mainWindow || undefined, {
-    title: '导出为 PDF',
+    title: t('导出为 PDF', 'Export as PDF'),
     defaultPath,
-    filters: [{ name: 'PDF 文档', extensions: ['pdf'] }],
+    filters: [{ name: t('PDF 文档', 'PDF Document'), extensions: ['pdf'] }],
     properties: ['createDirectory', 'showOverwriteConfirmation'],
   });
   if (res.canceled || !res.filePath) return { ok: false, canceled: true, code: 'ECANCELED' };
@@ -553,7 +571,7 @@ ipcMain.handle('qp:export-pdf', async (_event, payload) => {
 
 ipcMain.handle('qp:pick-directory', async () => {
   const res = await dialog.showOpenDialog(mainWindow || undefined, {
-    title: '选择保存目录',
+    title: t('选择保存目录', 'Choose Save Folder'),
     properties: ['openDirectory', 'createDirectory'],
   });
   if (res.canceled || !res.filePaths || !res.filePaths[0]) {
@@ -565,27 +583,28 @@ ipcMain.handle('qp:pick-directory', async () => {
 /** 依据当前文件名猜一组保存过滤器，让对话框默认就停在合适的类型上。 */
 function saveDialogFilters(defaultName) {
   const ext = path.extname(String(defaultName || '')).replace(/^\./, '').toLowerCase();
+  // 每项写 [中文名, 英文名]，取值时才求值（否则切换语言后过滤器名不会变）
   const known = {
-    md: 'Markdown',
-    markdown: 'Markdown',
-    txt: '纯文本',
-    log: '纯文本',
-    json: 'JSON',
-    js: 'JavaScript',
-    mjs: 'JavaScript',
-    cjs: 'JavaScript',
-    ts: 'TypeScript',
-    css: 'CSS',
-    html: 'HTML',
-    htm: 'HTML',
-    py: 'Python',
-    yml: 'YAML',
-    yaml: 'YAML',
-    csv: 'CSV',
+    md: ['Markdown', 'Markdown'],
+    markdown: ['Markdown', 'Markdown'],
+    txt: ['纯文本', 'Plain Text'],
+    log: ['纯文本', 'Plain Text'],
+    json: ['JSON', 'JSON'],
+    js: ['JavaScript', 'JavaScript'],
+    mjs: ['JavaScript', 'JavaScript'],
+    cjs: ['JavaScript', 'JavaScript'],
+    ts: ['TypeScript', 'TypeScript'],
+    css: ['CSS', 'CSS'],
+    html: ['HTML', 'HTML'],
+    htm: ['HTML', 'HTML'],
+    py: ['Python', 'Python'],
+    yml: ['YAML', 'YAML'],
+    yaml: ['YAML', 'YAML'],
+    csv: ['CSV', 'CSV'],
   };
   const list = [];
-  if (ext && known[ext]) list.push({ name: known[ext], extensions: [ext] });
-  list.push({ name: '所有文件', extensions: ['*'] });
+  if (ext && known[ext]) list.push({ name: t(known[ext][0], known[ext][1]), extensions: [ext] });
+  list.push({ name: t('所有文件', 'All Files'), extensions: ['*'] });
   return list;
 }
 
@@ -605,7 +624,8 @@ function saveDialogFilters(defaultName) {
 ipcMain.handle('qp:save-dialog', async (event, payload) => {
   const data = payload || {};
   const owner = BrowserWindow.fromWebContents(event.sender) || mainWindow || undefined;
-  const defaultName = String(data.defaultName || '未命名.txt').trim() || '未命名.txt';
+  const fallbackName = t('未命名.txt', 'Untitled.txt');
+  const defaultName = String(data.defaultName || fallbackName).trim() || fallbackName;
 
   let defaultPath = defaultName;
   const dir = String(data.directory || '').trim();
@@ -620,7 +640,7 @@ ipcMain.handle('qp:save-dialog', async (event, payload) => {
 
   try {
     const res = await dialog.showSaveDialog(owner, {
-      title: '另存为',
+      title: t('另存为', 'Save As'),
       defaultPath,
       filters: saveDialogFilters(defaultName),
       properties: ['createDirectory', 'showOverwriteConfirmation'],
@@ -675,7 +695,7 @@ ipcMain.handle('qp:print', async (_event, payload) => {
         resolve({ success: true, reason: 'submitted' });
       }, 3000);
     });
-    return printed.success ? { ok: true } : { ok: false, code: 'EPRINT', error: printed.reason || '打印失败' };
+    return printed.success ? { ok: true } : { ok: false, code: 'EPRINT', error: printed.reason || t('打印失败', 'Print failed') };
   } catch (err) {
     dumpPdfDebug(data.html);
     return { ok: false, code: 'EPRINT', error: (err && err.message) || String(err) };
@@ -701,38 +721,40 @@ ipcMain.handle('qp:write-asset', async (_event, payload) => {
   const data = payload || {};
   const docDir = typeof data.docDir === 'string' ? data.docDir.trim() : '';
   if (!docDir || !path.isAbsolute(docDir)) {
-    return { ok: false, code: 'EPATH', error: '文档目录不合法' };
+    return { ok: false, code: 'EPATH', error: t('文档目录不合法', 'Document folder is invalid') };
   }
 
   const rawName = String(data.fileName || '').trim();
   if (!rawName || rawName.includes('..') || /[\\/]/.test(rawName) || path.isAbsolute(rawName)) {
-    return { ok: false, code: 'EPATH', error: '文件名不合法' };
+    return { ok: false, code: 'EPATH', error: t('文件名不合法', 'File name is invalid') };
   }
   const baseName = path.basename(rawName);
   if (!baseName || baseName === '.' || baseName === '..') {
-    return { ok: false, code: 'EPATH', error: '文件名不合法' };
+    return { ok: false, code: 'EPATH', error: t('文件名不合法', 'File name is invalid') };
   }
 
   const assetsDir = path.join(docDir, 'assets');
   const target = path.resolve(assetsDir, baseName);
   const guard = path.resolve(assetsDir) + path.sep;
   if (!target.startsWith(guard)) {
-    return { ok: false, code: 'EPATH', error: '目标路径越界' };
+    return { ok: false, code: 'EPATH', error: t('目标路径越界', 'Target path escapes the assets folder') };
   }
 
   try {
     const stat = await fs.promises.stat(docDir);
-    if (!stat.isDirectory()) return { ok: false, code: 'EPATH', error: '文档目录不存在' };
+    if (!stat.isDirectory()) {
+      return { ok: false, code: 'EPATH', error: t('文档目录不存在', 'Document folder does not exist') };
+    }
   } catch {
-    return { ok: false, code: 'EPATH', error: '文档目录不存在' };
+    return { ok: false, code: 'EPATH', error: t('文档目录不存在', 'Document folder does not exist') };
   }
 
   const bytes = data.bytes;
   if (!bytes || !(bytes instanceof Uint8Array || bytes instanceof ArrayBuffer)) {
-    return { ok: false, code: 'EBYTES', error: '没有拿到图片字节' };
+    return { ok: false, code: 'EBYTES', error: t('没有拿到图片字节', 'No image bytes received') };
   }
   const buf = bytes instanceof Uint8Array ? Buffer.from(bytes) : Buffer.from(new Uint8Array(bytes));
-  if (!buf.length) return { ok: false, code: 'EBYTES', error: '图片内容为空' };
+  if (!buf.length) return { ok: false, code: 'EBYTES', error: t('图片内容为空', 'Image content is empty') };
 
   try {
     await fs.promises.mkdir(assetsDir, { recursive: true });
@@ -777,7 +799,7 @@ ipcMain.handle('qp:write-asset', async (_event, payload) => {
  */
 ipcMain.handle('qp:read-asset', async (_event, payload) => {
   const raw = String((payload && (payload.path || payload.url)) || '').trim();
-  if (!raw) return { ok: false, code: 'EPATH', error: '资源路径为空' };
+  if (!raw) return { ok: false, code: 'EPATH', error: t('资源路径为空', 'Resource path is empty') };
 
   let filePath = raw;
   if (/^file:/i.test(raw)) {
@@ -787,23 +809,25 @@ ipcMain.handle('qp:read-asset', async (_event, payload) => {
       // Windows 上 pathname 形如 /D:/dir/f.ttf，去掉前导斜杠才是盘符路径
       if (/^\/[a-zA-Z]:/.test(filePath)) filePath = filePath.slice(1);
     } catch {
-      return { ok: false, code: 'EPATH', error: '资源路径解析失败' };
+      return { ok: false, code: 'EPATH', error: t('资源路径解析失败', 'Failed to parse the resource path') };
     }
   }
   if (!path.isAbsolute(filePath)) {
-    return { ok: false, code: 'EPATH', error: '资源路径必须是绝对路径' };
+    return { ok: false, code: 'EPATH', error: t('资源路径必须是绝对路径', 'Resource path must be absolute') };
   }
 
   const root = path.resolve(app.getAppPath());
   const target = path.resolve(filePath);
   if (target !== root && !target.startsWith(root + path.sep)) {
-    return { ok: false, code: 'EPATH', error: '资源不在应用目录内' };
+    return { ok: false, code: 'EPATH', error: t('资源不在应用目录内', 'Resource is outside the application folder') };
   }
 
   try {
     const stat = await fs.promises.stat(target);
-    if (!stat.isFile()) return { ok: false, code: 'EPATH', error: '目标不是文件' };
-    if (stat.size > 32 * 1024 * 1024) return { ok: false, code: 'ETOOBIG', error: '资源过大' };
+    if (!stat.isFile()) return { ok: false, code: 'EPATH', error: t('目标不是文件', 'Target is not a file') };
+    if (stat.size > 32 * 1024 * 1024) {
+      return { ok: false, code: 'ETOOBIG', error: t('资源过大', 'Resource is too large') };
+    }
     const buf = await fs.promises.readFile(target);
     return { ok: true, base64: buf.toString('base64'), bytes: buf.length };
   } catch (err) {
@@ -839,7 +863,7 @@ const IMAGE_MIME = {
  */
 ipcMain.handle('qp:read-image', async (_event, payload) => {
   const raw = String((payload && (payload.path || payload.url)) || '').trim();
-  if (!raw) return { ok: false, code: 'EPATH', error: '图片路径为空' };
+  if (!raw) return { ok: false, code: 'EPATH', error: t('图片路径为空', 'Image path is empty') };
 
   let filePath = raw;
   if (/^file:/i.test(raw)) {
@@ -848,20 +872,20 @@ ipcMain.handle('qp:read-image', async (_event, payload) => {
       filePath = decodeURIComponent(parsed.pathname);
       if (/^\/[a-zA-Z]:/.test(filePath)) filePath = filePath.slice(1);
     } catch {
-      return { ok: false, code: 'EPATH', error: '图片路径解析失败' };
+      return { ok: false, code: 'EPATH', error: t('图片路径解析失败', 'Failed to parse the image path') };
     }
   }
   if (!path.isAbsolute(filePath)) {
-    return { ok: false, code: 'EPATH', error: '图片路径必须是绝对路径' };
+    return { ok: false, code: 'EPATH', error: t('图片路径必须是绝对路径', 'Image path must be absolute') };
   }
   const mime = IMAGE_MIME[path.extname(filePath).toLowerCase()];
-  if (!mime) return { ok: false, code: 'EEXT', error: '不是支持的图片格式' };
+  if (!mime) return { ok: false, code: 'EEXT', error: t('不是支持的图片格式', 'Unsupported image format') };
 
   try {
     const stat = await fs.promises.stat(filePath);
-    if (!stat.isFile()) return { ok: false, code: 'EPATH', error: '目标不是文件' };
+    if (!stat.isFile()) return { ok: false, code: 'EPATH', error: t('目标不是文件', 'Target is not a file') };
     if (stat.size > 20 * 1024 * 1024) {
-      return { ok: false, code: 'ETOOBIG', error: '图片过大（上限 20MB）' };
+      return { ok: false, code: 'ETOOBIG', error: t('图片过大（上限 20MB）', 'Image is too large (20 MB limit)') };
     }
     const buf = await fs.promises.readFile(filePath);
     return { ok: true, mime, base64: buf.toString('base64'), bytes: buf.length };
@@ -878,7 +902,7 @@ ipcMain.handle('qp:read-image', async (_event, payload) => {
  */
 ipcMain.handle('qp:reveal-in-folder', async (_event, payload) => {
   const raw = String((payload && (payload.path || payload.url)) || '').trim();
-  if (!raw) return { ok: false, code: 'EPATH', error: '路径为空' };
+  if (!raw) return { ok: false, code: 'EPATH', error: t('路径为空', 'Path is empty') };
 
   let filePath = raw;
   if (/^file:/i.test(raw)) {
@@ -887,17 +911,17 @@ ipcMain.handle('qp:reveal-in-folder', async (_event, payload) => {
       filePath = decodeURIComponent(parsed.pathname);
       if (/^\/[a-zA-Z]:/.test(filePath)) filePath = filePath.slice(1);
     } catch {
-      return { ok: false, code: 'EPATH', error: '路径解析失败' };
+      return { ok: false, code: 'EPATH', error: t('路径解析失败', 'Failed to parse the path') };
     }
   }
   if (!path.isAbsolute(filePath)) {
-    return { ok: false, code: 'EPATH', error: '路径必须是绝对路径' };
+    return { ok: false, code: 'EPATH', error: t('路径必须是绝对路径', 'Path must be absolute') };
   }
 
   try {
     await fs.promises.access(filePath);
   } catch {
-    return { ok: false, code: 'ENOENT', error: '文件不存在或已被移动' };
+    return { ok: false, code: 'ENOENT', error: t('文件不存在或已被移动', 'The file no longer exists or has been moved') };
   }
 
   shell.showItemInFolder(filePath);
@@ -913,13 +937,13 @@ ipcMain.handle('qp:reveal-in-folder', async (_event, payload) => {
  */
 ipcMain.handle('qp:open-external', async (event, payload) => {
   const raw = String((payload && payload.url) || '').trim();
-  if (!raw) return { ok: false, code: 'EPROTO', error: '链接为空' };
+  if (!raw) return { ok: false, code: 'EPROTO', error: t('链接为空', 'Link is empty') };
 
   let parsed;
   try {
     parsed = new URL(raw);
   } catch {
-    return { ok: false, code: 'EPROTO', error: '链接格式不合法' };
+    return { ok: false, code: 'EPROTO', error: t('链接格式不合法', 'Link format is invalid') };
   }
 
   const protocol = parsed.protocol.toLowerCase();
@@ -938,31 +962,34 @@ ipcMain.handle('qp:open-external', async (event, payload) => {
       filePath = decodeURIComponent(parsed.pathname.replace(/^\//, ''));
       if (/^[a-zA-Z]:/.test(filePath) === false) filePath = decodeURIComponent(parsed.pathname);
     } catch {
-      return { ok: false, code: 'EPROTO', error: '文件路径解析失败' };
+      return { ok: false, code: 'EPROTO', error: t('文件路径解析失败', 'Failed to parse the file path') };
     }
     try {
       const stat = await fs.promises.stat(filePath);
-      if (!stat.isFile()) return { ok: false, code: 'EPATH', error: '目标不是文件' };
+      if (!stat.isFile()) return { ok: false, code: 'EPATH', error: t('目标不是文件', 'Target is not a file') };
     } catch {
-      return { ok: false, code: 'EPATH', error: '文件不存在' };
+      return { ok: false, code: 'EPATH', error: t('文件不存在', 'File not found') };
     }
     const owner = BrowserWindow.fromWebContents(event.sender) || mainWindow;
     const { response } = await dialog.showMessageBox(owner || undefined, {
       type: 'warning',
-      buttons: ['取消', '用系统程序打开'],
+      buttons: [t('取消', 'Cancel'), t('用系统程序打开', 'Open with System App')],
       defaultId: 0,
       cancelId: 0,
       noLink: true,
       title: APP_NAME,
-      message: '要打开本地文件吗？',
-      detail: `${filePath}\n\n这会用系统关联的程序打开该文件。请确认来源可信。`,
+      message: t('要打开本地文件吗？', 'Open this local file?'),
+      detail: t(
+        `${filePath}\n\n这会用系统关联的程序打开该文件。请确认来源可信。`,
+        `${filePath}\n\nThis will open the file with the app associated on your system. Make sure you trust its source.`,
+      ),
     });
-    if (response !== 1) return { ok: false, code: 'ECANCELED', error: '用户取消' };
+    if (response !== 1) return { ok: false, code: 'ECANCELED', error: t('用户取消', 'Canceled by the user') };
     const errMsg = await shell.openPath(filePath);
     return errMsg ? { ok: false, code: 'EOPEN', error: errMsg } : { ok: true };
   }
 
-  return { ok: false, code: 'EPROTO', error: `不允许的协议：${protocol}` };
+  return { ok: false, code: 'EPROTO', error: t(`不允许的协议：${protocol}`, `Protocol not allowed: ${protocol}`) };
 });
 
 /* ------------------------------------------------------------------ 宏持久化 */
@@ -971,6 +998,44 @@ ipcMain.handle('qp:open-external', async (event, payload) => {
 function macrosFile() {
   return path.join(app.getPath('userData'), 'macros.json');
 }
+
+/**
+ * 应用语言设置并把新语言广播给其它窗口。
+ *
+ * 渲染层切换语言时同步过来：原生对话框不读 DOM，语言必须单独持久化。
+ * 只广播给**其它**窗口 —— 发起切换的那个窗口会自己重绘，再回送一次会造成
+ * 「setLocale → 广播 → setLocale」的自我循环。
+ *
+ * @param {unknown} locale 目标语言（脏值由 i18n 归一化后回落中文）
+ * @param {number} senderId 发起切换的 webContents id
+ * @return {string} 当前生效的语言码
+ */
+function applyLocale(locale, senderId) {
+  const next = i18n.setLocale(app.getPath('userData'), locale);
+  for (const wc of webContents.getAllWebContents()) {
+    if (wc.isDestroyed() || wc.id === senderId) continue;
+    try {
+      wc.send('app:locale-changed', next);
+    } catch {
+      // 窗口正在关闭：忽略，它重启时会从 locale.json 读到正确语言
+    }
+  }
+  return next;
+}
+
+/**
+ * 渲染层切换界面语言时同步过来：原生对话框不读 DOM，语言必须单独持久化，
+ * 同时把新语言广播给其它窗口（preload 的 onLocaleChange 负责接收）。
+ *
+ * 只保留 `app:set-locale` 这一个入口：渲染层唯一要调的 API 是
+ * `window.quillpadDesktop.setLocale()`，多一个并存通道只会变成两套真相。
+ */
+ipcMain.handle('app:set-locale', (event, locale) => ({
+  ok: true,
+  locale: applyLocale(locale, event.sender.id),
+}));
+/** 启动时读取主进程当前语言（渲染层可据此对齐自己持久化下来的选择）。 */
+ipcMain.handle('app:get-locale', () => ({ ok: true, locale: i18n.getLocale() }));
 
 ipcMain.handle('qp:macros-path', () => ({ ok: true, path: macrosFile() }));
 
@@ -998,7 +1063,7 @@ ipcMain.handle('qp:write-macros', async (_event, macros) => {
   // 只接受「命令 id + 参数 + 选区」这种纯数据，防止渲染层塞函数/原型污染
   const clean = list.slice(0, 200).map((m) => ({
     id: String((m && m.id) || ''),
-    name: String((m && m.name) || '未命名宏').slice(0, 120),
+    name: String((m && m.name) || t('未命名宏', 'Untitled Macro')).slice(0, 120),
     createdAt: Number((m && m.createdAt) || Date.now()),
     version: 1,
     steps: (Array.isArray(m && m.steps) ? m.steps : []).slice(0, 2000).map((s) => ({
@@ -1087,24 +1152,30 @@ ipcMain.handle('qp:plugin-install', async (_event, payload) => {
     } else if (Array.isArray(data.files)) {
       files = decodeFiles(data.files);
     } else {
-      return { ok: false, code: 'EINVALID', error: '没有可安装的内容' };
+      return { ok: false, code: 'EINVALID', error: t('没有可安装的内容', 'Nothing to install') };
     }
 
     // 路径穿越：在写任何文件之前统一挡一次
     for (const f of files) {
       if (String(f.name).endsWith('/')) continue;
       if (!pluginFs.isSafeEntryName(f.name)) {
-        return { ok: false, code: 'EPATH', error: `安装包包含非法路径：${f.name}` };
+        return {
+          ok: false,
+          code: 'EPATH',
+          error: t(`安装包包含非法路径：${f.name}`, `Package contains an illegal path: ${f.name}`),
+        };
       }
     }
 
     const manifestFile = files.find((f) => String(f.name).replace(/^\.\//, '') === 'plugin.json');
-    if (!manifestFile) return { ok: false, code: 'ESCHEMA', error: '安装包缺少 plugin.json' };
+    if (!manifestFile) {
+      return { ok: false, code: 'ESCHEMA', error: t('安装包缺少 plugin.json', 'Package is missing plugin.json') };
+    }
     let manifest;
     try {
       manifest = JSON.parse(manifestFile.bytes.toString('utf8'));
     } catch {
-      return { ok: false, code: 'ESCHEMA', error: 'plugin.json 不是合法 JSON' };
+      return { ok: false, code: 'ESCHEMA', error: t('plugin.json 不是合法 JSON', 'plugin.json is not valid JSON') };
     }
     const checked = pluginFs.validateInstallManifest(manifest, app.getVersion());
     if (!checked.ok) return checked;
@@ -1120,10 +1191,10 @@ ipcMain.handle('qp:plugin-install', async (_event, payload) => {
     const old = state[manifest.id];
     const isUpdate = !!old;
     if (isUpdate && String(data.update) !== 'true' && String(data.force) !== 'true') {
-      return { ok: false, code: 'EEXISTS', error: '同 id 已安装，请使用更新流程' };
+      return { ok: false, code: 'EEXISTS', error: t('同 id 已安装，请使用更新流程', 'A plugin with this id is already installed. Use the update flow.') };
     }
     if (isUpdate && pluginFs.compareLess(String(manifest.version), String(old.version || ''))) {
-      return { ok: false, code: 'EEXISTS', error: '已安装更高版本' };
+      return { ok: false, code: 'EEXISTS', error: t('已安装更高版本', 'A newer version is already installed') };
     }
 
     const res = pluginFs.installPlugin({
@@ -1162,7 +1233,9 @@ ipcMain.handle('qp:plugin-storage', (_event, payload) => {
   const p = pluginPaths();
   const data = payload || {};
   const id = String(data.id || '');
-  if (!/^[a-z0-9]+(\.[a-z0-9-]+)+$/.test(id)) return { ok: false, code: 'ESCHEMA', error: '插件 id 不合法' };
+  if (!/^[a-z0-9]+(\.[a-z0-9-]+)+$/.test(id)) {
+    return { ok: false, code: 'ESCHEMA', error: t('插件 id 不合法', 'Plugin id is invalid') };
+  }
   if (data.action === 'set') {
     return pluginFs.storageSet(p.storageRoot, id, String(data.key || ''), data.value);
   }
@@ -1246,7 +1319,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(boot).catch((err) => {
-    dialog.showErrorBox('QuillPad 启动失败', String((err && err.stack) || err));
+    dialog.showErrorBox(t('QuillPad 启动失败', 'QuillPad failed to start'), String((err && err.stack) || err));
     app.quit();
   });
 

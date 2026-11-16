@@ -6,6 +6,8 @@
  * 都来自 `summarizeNpp()`，不会出现「页面写一套、测试写一套」。
  */
 
+import { t } from '../i18n.js';
+
 /**
  * 把扫描到的目录名映射到兼容表条目。
  * @param {Array<string>} names 扫描到的插件目录名
@@ -37,7 +39,9 @@ export function summarizeNpp(names, items) {
     builtin,
     port,
     unsupported,
-    text: `共 ${mapped.length} 个：${builtin} 个已内置、${port} 个可一键安装、${unsupported} 个不支持`,
-    detail: `共检测到 ${mapped.length} 个：${builtin} 个已内置 · ${port} 个可一键安装 · ${unsupported} 个不支持`,
+    text: t(`共 ${mapped.length} 个：${builtin} 个已内置、${port} 个可一键安装、${unsupported} 个不支持`,
+      `${mapped.length} total: ${builtin} built in, ${port} one-click installs, ${unsupported} unsupported`),
+    detail: t(`共检测到 ${mapped.length} 个：${builtin} 个已内置 · ${port} 个可一键安装 · ${unsupported} 个不支持`,
+      `Detected ${mapped.length} total: ${builtin} built in · ${port} one-click installs · ${unsupported} unsupported`),
   };
 }

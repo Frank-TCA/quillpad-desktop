@@ -11,6 +11,7 @@
  */
 
 import { state } from '../core/state.js';
+import { t } from '../core/i18n.js';
 
 /** 画布逻辑宽度（CSS 像素）。 */
 const WIDTH = 64;
@@ -77,7 +78,7 @@ export function createMinimap(host, app) {
   const canvas = document.createElement('canvas');
   canvas.className = 'qp-minimap';
   canvas.setAttribute('data-qp-node', 'minimap');
-  canvas.setAttribute('aria-label', '迷你地图（点击跳转）');
+  canvas.setAttribute('aria-label', t('迷你地图（点击跳转）', 'Minimap (click to jump)'));
   canvas.setAttribute('role', 'presentation');
   canvas.width = WIDTH;
   host.appendChild(canvas);

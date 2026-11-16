@@ -12,6 +12,7 @@ import { escapeHtml, fuzzyScore } from '../core/utils.js';
 import { toast } from './toast.js';
 import { THEMES } from '../editor/cm-themes.js';
 import { languageMenuList } from '../editor/languages.js';
+import { t, pickLocalized } from '../core/i18n.js';
 
 /**
  * @typedef {object} PaletteEntry
@@ -47,20 +48,20 @@ function collectEntries(app, withThemes) {
 
   for (const theme of THEMES) {
     entries.push({
-      cat: '主题',
-      title: theme.label,
+      cat: t('主题', 'Theme'),
+      title: pickLocalized(theme, 'label'),
       keys: [],
-      hint: '切换主题',
+      hint: t('切换主题', 'Switch Theme'),
       enabled: true,
       run: () => app.setTheme(theme.id),
     });
   }
   for (const lang of languageMenuList()) {
     entries.push({
-      cat: '语言',
-      title: lang.label,
+      cat: t('语言', 'Language'),
+      title: pickLocalized(lang, 'label'),
       keys: [],
-      hint: '切换语法',
+      hint: t('切换语法', 'Switch Syntax'),
       enabled: true,
       run: () => app.setLanguage(lang.id),
     });
@@ -130,10 +131,12 @@ export function initPalette(app) {
     visible = filterEntries(query).slice(0, 200);
     if (activeIndex >= visible.length) activeIndex = Math.max(0, visible.length - 1);
 
-    countEl.textContent = visible.length ? `${visible.length} 项` : '0 项';
+    countEl.textContent = visible.length
+      ? t(`${visible.length} 项`, `${visible.length} items`)
+      : t('0 项', '0 items');
 
     if (!visible.length) {
-      listEl.innerHTML = '<div class="palette__empty">没有匹配的命令</div>';
+      listEl.innerHTML = `<div class="palette__empty">${t('没有匹配的命令', 'No matching commands')}</div>`;
       return;
     }
 
@@ -179,7 +182,7 @@ export function initPalette(app) {
     if (!entry) return;
     if (entry.enabled === false) {
       // 与菜单栏 / 工具栏一致：不可用的命令给出明确提示，而不是静默失败
-      toast(`「${entry.title}」当前不可用`, 'info', 2400);
+      toast(t(`「${entry.title}」当前不可用`, `"${entry.title}" is currently unavailable`), 'info', 2400);
       return;
     }
     close();
@@ -200,16 +203,16 @@ export function initPalette(app) {
     backdrop = document.createElement('div');
     backdrop.className = 'palette-backdrop';
     backdrop.innerHTML =
-      `<div class="palette" role="dialog" aria-modal="true" aria-label="命令面板">` +
+      `<div class="palette" role="dialog" aria-modal="true" aria-label="${t('命令面板', 'Command Palette')}">` +
       `<div class="palette__head">` +
       `${icon('command', 16)}` +
-      `<input class="palette__input" placeholder="输入命令、主题或语言名称…" value="${escapeHtml(initial)}" ` +
-      `aria-label="搜索命令" autocomplete="off" spellcheck="false" />` +
-      `<span class="palette__count">0 项</span>` +
+      `<input class="palette__input" placeholder="${t('输入命令、主题或语言名称…', 'Type a command, theme or language name…')}" value="${escapeHtml(initial)}" ` +
+      `aria-label="${t('搜索命令', 'Search Commands')}" autocomplete="off" spellcheck="false" />` +
+      `<span class="palette__count">${t('0 项', '0 items')}</span>` +
       `</div>` +
       `<div class="palette__list"></div>` +
       `<div class="palette__foot">` +
-      `<span>↑↓ 选择</span><span>Enter 执行</span><span>Esc 关闭</span>` +
+      `<span>${t('↑↓ 选择', '↑↓ Select')}</span><span>${t('Enter 执行', 'Enter Run')}</span><span>${t('Esc 关闭', 'Esc Close')}</span>` +
       `</div>` +
       `</div>`;
     document.body.appendChild(backdrop);

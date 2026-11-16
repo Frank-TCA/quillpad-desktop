@@ -8,6 +8,8 @@
  * G5-16：崩溃停用写的是 `disabledReason:'crashed'`，重启后**不会**被自动复活。
  */
 
+import { t } from '../i18n.js';
+
 const STATE_KEY = 'quillpad.plugins.state.v1';
 
 /** @type {Record<string, {enabled: boolean, version: string, sha256: string, installedAt: number, disabledReason?: string, blocked?: boolean}>} */
@@ -128,7 +130,7 @@ export function markCrashed(id) {
 }
 
 /** 标记为 License 不合规（已阻止）。 */
-export function markBlocked(id, reason = 'License 不合规') {
+export function markBlocked(id, reason = t('License 不合规', 'Non-compliant license')) {
   return setEntry(id, { enabled: false, blocked: true, disabledReason: reason });
 }
 

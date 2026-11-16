@@ -1,7 +1,9 @@
 {
   "id": "community.csv-to-json",
   "name": "CSV 转 JSON",
+  "nameEn": "CSV to JSON",
   "description": "把当前 CSV 文本转换成 json 数组",
+  "descriptionEn": "Convert the current CSV text into a JSON array",
   "author": "QuillPad 社区示例",
   "version": "1.1.0",
   "license": "ISC",
@@ -10,7 +12,7 @@
   "permissions": ["editor:read", "editor:write"],
   "contributes": {
     "commands": [
-      { "id": "to-json", "title": "CSV 转 JSON 数组", "key": "Mod-Alt-Shift-c" }
+      { "id": "to-json", "title": "CSV 转 JSON 数组", "titleEn": "CSV to JSON Array", "key": "Mod-Alt-Shift-c" }
     ]
   }
 }

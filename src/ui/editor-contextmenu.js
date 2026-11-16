@@ -8,6 +8,7 @@
 import { openContextMenu } from './dropdown.js';
 import { runCommand, getCommand, commandShortcutText } from '../core/commands.js';
 import { applyMarkToRanges, clearMarkRanges } from '../editor/marks.js';
+import { t } from '../core/i18n.js';
 
 /**
  * 标记色块图例基色（与 theme.css `.qp-tmark--*` 的 color-mix 基色一致）。
@@ -61,13 +62,13 @@ export function initEditorContextMenu(app, editorRoot) {
 
     /** 标记颜色 submenu（五色带颜色图例小色块）。 */
     const markSubmenu = [
-      { label: '红色', swatch: MARK_SWATCHES.red, disabled: !hasSelection, run: () => applyMarkToRanges(app, snapshot, 'red') },
-      { label: '黄色', swatch: MARK_SWATCHES.yellow, disabled: !hasSelection, run: () => applyMarkToRanges(app, snapshot, 'yellow') },
-      { label: '绿色', swatch: MARK_SWATCHES.green, disabled: !hasSelection, run: () => applyMarkToRanges(app, snapshot, 'green') },
-      { label: '蓝色', swatch: MARK_SWATCHES.blue, disabled: !hasSelection, run: () => applyMarkToRanges(app, snapshot, 'blue') },
-      { label: '紫色', swatch: MARK_SWATCHES.purple, disabled: !hasSelection, run: () => applyMarkToRanges(app, snapshot, 'purple') },
+      { label: t('红色', 'Red'), swatch: MARK_SWATCHES.red, disabled: !hasSelection, run: () => applyMarkToRanges(app, snapshot, 'red') },
+      { label: t('黄色', 'Yellow'), swatch: MARK_SWATCHES.yellow, disabled: !hasSelection, run: () => applyMarkToRanges(app, snapshot, 'yellow') },
+      { label: t('绿色', 'Green'), swatch: MARK_SWATCHES.green, disabled: !hasSelection, run: () => applyMarkToRanges(app, snapshot, 'green') },
+      { label: t('蓝色', 'Blue'), swatch: MARK_SWATCHES.blue, disabled: !hasSelection, run: () => applyMarkToRanges(app, snapshot, 'blue') },
+      { label: t('紫色', 'Purple'), swatch: MARK_SWATCHES.purple, disabled: !hasSelection, run: () => applyMarkToRanges(app, snapshot, 'purple') },
       { separator: true },
-      { label: '清除标记', disabled: !hasSelection, run: () => clearMarkRanges(app, snapshot) },
+      { label: t('清除标记', 'Clear Marks'), disabled: !hasSelection, run: () => clearMarkRanges(app, snapshot) },
     ];
 
     openContextMenu(e, [
@@ -78,7 +79,7 @@ export function initEditorContextMenu(app, editorRoot) {
       cmdItem('edit.selectAll'),
       { separator: true },
       {
-        label: '标记颜色',
+        label: t('标记颜色', 'Mark Color'),
         submenu: markSubmenu,
       },
       { separator: true },

@@ -4,12 +4,18 @@
  * 发布态 `plugins/catalog.json` 是唯一数据源；拉取失败时回落到
  * `src/data/catalog.json` 的编译期内联副本，并给出顶部提示条（PRD §4.G2）。
  * 搜索：id / name / description / keywords 大小写不敏感子串，中英文都能命中。
+ *
+ * 本文件里的中文串都是「状态机 / 筛选比较 / 断言」用的稳定 key，不是显示文案：
+ * 按 ui/plugins.js 的既有约定写成单参数 t('中文原文')（英文参数缺失时恒返回中文），
+ * 英文显示由 UI 渲染点的 localizedStateLabel() / localizedActionLabel() /
+ * categoryLabel() 完成。t() 同时也让静态审计把这些 key 识别为已处理。
  */
 
 import { LICENSE_WHITELIST, HIGH_RISK_PERMISSIONS, PERMISSION_LABELS } from './manifest.js';
+import { t } from '../i18n.js';
 
 /** 分类枚举（PRD §4.G2）。实际下拉框只列出目录里真实存在的分类，见 `categoriesOf`。 */
-export const CATEGORIES = Object.freeze(['全部', '文本处理', 'Markdown', '开发者', '主题', '语言']);
+export const CATEGORIES = Object.freeze([t('全部'), t('文本处理'), 'Markdown', t('开发者'), t('主题'), t('语言')]);
 
 /**
  * 由目录数据推出可用的分类列表（「全部」恒在首位）。
@@ -26,14 +32,14 @@ export function categoriesOf(items = []) {
     const c = String((item && item.category) || '').trim();
     if (c && !seen.includes(c)) seen.push(c);
   }
-  return ['全部', ...seen];
+  return [t('全部'), ...seen];
 }
 
 /** 排序枚举。 */
 export const SORTS = Object.freeze([
-  { id: 'recommended', label: '推荐' },
-  { id: 'name', label: '名称' },
-  { id: 'updated', label: '更新时间' },
+  { id: 'recommended', label: '推荐', labelEn: 'Recommended' },
+  { id: 'name', label: '名称', labelEn: 'Name' },
+  { id: 'updated', label: '更新时间', labelEn: 'Last Updated' },
 ]);
 
 /** 编译期内联兜底（Vite 会把 JSON 打进 bundle）。 */
@@ -56,13 +62,13 @@ export async function loadCatalog(force = false) {
     const res = await fetch(new URL('./plugins/catalog.json', document.baseURI).href, { cache: 'no-cache' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    if (!data || !Array.isArray(data.plugins)) throw new Error('catalog 结构不合法');
+    if (!data || !Array.isArray(data.plugins)) throw new Error(t('catalog 结构不合法', 'Invalid catalog structure'));
     items = data.plugins;
     source = 'dist';
   } catch {
     items = Array.isArray(BUILTIN.plugins) ? BUILTIN.plugins : [];
     source = 'builtin';
-    warning = '插件目录更新失败，正在显示内置列表';
+    warning = t('插件目录更新失败，正在显示内置列表', 'Failed to update the plugin catalog; showing the built-in list');
   }
   cache = { items, source, warning };
   return { items: items.slice(), source, warning };
@@ -82,6 +88,10 @@ export function matches(plugin, query) {
     plugin.name,
     plugin.description,
     ...(Array.isArray(plugin.keywords) ? plugin.keywords : []),
+    plugin.nameEn,
+    plugin.titleEn,
+    plugin.descriptionEn,
+    ...(Array.isArray(plugin.featuresEn) ? plugin.featuresEn : []),
   ].join(' ').toLowerCase();
   return hay.includes(q);
 }
@@ -94,8 +104,8 @@ export function matches(plugin, query) {
  */
 export function searchCatalog(items, opts = {}) {
   let out = (Array.isArray(items) ? items : []).filter((p) => matches(p, opts.query));
-  const cat = String(opts.category || '全部');
-  if (cat !== '全部') out = out.filter((p) => String(p.category || '') === cat);
+  const cat = String(opts.category || t('全部'));
+  if (cat !== t('全部')) out = out.filter((p) => String(p.category || '') === cat);
   const sort = String(opts.sort || 'recommended');
   if (sort === 'name') {
     out = out.slice().sort((a, b) => String(a.name).localeCompare(String(b.name), 'zh-CN'));
@@ -109,18 +119,21 @@ export function searchCatalog(items, opts = {}) {
 
 /**
  * 计算卡片状态标签（四态）。
+ *
+ * 标签保持中文原文：UI 在渲染点用 localizedStateLabel() 翻译，且
+ * `st.label.startsWith('已阻止')` 等分支依赖中文原文做状态判断。
  * @param {object} plugin catalog 条目
  * @param {object|null} installed 已安装状态
  * @return {{state: 'not-installed'|'installed'|'updatable'|'disabled'|'blocked', label: string, version: string}}
  */
 export function pluginState(plugin, installed) {
-  if (!installed) return { state: 'not-installed', label: '未安装', version: '' };
+  if (!installed) return { state: 'not-installed', label: t('未安装'), version: '' };
   const version = String(installed.version || '');
-  if (installed.blocked) return { state: 'disabled', label: '已阻止（License 不合规）', version };
+  if (installed.blocked) return { state: 'disabled', label: t('已阻止（License 不合规）'), version };
   if (!installed.enabled) {
     return {
       state: 'disabled',
-      label: installed.disabledReason === 'crashed' ? '已停用（无响应）' : '已禁用',
+      label: installed.disabledReason === 'crashed' ? t('已停用（无响应）') : t('已禁用'),
       version,
     };
   }
@@ -131,8 +144,8 @@ export function pluginState(plugin, installed) {
     if ((cmp[i] || 0) > (cur[i] || 0)) { newer = true; break; }
     if ((cmp[i] || 0) < (cur[i] || 0)) break;
   }
-  if (newer) return { state: 'updatable', label: `可更新到 v${plugin.version}`, version };
-  return { state: 'installed', label: `已安装 v${version}`, version };
+  if (newer) return { state: 'updatable', label: t(`可更新到 v${plugin.version}`), version };
+  return { state: 'installed', label: t(`已安装 v${version}`), version };
 }
 
 /**
@@ -142,10 +155,10 @@ export function pluginState(plugin, installed) {
  * @return {string}
  */
 export function actionLabel(st, plugin) {
-  if (st.state === 'not-installed') return '安装';
-  if (st.state === 'updatable') return `更新到 v${plugin.version}`;
-  if (st.state === 'disabled') return '启用';
-  return '已安装';
+  if (st.state === 'not-installed') return t('安装');
+  if (st.state === 'updatable') return t(`更新到 v${plugin.version}`);
+  if (st.state === 'disabled') return t('启用');
+  return t('已安装');
 }
 
 /**

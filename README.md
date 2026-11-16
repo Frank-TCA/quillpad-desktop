@@ -89,7 +89,7 @@ QuillPad 保留了 Notepad++ 的全部手感 —— 多标签、语法高亮、�
 </tr>
 </table>
 
-![Aurora 深色主题](docs/screenshots/04-theme-aurora.png)
+![Ivory Light 主题](docs/screenshots/04-theme-ivory.png)
 
 ## 下载安装
 

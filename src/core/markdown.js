@@ -5,6 +5,7 @@
  */
 
 import { marked } from 'marked';
+import { t } from './i18n.js';
 
 marked.setOptions({
   gfm: true,
@@ -39,6 +40,6 @@ export function renderMarkdown(text) {
     return sanitize(typeof html === 'string' ? html : '');
   } catch (err) {
     console.warn('[QuillPad] Markdown 渲染失败：', err);
-    return '<p style="color:var(--danger)">Markdown 渲染失败</p>';
+    return t('<p style="color:var(--danger)">Markdown 渲染失败</p>', '<p style="color:var(--danger)">Markdown rendering failed</p>');
   }
 }

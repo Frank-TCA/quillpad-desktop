@@ -1,7 +1,9 @@
 {
   "id": "community.json-schema-lite",
   "name": "JSON Schema 速查",
+  "nameEn": "JSON Schema Quick Reference",
   "description": "为 json 文档生成最小可用 schema 片段",
+  "descriptionEn": "Generate a minimal usable schema snippet for a JSON document",
   "author": "QuillPad 社区示例",
   "version": "0.9.1",
   "license": "BSD-3-Clause",
@@ -10,7 +12,7 @@
   "permissions": ["editor:read", "editor:write"],
   "contributes": {
     "commands": [
-      { "id": "make-schema", "title": "由选中 JSON 生成 Schema", "key": "Mod-Alt-Shift-j" }
+      { "id": "make-schema", "title": "由选中 JSON 生成 Schema", "titleEn": "Generate Schema from Selected JSON", "key": "Mod-Alt-Shift-j" }
     ]
   }
 }

@@ -6,6 +6,8 @@
  *    让刷新页面后 Ctrl+S 仍能写回同一个磁盘文件。
  */
 
+import { t } from './i18n.js';
+
 const SESSION_KEY = 'quillpad.session.v1';
 const DB_NAME = 'quillpad-handles';
 const DB_VERSION = 1;
@@ -79,7 +81,7 @@ function openDb() {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
     if (typeof indexedDB === 'undefined') {
-      reject(new Error('当前环境不支持 IndexedDB'));
+      reject(new Error(t('当前环境不支持 IndexedDB', 'IndexedDB is not available in this environment')));
       return;
     }
     const req = indexedDB.open(DB_NAME, DB_VERSION);
@@ -89,7 +91,7 @@ function openDb() {
       if (!db.objectStoreNames.contains(STORE_DIRS)) db.createObjectStore(STORE_DIRS);
     };
     req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error || new Error('打开 IndexedDB 失败'));
+    req.onerror = () => reject(req.error || new Error(t('打开 IndexedDB 失败', 'Failed to open IndexedDB')));
   });
   return dbPromise;
 }
@@ -107,7 +109,7 @@ async function withStore(store, mode, action) {
     const tx = db.transaction(store, mode);
     const req = action(tx.objectStore(store));
     req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error || new Error('IndexedDB 操作失败'));
+    req.onerror = () => reject(req.error || new Error(t('IndexedDB 操作失败', 'IndexedDB operation failed')));
   });
 }
 

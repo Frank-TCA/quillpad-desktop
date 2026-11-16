@@ -7,7 +7,8 @@ import { icon, brandSvg } from './icons.js';
 import { escapeHtml } from '../core/utils.js';
 import { allCommands, commandShortcutLabels, IS_MAC } from '../core/commands.js';
 import { APP_VERSION_LABEL } from '../core/version.js';
-import { LANGUAGES } from '../editor/languages.js';
+import { LANGUAGES, languageLabel } from '../editor/languages.js';
+import { t } from '../core/i18n.js';
 
 /** 当前打开的模态框栈。 */
 const stack = [];
@@ -57,7 +58,7 @@ export function openModal(opts) {
     glyph = 'info',
     glyphKind = 'info',
     wide = false,
-    actions = [{ label: '好', value: true, kind: 'primary', defaultAction: true }],
+    actions = [{ label: t('好', 'OK'), value: true, kind: 'primary', defaultAction: true }],
     onMount = null,
   } = opts;
 
@@ -141,17 +142,23 @@ export function hasModal() {
  */
 export function confirmClose(fileName) {
   return openModal({
-    title: '有未保存的更改',
+    title: t('有未保存的更改', 'Unsaved Changes'),
     glyph: 'alert',
     glyphKind: 'warning',
     bodyHtml:
-      `<p>文件 <strong>${escapeHtml(fileName)}</strong> 有尚未保存的修改。</p>` +
+      `<p>${t('文件', 'The file')} <strong>${escapeHtml(fileName)}</strong> ${t(
+        '有尚未保存的修改。',
+        'has unsaved changes.',
+      )}</p>` +
       `<p style="color:var(--text-faint);font-size:11.5px;margin-top:6px">` +
-      `选择「保存」将写回原位置，选择「不保存」将丢弃本次修改。</p>`,
+      `${t(
+        '选择「保存」将写回原位置，选择「不保存」将丢弃本次修改。',
+        'Choose "Save" to write the changes back, or "Don\'t Save" to discard them.',
+      )}</p>`,
     actions: [
-      { label: '取消', value: 'cancel', kind: 'ghost' },
-      { label: '不保存', value: 'discard', kind: 'ghost' },
-      { label: '保存', value: 'save', kind: 'primary', defaultAction: true },
+      { label: t('取消', 'Cancel'), value: 'cancel', kind: 'ghost' },
+      { label: t('不保存', "Don't Save"), value: 'discard', kind: 'ghost' },
+      { label: t('保存', 'Save'), value: 'save', kind: 'primary', defaultAction: true },
     ],
   }).then((v) => v || 'cancel');
 }
@@ -163,13 +170,18 @@ export function confirmClose(fileName) {
  */
 export function confirmAction(opts) {
   return openModal({
-    title: opts.title || '请确认',
+    title: opts.title || t('请确认', 'Please Confirm'),
     glyph: opts.danger ? 'alert' : 'info',
     glyphKind: opts.danger ? 'danger' : 'info',
     bodyHtml: `<p>${opts.message || ''}</p>`,
     actions: [
-      { label: '取消', value: false, kind: 'ghost' },
-      { label: opts.okLabel || '确定', value: true, kind: opts.danger ? 'danger' : 'primary', defaultAction: true },
+      { label: t('取消', 'Cancel'), value: false, kind: 'ghost' },
+      {
+        label: opts.okLabel || t('确定', 'OK'),
+        value: true,
+        kind: opts.danger ? 'danger' : 'primary',
+        defaultAction: true,
+      },
     ],
   }).then((v) => v === true);
 }
@@ -181,15 +193,20 @@ export function confirmAction(opts) {
  */
 export function promptInput(opts) {
   return openModal({
-    title: opts.title || '输入',
+    title: opts.title || t('输入', 'Input'),
     glyph: 'chevronRight',
     bodyHtml:
       `<label class="field-label">${escapeHtml(opts.label || '')}</label>` +
       `<input class="text-input" id="modal-input" value="${escapeHtml(opts.value || '')}" ` +
       `placeholder="${escapeHtml(opts.placeholder || '')}" />`,
     actions: [
-      { label: '取消', value: null, kind: 'ghost' },
-      { label: opts.okLabel || '确定', value: '__OK__', kind: 'primary', defaultAction: true },
+      { label: t('取消', 'Cancel'), value: null, kind: 'ghost' },
+      {
+        label: opts.okLabel || t('确定', 'OK'),
+        value: '__OK__',
+        kind: 'primary',
+        defaultAction: true,
+      },
     ],
     onMount: (body, api) => {
       const input = body.querySelector('#modal-input');
@@ -224,6 +241,9 @@ const TYPE_RANK = { plaintext: 0, markdown: 1 };
  *
  * 直接从语言表推导（取每种语言的第一个扩展名），这样「能选到的类型」和
  * 「有语法高亮的类型」永远是同一份清单，加语言不用回来改这里。
+ *
+ * 注意：`label` 是模块期快照（「纯文本」这类名字会跟随界面语言），因此只作兜底；
+ * 真正渲染到下拉框时走 `languageLabel(id)`，在渲染点按当前语言求值。
  *
  * @type {Array<{id: string, ext: string, label: string}>}
  */
@@ -260,28 +280,34 @@ function extOf(name) {
  */
 export function newFileDialog(opts = {}) {
   const suggestName =
-    typeof opts.suggestName === 'function' ? opts.suggestName : (ext) => `未命名.${ext}`;
+    typeof opts.suggestName === 'function'
+      ? opts.suggestName
+      : (ext) => `${t('未命名', 'Untitled')}.${ext}`;
   const defaultExt = KNOWN_EXTS.has(opts.defaultExt) ? opts.defaultExt : NEW_FILE_TYPES[0].ext;
 
+  // 标签在渲染点才求值：语言切换后重新打开对话框即得到新语言的类型名
   const optionsHtml = NEW_FILE_TYPES.map(
-    (t) =>
-      `<option value="${escapeHtml(t.ext)}"${t.ext === defaultExt ? ' selected' : ''}>` +
-      `${escapeHtml(t.label)}（.${escapeHtml(t.ext)}）</option>`,
+    (item) =>
+      `<option value="${escapeHtml(item.ext)}"${item.ext === defaultExt ? ' selected' : ''}>` +
+      `${escapeHtml(languageLabel(item.id) || item.label)}（.${escapeHtml(item.ext)}）</option>`,
   ).join('');
 
   return openModal({
-    title: '新建文件',
+    title: t('新建文件', 'New File'),
     glyph: 'newFile',
     bodyHtml:
-      `<label class="field-label" for="newfile-name">文件名</label>` +
+      `<label class="field-label" for="newfile-name">${t('文件名', 'File Name')}</label>` +
       `<input class="text-input" id="newfile-name" spellcheck="false" autocomplete="off" ` +
       `value="${escapeHtml(suggestName(defaultExt))}" />` +
-      `<label class="field-label" for="newfile-type">文件类型</label>` +
+      `<label class="field-label" for="newfile-type">${t('文件类型', 'File Type')}</label>` +
       `<select class="text-input" id="newfile-type">${optionsHtml}</select>` +
-      `<p class="field-hint">也可以直接输入带扩展名的文件名（如 README.md），类型会自动跟随。</p>`,
+      `<p class="field-hint">${t(
+        '也可以直接输入带扩展名的文件名（如 README.md），类型会自动跟随。',
+        'You can also type a file name with an extension (e.g. README.md) — the type follows automatically.',
+      )}</p>`,
     actions: [
-      { label: '取消', value: null, kind: 'ghost' },
-      { label: '创建', value: '__OK__', kind: 'primary', defaultAction: true },
+      { label: t('取消', 'Cancel'), value: null, kind: 'ghost' },
+      { label: t('创建', 'Create'), value: '__OK__', kind: 'primary', defaultAction: true },
     ],
     onMount: (body, api) => {
       const nameEl = body.querySelector('#newfile-name');
@@ -378,15 +404,15 @@ export function newFileDialog(opts = {}) {
  */
 export function gotoLineDialog(info) {
   return openModal({
-    title: '转到行',
+    title: t('转到行', 'Go to Line'),
     glyph: 'chevronRight',
     bodyHtml:
-      `<label class="field-label">行号（1 - ${info.totalLines}）</label>` +
+      `<label class="field-label">${t('行号', 'Line number')}（1 - ${info.totalLines}）</label>` +
       `<input class="text-input" id="modal-input" type="number" min="1" max="${info.totalLines}" ` +
       `value="${info.current}" />`,
     actions: [
-      { label: '取消', value: null, kind: 'ghost' },
-      { label: '跳转', value: '__OK__', kind: 'primary', defaultAction: true },
+      { label: t('取消', 'Cancel'), value: null, kind: 'ghost' },
+      { label: t('跳转', 'Go'), value: '__OK__', kind: 'primary', defaultAction: true },
     ],
     onMount: (body, api) => {
       const input = body.querySelector('#modal-input');
@@ -415,37 +441,44 @@ export function gotoLineDialog(info) {
   });
 }
 
-/** 快捷键速查表分组定义。 */
-const SHORTCUT_GROUPS = [
-  {
-    name: '文件',
-    ids: [
-      'file.new', 'file.open', 'file.openFolder', 'file.save', 'file.saveAs',
-      'file.saveAll', 'file.close', 'file.reload',
-    ],
-  },
-  {
-    name: '编辑',
-    ids: [
-      'edit.undo', 'edit.redo', 'edit.cut', 'edit.copy', 'edit.paste', 'edit.selectAll',
-      'edit.duplicateLine', 'edit.deleteLine', 'edit.moveLineUp', 'edit.moveLineDown',
-      'edit.toggleComment', 'edit.multiCursorUp', 'edit.multiCursorDown',
-    ],
-  },
-  {
-    name: '搜索',
-    ids: ['search.find', 'search.replace', 'search.findNext', 'search.findPrev', 'search.gotoLine', 'search.findInFiles'],
-  },
-  {
-    name: '视图',
-    ids: ['view.commandPalette', 'view.toggleSidebar', 'view.wordWrap', 'view.zen', 'view.fontIncrease', 'view.fontDecrease', 'view.fontReset', 'view.preview', 'help.shortcuts'],
-  },
-];
+/**
+ * 快捷键速查表分组定义。
+ *
+ * 必须是函数：分组名走 `t()`，写成模块级常量会在 import 期被冻结成当时的语言。
+ * @return {{name: string, ids: string[]}[]}
+ */
+function shortcutGroups() {
+  return [
+    {
+      name: t('文件', 'File'),
+      ids: [
+        'file.new', 'file.open', 'file.openFolder', 'file.save', 'file.saveAs',
+        'file.saveAll', 'file.close', 'file.reload',
+      ],
+    },
+    {
+      name: t('编辑', 'Edit'),
+      ids: [
+        'edit.undo', 'edit.redo', 'edit.cut', 'edit.copy', 'edit.paste', 'edit.selectAll',
+        'edit.duplicateLine', 'edit.deleteLine', 'edit.moveLineUp', 'edit.moveLineDown',
+        'edit.toggleComment', 'edit.multiCursorUp', 'edit.multiCursorDown',
+      ],
+    },
+    {
+      name: t('搜索', 'Search'),
+      ids: ['search.find', 'search.replace', 'search.findNext', 'search.findPrev', 'search.gotoLine', 'search.findInFiles'],
+    },
+    {
+      name: t('视图', 'View'),
+      ids: ['view.commandPalette', 'view.toggleSidebar', 'view.wordWrap', 'view.zen', 'view.fontIncrease', 'view.fontDecrease', 'view.fontReset', 'view.preview', 'help.shortcuts'],
+    },
+  ];
+}
 
 /**
  * 已安装插件贡献的快捷键，按插件包分组。
  *
- * 插件命令是运行时才注册的，静态的 SHORTCUT_GROUPS 写不下它们的 id，
+ * 插件命令是运行时才注册的，静态的分组表写不下它们的 id，
  * 只能按 `plugin.` 前缀现取；没声明快捷键的插件不会出现在这里。
  *
  * @return {{name: string, ids: string[]}[]}
@@ -456,20 +489,27 @@ function pluginShortcutGroups() {
   for (const cmd of allCommands()) {
     if (!cmd.id.startsWith('plugin.')) continue;
     if (!cmd.keys || !cmd.keys.length) continue;
-    // 标题形如「文本处理包：转为大写」，冒号前是包名
-    const sep = String(cmd.title).indexOf('：');
-    const pack = sep > 0 ? cmd.title.slice(0, sep) : '插件';
+    // 标题形如「文本处理包：转为大写」/「Text Tools: To Uppercase」，冒号前是包名。
+    // 中文全角与英文半角都要认：英文界面下包名分隔可能换成半角冒号 + 空格。
+    const title = String(cmd.title);
+    const sepZh = title.indexOf('：');
+    const sepEn = title.indexOf(': ');
+    const sep = sepZh >= 0 && sepEn >= 0 ? Math.min(sepZh, sepEn) : Math.max(sepZh, sepEn);
+    const pack = sep > 0 ? title.slice(0, sep).trim() : t('插件', 'Plugin');
     if (!byPack.has(pack)) byPack.set(pack, []);
     byPack.get(pack).push(cmd.id);
   }
-  return [...byPack.entries()].map(([pack, ids]) => ({ name: `插件 · ${pack}`, ids }));
+  return [...byPack.entries()].map(([pack, ids]) => ({
+    name: t(`插件 · ${pack}`, `Plugin · ${pack}`),
+    ids,
+  }));
 }
 
 /**
  * 快捷键速查。
  */
 export function shortcutsDialog() {
-  const groupsHtml = [...SHORTCUT_GROUPS, ...pluginShortcutGroups()].map((group) => {
+  const groupsHtml = [...shortcutGroups(), ...pluginShortcutGroups()].map((group) => {
     const rows = group.ids
       .map((id) => allCommands().find((c) => c.id === id))
       .filter(Boolean)
@@ -494,15 +534,17 @@ export function shortcutsDialog() {
   }).join('');
 
   return openModal({
-    title: '快捷键速查',
+    title: t('快捷键速查', 'Keyboard Shortcuts'),
     glyph: 'help',
     wide: true,
     bodyHtml:
       `${groupsHtml}` +
       `<p style="color:var(--text-faint);font-size:11px;margin:14px 0 4px">` +
-      `提示：${IS_MAC ? '⌘ 对应 Command' : 'Ctrl 对应 Control'}，所有快捷键在命令面板（Ctrl+Shift+P）里也能找到；` +
-      `插件命令的键位由各插件包的 plugin.json 声明，装或卸插件后这张表会跟着变。</p>`,
-    actions: [{ label: '知道了', value: true, kind: 'primary', defaultAction: true }],
+      `${t('提示：', 'Tip: ')}${IS_MAC ? t('⌘ 对应 Command', '⌘ is Command') : t('Ctrl 对应 Control', 'Ctrl is Control')}${t(
+        '，所有快捷键在命令面板（Ctrl+Shift+P）里也能找到；插件命令的键位由各插件包的 plugin.json 声明，装或卸插件后这张表会跟着变。',
+        '. Every shortcut is also listed in the Command Palette (Ctrl+Shift+P). Plugin shortcuts are declared in each package\'s plugin.json, so this table changes when you install or remove a plugin.',
+      )}</p>`,
+    actions: [{ label: t('知道了', 'Got it'), value: true, kind: 'primary', defaultAction: true }],
   });
 }
 
@@ -511,32 +553,50 @@ export function shortcutsDialog() {
  */
 export function aboutDialog() {
   return openModal({
-    title: '关于 QuillPad',
+    title: t('关于 QuillPad', 'About QuillPad'),
     glyph: 'feather',
     bodyHtml:
       `<div class="about-body">` +
       `<div class="about-logo">${brandSvg(28)}</div>` +
       `<div class="about-name">QuillPad</div>` +
-      `<div class="about-ver">版本 ${APP_VERSION_LABEL} · 构建于 Vite + CodeMirror 6</div>` +
-      `<p class="about-desc">一个现代、克制、键盘优先的文本与代码编辑器。<br/>` +
-      `所有数据都留在你自己的机器上，没有账号，没有云端。</p>` +
+      `<div class="about-ver">${t('版本', 'Version')} ${APP_VERSION_LABEL} · ${t(
+        '构建于',
+        'Built with',
+      )} Vite + CodeMirror 6</div>` +
+      `<p class="about-desc">${t(
+        '一个现代、克制、键盘优先的文本与代码编辑器。',
+        'A modern, restrained, keyboard-first text and code editor.',
+      )}<br/>` +
+      `${t(
+        '所有数据都留在你自己的机器上，没有账号，没有云端。',
+        'All your data stays on your own machine — no accounts, no cloud.',
+      )}</p>` +
       `<div class="about-meta">` +
       `<span class="about-chip">File System Access</span>` +
       `<span class="about-chip">CodeMirror 6</span>` +
-      `<span class="about-chip">40+ 语言</span>` +
-      `<span class="about-chip">4 套主题</span>` +
-      `<span class="about-chip">零 CDN</span>` +
+      `<span class="about-chip">${t('40+ 语言', '40+ languages')}</span>` +
+      `<span class="about-chip">${t('4 套主题', '4 themes')}</span>` +
+      `<span class="about-chip">${t('零 CDN', 'Zero CDN')}</span>` +
       `</div>` +
       `<div class="about-licenses" data-role="licenses">` +
-      `<div class="about-licenses__title">开源许可</div>` +
-      `<p class="about-licenses__text">QuillPad 本身为自有软件；随包分发的第三方组件使用 ` +
-      `MIT / ISC / BSD / Apache-2.0 / SIL OFL 1.1 等宽松许可，` +
-      `完整清单与许可全文见安装目录下 <code>resources/licenses/</code> 中的 ` +
-      `<code>THIRD-PARTY-NOTICES.txt</code> 与 <code>OFL.txt</code>（随安装包分发）。</p>` +
-      `<p class="about-licenses__text">内置中文字体为 Noto Sans SC 子集（SIL OFL 1.1，` +
-      `由 <code>scripts/font-subset.py</code> 生成，可自由随应用再分发）。</p>` +
+      `<div class="about-licenses__title">${t('开源许可', 'Open Source Licenses')}</div>` +
+      `<p class="about-licenses__text">${t(
+        'QuillPad 本身为自有软件；随包分发的第三方组件使用 MIT / ISC / BSD / Apache-2.0 / SIL OFL 1.1 等宽松许可，完整清单与许可全文见安装目录下 ',
+        'QuillPad itself is proprietary software. Bundled third-party components are distributed under permissive licenses such as MIT / ISC / BSD / Apache-2.0 / SIL OFL 1.1. The full list and license texts are in ',
+      )}<code>resources/licenses/</code> ${t('中的', 'as')} ` +
+      `<code>THIRD-PARTY-NOTICES.txt</code> ${t('与', 'and')} <code>OFL.txt</code>${t(
+        '（随安装包分发）。',
+        ' (shipped with the installer).',
+      )}</p>` +
+      `<p class="about-licenses__text">${t(
+        '内置中文字体为 Noto Sans SC 子集（SIL OFL 1.1，由 ',
+        'The bundled CJK font is a subset of Noto Sans SC (SIL OFL 1.1, generated by ',
+      )}<code>scripts/font-subset.py</code> ${t(
+        '生成，可自由随应用再分发）。',
+        'and freely redistributable with the app).',
+      )}</p>` +
       `</div>` +
       `</div>`,
-    actions: [{ label: '关闭', value: true, kind: 'primary', defaultAction: true }],
+    actions: [{ label: t('关闭', 'Close'), value: true, kind: 'primary', defaultAction: true }],
   });
 }

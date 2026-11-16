@@ -26,7 +26,20 @@ import {
   BIG_FILE_THRESHOLD,
 } from './core/state.js';
 import { registerCommands } from './core/actions.js';
-import { runCommand } from './core/commands.js';
+import {
+  runCommand,
+  resetCommands,
+  allCommands,
+  getCommand,
+  defineCommand,
+} from './core/commands.js';
+import {
+  t,
+  setLocale,
+  getLocale,
+  normalizeLocale,
+  LOCALE_LABELS,
+} from './core/i18n.js';
 import { loadSettings, saveSettings, pickSettings, clamp, FONT_SIZE_MIN, FONT_SIZE_MAX, fontStepFor, SIDEBAR_MIN, SIDEBAR_MAX } from './core/settings.js';
 import {
   loadSession,
@@ -93,7 +106,7 @@ import * as printPipeline from './core/print.js';
 import * as desktopBridge from './core/desktop.js';
 import * as pluginHost from './core/plugins/host.js';
 import { debounce } from './core/utils.js';
-import { WELCOME_MD } from './samples.js';
+import { welcomeMarkdown, isWelcomeTemplate, WELCOME_NAMES } from './samples.js';
 import { icon } from './ui/icons.js';
 
 /** 单个文件读取上限（字节）。 */
@@ -162,6 +175,37 @@ export async function createApp() {
     lastCursor: { line: 1, column: 1, selectionLength: 0, lines: 0, chars: 0 },
   };
 
+  /* 语言必须在「任何 UI 渲染 / 命令注册」之前定下来：菜单项、命令标题、
+   * 工具栏 tooltip 都是注册时就把 t() 的结果写死的。
+   * main.js 的 boot() 里也做了一次（给致命错误页用），这里再按磁盘设置
+   * 校准一次，保证 createApp() 被测试脚本直接调用时语言同样正确。 */
+  const initialSettings = loadSettings();
+  setLocale(initialSettings.locale);
+
+  /* index.html 里的静态文案没法用 t()，启动时与切换语言时由 JS 覆写一遍。
+   * <html lang> 由 i18n.js 的 setLocale() 负责，这里只管 title / aria-label。 */
+  const applyStaticLabels = () => {
+    // 有活动标签时 document.title 由 updateTitle() 写成「文件名 — QuillPad」，
+    // 不能用产品标语盖掉；产品标语只在没有标签时作为页面标题出现。
+    if (!activeTab()) {
+      document.title = t(
+        'QuillPad · 现代文本与代码编辑器',
+        'QuillPad — A modern text and code editor',
+      );
+    }
+    const labels = [
+      ['menubar', t('主菜单', 'Main menu')],
+      ['toolbar', t('工具栏', 'Toolbar')],
+      ['sidebar', t('侧边栏', 'Sidebar')],
+      ['tabbar', t('已打开文件', 'Open files')],
+    ];
+    for (const [id, label] of labels) {
+      const node = document.getElementById(id);
+      if (node) node.setAttribute('aria-label', label);
+    }
+  };
+  applyStaticLabels();
+
   app.toast = toast;
   app.supportsFsa = supportsFsa();
 
@@ -201,9 +245,30 @@ export async function createApp() {
 
   /* -------------------------------------------------------------- 设置应用 */
 
-  const settings = loadSettings();
+  const settings = initialSettings;
   /** v2：完整设置对象（含 decorations / pdf / macro / plugins 四组嵌套） */
   app.settings = settings;
+
+  // 主进程读不到 localStorage，语言另存一份到 <userData>/locale.json。
+  // 启动时同步一次，否则重启后系统原生对话框会退回中文。
+  try {
+    const desktopLocaleReady = window.quillpadDesktop?.setLocale?.(settings.locale);
+    if (desktopLocaleReady && typeof desktopLocaleReady.catch === 'function') {
+      desktopLocaleReady.catch((err) => {
+        console.warn('[QuillPad] 启动时同步界面语言失败：', err);
+      });
+    }
+    // 多窗口：别的窗口切换语言时跟随（发起方不会收到自己的广播，
+    // 且 applyLocale 对同语言直接 return，不会形成来回广播）。
+    window.quillpadDesktop?.onLocaleChange?.((locale) => {
+      const next = normalizeLocale(locale);
+      if (next === getLocale()) return;
+      if (typeof app.applyLocale === 'function') void app.applyLocale(next);
+    });
+  } catch (err) {
+    console.warn('[QuillPad] 桌面语言桥不可用：', err);
+  }
+
   // 浅色成为默认主题：从没主动选过主题的老用户（存的是旧默认 aurora）
   // 迁移到新的默认值，避免「装了新版本还是黑底」。显式选过的保持不动。
   state.themePinned = !!settings.themePinned;
@@ -304,7 +369,8 @@ export async function createApp() {
 
   /* --------------------------------------------------------------- 菜单栏 */
 
-  initMenubar(el.menubar, app);
+  // 菜单栏返回 { render }；切语言时由 refreshChrome 重绘顶层菜单。
+  app.menubar = initMenubar(el.menubar, app);
   initEditorContextMenu(app, el.editorHost);
   app.tooltips = initTooltips();
 
@@ -418,8 +484,11 @@ export async function createApp() {
   function updateTitle() {
     const tab = activeTab();
     if (!tab) {
-      el.title.innerHTML = '<span class="doc-name">未打开文件</span>';
-      document.title = 'QuillPad';
+      el.title.innerHTML = `<span class="doc-name">${t('未打开文件', 'No file open')}</span>`;
+      document.title = t(
+        'QuillPad · 现代文本与代码编辑器',
+        'QuillPad — A modern text and code editor',
+      );
       return;
     }
     const dirty = isDirty(tab);
@@ -536,7 +605,7 @@ export async function createApp() {
     const box = document.createElement('span');
     box.className = 'qp-img-missing';
     box.setAttribute('data-qp-node', 'image-missing');
-    box.textContent = `图片未能加载：${src}`;
+    box.textContent = t(`图片未能加载：${src}`, `Image failed to load: ${src}`);
     box.style.cssText =
       'display:inline-flex;align-items:center;gap:6px;padding:4px 10px;' +
       'border:1px dashed var(--border);border-radius:6px;' +
@@ -612,7 +681,7 @@ export async function createApp() {
       copyText: async (text) => {
         const ok = await copyToClipboard(text);
         toast(
-          ok ? `已复制 ${text.length} 个字符` : '剪贴板不可用',
+          ok ? t(`已复制 ${text.length} 个字符`, `Copied ${text.length} characters`) : t('剪贴板不可用', 'Clipboard unavailable'),
           ok ? 'success' : 'error',
           1800,
         );
@@ -622,7 +691,7 @@ export async function createApp() {
       jumpToFootnote: (id, info) => {
         const def = info && info.defs ? info.defs.find((d) => d.id === id) : null;
         if (!def) {
-          toast('未找到该脚注的定义', 'info', 2000);
+          toast(t('未找到该脚注的定义', 'No definition found for this footnote'), 'info', 2000);
           return;
         }
         app.editor.gotoPos(def.from);
@@ -689,15 +758,15 @@ export async function createApp() {
     const tab = activeTab();
     let target = mode;
     if (!tab) {
-      toast('请先打开一个文件', 'info', 1600);
+      toast(t('请先打开一个文件', 'Open a file first'), 'info', 1600);
       return false;
     }
     if (target !== 'source' && tab.language !== 'markdown') {
-      toast('仅 Markdown 支持所见即所得与分屏', 'info', 2200);
+      toast(t('仅 Markdown 支持所见即所得与分屏', 'WYSIWYG and split view are only available for Markdown'), 'info', 2200);
       target = 'source';
     }
     if (target !== 'source' && isHardLimited({ ...tab, lines: tabLines(tab) })) {
-      toast('文件过大（超过 20MB / 500k 行），已禁用所见即所得与分屏', 'error', 3600);
+      toast(t('文件过大（超过 20MB / 500k 行），已禁用所见即所得与分屏', 'File too large (over 20MB / 500k lines). WYSIWYG and split view are disabled.'), 'error', 3600);
       target = 'source';
     }
     if (target !== 'source' && shouldDegrade({ content: tab.content, lines: tabLines(tab) })
@@ -706,7 +775,7 @@ export async function createApp() {
       state.wysiwygDegraded = true;
       target = 'source';
       toast(
-        `文件较大（${(tab.content.length / 1024 / 1024).toFixed(1)} MB / ${tabLines(tab)} 行），已切至源码视图以保持流畅`,
+        t(`文件较大（${(tab.content.length / 1024 / 1024).toFixed(1)} MB / ${tabLines(tab)} 行），已切至源码视图以保持流畅`, `Large file (${(tab.content.length / 1024 / 1024).toFixed(1)} MB / ${tabLines(tab)} lines). Switched to source view to keep things smooth.`),
         'info',
         4200,
       );
@@ -733,11 +802,11 @@ export async function createApp() {
   app.cycleViewMode = function cycleViewMode() {
     const tab = activeTab();
     if (!tab) {
-      toast('请先打开一个文件', 'info', 1600);
+      toast(t('请先打开一个文件', 'Open a file first'), 'info', 1600);
       return false;
     }
     if (tab.language !== 'markdown') {
-      toast('仅 Markdown 支持切换视图模式', 'info', 2000);
+      toast(t('仅 Markdown 支持切换视图模式', 'View modes can only be switched for Markdown'), 'info', 2000);
       return false;
     }
     return app.setViewMode(nextViewMode(state.viewMode), { user: true });
@@ -753,7 +822,7 @@ export async function createApp() {
     state.wysiwygDegraded = false;
     updateDegradeBanner();
     app.setViewMode('wysiwyg');
-    toast('已为该文件启用所见即所得（本次会话内有效）', 'success', 2600);
+    toast(t('已为该文件启用所见即所得（本次会话内有效）', 'WYSIWYG enabled for this file (this session only)'), 'success', 2600);
   };
 
   /** 大文件降级提示条（不依赖 toast，因为需要常驻 + 可点击）。 */
@@ -769,8 +838,8 @@ export async function createApp() {
       banner.className = 'qp-degrade-banner';
       banner.innerHTML =
         '<span class="qp-degrade-banner__text"></span>' +
-        '<button type="button" class="qp-degrade-banner__btn" data-role="force-wysiwyg">仍要启用</button>' +
-        '<button type="button" class="qp-degrade-banner__close" data-role="dismiss-degrade" aria-label="关闭提示">×</button>';
+        `<button type="button" class="qp-degrade-banner__btn" data-role="force-wysiwyg">${t('仍要启用', 'Enable Anyway')}</button>` +
+        `<button type="button" class="qp-degrade-banner__close" data-role="dismiss-degrade" aria-label="${t('关闭提示', 'Dismiss')}">×</button>`;
       banner.addEventListener('click', (e) => {
         const force = e.target.closest('[data-role="force-wysiwyg"]');
         if (force) {
@@ -788,8 +857,13 @@ export async function createApp() {
     const lines = tab ? tabLines(tab) : 0;
     const text = banner.querySelector('.qp-degrade-banner__text');
     if (text) {
-      text.textContent = `文件较大（${size} MB / ${lines} 行），已切至源码视图以保持流畅`;
+      text.textContent = t(`文件较大（${size} MB / ${lines} 行），已切至源码视图以保持流畅`, `Large file (${size} MB / ${lines} lines). Switched to source view to keep things smooth.`);
     }
+    // 提示条可能是切语言之前就常驻的：每次刷新都重写按钮文案与无障碍标签。
+    const forceBtn = banner.querySelector('[data-role="force-wysiwyg"]');
+    if (forceBtn) forceBtn.textContent = t('仍要启用', 'Enable Anyway');
+    const closeBtn = banner.querySelector('[data-role="dismiss-degrade"]');
+    if (closeBtn) closeBtn.setAttribute('aria-label', t('关闭提示', 'Dismiss'));
   }
   app.updateDegradeBanner = updateDegradeBanner;
 
@@ -812,20 +886,20 @@ export async function createApp() {
   function buildSession() {
     return {
       version: 1,
-      tabs: state.tabs.map((t) => ({
-        name: t.name,
-        path: t.path,
-        content: t.content,
-        savedContent: t.savedContent,
-        savedEol: t.savedEol,
-        language: t.language,
-        eol: t.eol,
-        encoding: t.encoding,
-        handleKey: t.handleKey,
-        nativePath: t.nativePath || null,
-        nativeBom: !!t.nativeBom,
-        bigFile: t.bigFile,
-        scrollTop: app.editor.scrollTops.get(t.id) || 0,
+      tabs: state.tabs.map((tab) => ({
+        name: tab.name,
+        path: tab.path,
+        content: tab.content,
+        savedContent: tab.savedContent,
+        savedEol: tab.savedEol,
+        language: tab.language,
+        eol: tab.eol,
+        encoding: tab.encoding,
+        handleKey: tab.handleKey,
+        nativePath: tab.nativePath || null,
+        nativeBom: !!tab.nativeBom,
+        bigFile: tab.bigFile,
+        scrollTop: app.editor.scrollTops.get(tab.id) || 0,
       })),
       activeIndex: Math.max(0, state.tabs.findIndex((t) => t.id === state.activeTabId)),
       recent: state.recent.slice(0, 12),
@@ -857,21 +931,21 @@ export async function createApp() {
     state.folder = session.folder || null;
 
     const tabs = (session.tabs || [])
-      .filter((t) => t && typeof t.content === 'string')
-      .map((t) => ({
+      .filter((tab) => tab && typeof tab.content === 'string')
+      .map((tab) => ({
         id: nextTabId(),
-        name: t.name || '未命名.txt',
-        path: t.path || t.name || '未命名.txt',
-        content: t.content,
-        savedContent: typeof t.savedContent === 'string' ? t.savedContent : t.content,
-        savedEol: t.savedEol || t.eol || 'LF',
-        language: t.language || guessLanguage(t.name),
-        eol: t.eol || 'LF',
-        encoding: t.encoding || 'UTF-8',
-        handleKey: t.handleKey || null,
-        nativePath: t.nativePath || null,
-        nativeBom: !!t.nativeBom,
-        bigFile: !!t.bigFile,
+        name: tab.name || t('未命名.txt', 'Untitled.txt'),
+        path: tab.path || tab.name || t('未命名.txt', 'Untitled.txt'),
+        content: tab.content,
+        savedContent: typeof tab.savedContent === 'string' ? tab.savedContent : tab.content,
+        savedEol: tab.savedEol || tab.eol || 'LF',
+        language: tab.language || guessLanguage(tab.name),
+        eol: tab.eol || 'LF',
+        encoding: tab.encoding || 'UTF-8',
+        handleKey: tab.handleKey || null,
+        nativePath: tab.nativePath || null,
+        nativeBom: !!tab.nativeBom,
+        bigFile: !!tab.bigFile,
         _dirtyShown: false,
       }));
 
@@ -882,8 +956,8 @@ export async function createApp() {
       });
       const activeIdx = Math.min(Math.max(0, session.activeIndex || 0), tabs.length - 1);
       setTabs(tabs, tabs[activeIdx].id);
-      tabs.forEach((t) => {
-        t._dirtyShown = isDirty(t);
+      tabs.forEach((tab) => {
+        tab._dirtyShown = isDirty(tab);
       });
       app.tabsView.render();
     }
@@ -907,18 +981,30 @@ export async function createApp() {
   /* ------------------------------------------------------------ 标签操作 */
 
   /**
+   * 「未命名」文件名的识别规则。
+   *
+   * 中英文两种前缀都算：用户切过语言之后，同一个会话里可能同时存在
+   * 「未命名.txt」与「Untitled.txt」，序号必须接着往下排而不是从 1 重来。
+   */
+  const UNTITLED_PATTERN = /^(?:未命名|Untitled)/;
+
+  /**
    * 生成下一个「未命名」文件名。
    *
    * 只统计「从未落盘」的未命名标签，序号接着往下排：未命名.txt → 未命名2.md。
    * 扩展名跟着用户选的文件类型走，这样 .md 新建出来就是 Markdown 标签。
+   *
+   * 文件名本身属于数据而不是界面文案，但前缀跟随界面语言更符合预期，
+   * 因此这里用 t() 取前缀，同时用 UNTITLED_PATTERN 兼容两种写法。
    *
    * @param {string} [ext] 扩展名（不含点）
    * @return {string}
    */
   app.nextUntitledName = function nextUntitledName(ext = 'txt') {
     const count =
-      state.tabs.filter((t) => !t.handleKey && /^未命名/.test(t.name)).length + 1;
-    return count <= 1 ? `未命名.${ext}` : `未命名${count}.${ext}`;
+      state.tabs.filter((tab) => !tab.handleKey && UNTITLED_PATTERN.test(tab.name)).length + 1;
+    const base = t('未命名', 'Untitled');
+    return count <= 1 ? `${base}.${ext}` : `${base}${count}.${ext}`;
   };
 
   /**
@@ -989,7 +1075,7 @@ export async function createApp() {
     try {
       const file = await handle.getFile();
       if (file.size > MAX_FILE_SIZE) {
-        toast(`文件过大（${(file.size / 1024 / 1024).toFixed(1)} MB），已跳过`, 'error', 3600);
+        toast(t(`文件过大（${(file.size / 1024 / 1024).toFixed(1)} MB），已跳过`, `File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Skipped.`), 'error', 3600);
         return null;
       }
       // 桌面壳里能拿到 File 的真实磁盘路径：记住它，右键「复制完整路径 /
@@ -1021,7 +1107,7 @@ export async function createApp() {
       };
       addTab(tab, true);
       if (tab.bigFile) {
-        toast(`「${tab.name}」超过 2MB，已关闭语法高亮以保证编辑流畅`, 'info', 4000);
+        toast(t(`「${tab.name}」超过 2MB，已关闭语法高亮以保证编辑流畅`, `"${tab.name}" is over 2MB, so syntax highlighting is off to keep editing smooth`), 'info', 4000);
         app.editor.loadedLang.set(tab.id, 'plaintext');
       }
       addRecent(tab.name, path, key);
@@ -1029,7 +1115,7 @@ export async function createApp() {
       return tab;
     } catch (err) {
       console.error(err);
-      toast(`打开文件失败：${err.message || err}`, 'error', 3600);
+      toast(t(`打开文件失败：${err.message || err}`, `Failed to open file: ${err.message || err}`), 'error', 3600);
       return null;
     }
   };
@@ -1046,7 +1132,7 @@ export async function createApp() {
       return existing;
     }
     if (file.size > MAX_FILE_SIZE) {
-      toast(`文件过大（${(file.size / 1024 / 1024).toFixed(1)} MB），已跳过`, 'error', 3600);
+      toast(t(`文件过大（${(file.size / 1024 / 1024).toFixed(1)} MB），已跳过`, `File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Skipped.`), 'error', 3600);
       return null;
     }
     try {
@@ -1066,11 +1152,11 @@ export async function createApp() {
         _dirtyShown: false,
       };
       addTab(tab, true);
-      if (tab.bigFile) toast(`「${tab.name}」超过 2MB，已关闭语法高亮`, 'info', 3600);
+      if (tab.bigFile) toast(t(`「${tab.name}」超过 2MB，已关闭语法高亮`, `"${tab.name}" is over 2MB, so syntax highlighting is off`), 'info', 3600);
       addRecent(tab.name, data.name, null);
       return tab;
     } catch (err) {
-      toast(`读取文件失败：${err.message || err}`, 'error', 3600);
+      toast(t(`读取文件失败：${err.message || err}`, `Failed to read file: ${err.message || err}`), 'error', 3600);
       return null;
     }
   };
@@ -1083,12 +1169,12 @@ export async function createApp() {
       for (const handle of handles) {
         await app.openFromHandle(handle);
       }
-      if (handles.length > 1) toast(`已打开 ${handles.length} 个文件`, 'success');
+      if (handles.length > 1) toast(t(`已打开 ${handles.length} 个文件`, `Opened ${handles.length} files`), 'success');
     } else {
       const files = await pickFilesLegacy(true);
       if (!files.length) return;
       for (const file of files) await app.openFileObject(file);
-      toast('当前浏览器不支持直接写回磁盘，保存时会下载文件', 'info', 3600);
+      toast(t('当前浏览器不支持直接写回磁盘，保存时会下载文件', 'This browser cannot write to disk directly; saving will download the file'), 'info', 3600);
     }
   };
 
@@ -1097,7 +1183,7 @@ export async function createApp() {
    */
   app.openFolder = async function openFolder() {
     if (!supportsFsa() || typeof window.showDirectoryPicker !== 'function') {
-      toast('当前浏览器不支持「打开文件夹」，请使用 Chrome / Edge', 'error', 3600);
+      toast(t('当前浏览器不支持「打开文件夹」，请使用 Chrome / Edge', 'This browser does not support "Open Folder". Please use Chrome or Edge.'), 'error', 3600);
       return;
     }
     const handle = await pickDirectory();
@@ -1112,7 +1198,7 @@ export async function createApp() {
     app.persistSettings();
     app.toolbar.update();
     app.persistSession();
-    toast(`已打开文件夹：${handle.name}`, 'success');
+    toast(t(`已打开文件夹：${handle.name}`, `Folder opened: ${handle.name}`), 'success');
   };
 
   /** 恢复上次的文件夹（需要用户手势内申请权限）。 */
@@ -1120,18 +1206,18 @@ export async function createApp() {
     if (!state.folder || !state.folder.handleKey) return;
     const handle = await getDirHandle(state.folder.handleKey);
     if (!handle) {
-      toast('无法恢复上次的文件夹，请重新打开', 'error');
+      toast(t('无法恢复上次的文件夹，请重新打开', 'Could not restore the last folder. Please open it again.'), 'error');
       state.folder = null;
       app.sidebar.render();
       return;
     }
     const ok = await ensurePermission(handle, 'readwrite');
     if (!ok) {
-      toast('未获得文件夹访问权限', 'error');
+      toast(t('未获得文件夹访问权限', 'Folder access was not granted'), 'error');
       return;
     }
     await app.sidebar.setFolder(handle);
-    toast(`已恢复文件夹：${handle.name}`, 'success');
+    toast(t(`已恢复文件夹：${handle.name}`, `Folder restored: ${handle.name}`), 'success');
   };
 
   /** 关闭文件夹。 */
@@ -1147,11 +1233,11 @@ export async function createApp() {
   /** 刷新文件夹树。 */
   app.refreshFolder = async function refreshFolder() {
     if (!app.sidebar.handle) {
-      toast('还没有打开文件夹', 'info');
+      toast(t('还没有打开文件夹', 'No folder is open'), 'info');
       return;
     }
     await app.sidebar.refresh();
-    toast('已刷新文件夹', 'success');
+    toast(t('已刷新文件夹', 'Folder refreshed'), 'success');
   };
 
   /**
@@ -1197,18 +1283,18 @@ export async function createApp() {
     try {
       const res = await bridge.readFile(target);
       if (!res || !res.ok) {
-        toast(`打开文件失败：${(res && res.error) || '无法读取文件'}`, 'error', 3600);
+        toast(t(`打开文件失败：${(res && res.error) || '无法读取文件'}`, `Failed to open file: ${(res && res.error) || 'cannot read file'}`), 'error', 3600);
         return false;
       }
       if (res.size > MAX_FILE_SIZE) {
-        toast(`文件过大（${(res.size / 1024 / 1024).toFixed(1)} MB），已跳过`, 'error', 3600);
+        toast(t(`文件过大（${(res.size / 1024 / 1024).toFixed(1)} MB），已跳过`, `File too large (${(res.size / 1024 / 1024).toFixed(1)} MB). Skipped.`), 'error', 3600);
         return false;
       }
       const bytes = res.bytes instanceof Uint8Array ? res.bytes : new Uint8Array(res.bytes || []);
       const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
       const decoded = decodeBytes(buffer);
       const eol = detectEol(decoded.text);
-      const name = res.name || target.split(/[\\/]/).pop() || '未命名.txt';
+      const name = res.name || target.split(/[\\/]/).pop() || t('未命名.txt', 'Untitled.txt');
 
       const tab = {
         id: nextTabId(),
@@ -1228,7 +1314,7 @@ export async function createApp() {
       };
       addTab(tab, true);
       if (tab.bigFile) {
-        toast(`「${tab.name}」超过 2MB，已关闭语法高亮以保证编辑流畅`, 'info', 4000);
+        toast(t(`「${tab.name}」超过 2MB，已关闭语法高亮以保证编辑流畅`, `"${tab.name}" is over 2MB, so syntax highlighting is off to keep editing smooth`), 'info', 4000);
         app.editor.loadedLang.set(tab.id, 'plaintext');
       }
       addRecent(tab.name, target, null, target);
@@ -1236,7 +1322,7 @@ export async function createApp() {
       return true;
     } catch (err) {
       console.error(err);
-      toast(`打开文件失败：${err.message || err}`, 'error', 3600);
+      toast(t(`打开文件失败：${err.message || err}`, `Failed to open file: ${err.message || err}`), 'error', 3600);
       return false;
     }
   };
@@ -1270,7 +1356,7 @@ export async function createApp() {
       const bridge = window.quillpadDesktop;
       if (!opts.saveAs && tab.nativePath && bridge && typeof bridge.writeFile === 'function') {
         const res = await bridge.writeFile(tab.nativePath, payload, { bom: !!tab.nativeBom });
-        if (!res || !res.ok) throw new Error((res && res.error) || '写入失败');
+        if (!res || !res.ok) throw new Error((res && res.error) || t('写入失败', 'write failed'));
         tab.savedContent = tab.content;
         tab.savedEol = tab.eol;
         tab.encoding = 'UTF-8';
@@ -1280,7 +1366,7 @@ export async function createApp() {
         updateTitle();
         app.statusbar.update();
         persistSession();
-        if (!opts.silent) toast(`已保存 ${tab.name}`, 'success');
+        if (!opts.silent) toast(t(`已保存 ${tab.name}`, `Saved ${tab.name}`), 'success');
         return true;
       }
 
@@ -1292,12 +1378,12 @@ export async function createApp() {
           const picked = await desktopBridge.saveDialog({ defaultName: tab.name });
           if (!picked || !picked.ok) {
             if (picked && picked.canceled) return false;
-            throw new Error((picked && picked.error) || '无法打开保存对话框');
+            throw new Error((picked && picked.error) || t('无法打开保存对话框', 'Cannot open the save dialog'));
           }
           const target = String(picked.path || '');
-          if (!target) throw new Error('保存对话框没有返回路径');
+          if (!target) throw new Error(t('保存对话框没有返回路径', 'The save dialog returned no path'));
           const written = await bridge.writeFile(target, payload, { bom: !!tab.nativeBom });
-          if (!written || !written.ok) throw new Error((written && written.error) || '写入失败');
+          if (!written || !written.ok) throw new Error((written && written.error) || t('写入失败', 'write failed'));
 
           const base = target.split(/[\\/]/).pop() || tab.name;
           tab.name = base;
@@ -1319,7 +1405,7 @@ export async function createApp() {
           updateTitle();
           app.statusbar.update();
           persistSession();
-          if (!opts.silent) toast(`已保存 ${base}`, 'success');
+          if (!opts.silent) toast(t(`已保存 ${base}`, `Saved ${base}`), 'success');
           return true;
         }
 
@@ -1347,7 +1433,7 @@ export async function createApp() {
           app.tabsView.render();
           updateTitle();
           app.statusbar.update();
-          if (!opts.silent) toast('已下载文件（当前浏览器不支持直接写盘）', 'success');
+          if (!opts.silent) toast(t('已下载文件（当前浏览器不支持直接写盘）', 'File downloaded (this browser cannot write to disk directly)'), 'success');
           return true;
         }
       }
@@ -1362,11 +1448,11 @@ export async function createApp() {
       updateTitle();
       app.statusbar.update();
       persistSession();
-      if (!opts.silent) toast(`已保存 ${tab.name}`, 'success');
+      if (!opts.silent) toast(t(`已保存 ${tab.name}`, `Saved ${tab.name}`), 'success');
       return true;
     } catch (err) {
       console.error(err);
-      toast(`保存失败：${err.message || err}`, 'error', 3600);
+      toast(t(`保存失败：${err.message || err}`, `Save failed: ${err.message || err}`), 'error', 3600);
       return false;
     } finally {
       app.savingTabs.delete(tab.id);
@@ -1378,7 +1464,7 @@ export async function createApp() {
   app.saveActive = async function saveActive() {
     const tab = activeTab();
     if (!tab) {
-      toast('没有需要保存的文件', 'info');
+      toast(t('没有需要保存的文件', 'No file to save'), 'info');
       return false;
     }
     return app.saveTab(tab);
@@ -1388,7 +1474,7 @@ export async function createApp() {
   app.saveActiveAs = async function saveActiveAs() {
     const tab = activeTab();
     if (!tab) {
-      toast('没有需要保存的文件', 'info');
+      toast(t('没有需要保存的文件', 'No file to save'), 'info');
       return false;
     }
     return app.saveTab(tab, { saveAs: true });
@@ -1398,7 +1484,7 @@ export async function createApp() {
   app.saveAll = async function saveAll() {
     const dirtyTabs = state.tabs.filter((t) => isDirty(t));
     if (!dirtyTabs.length) {
-      toast('所有文件都已保存', 'info');
+      toast(t('所有文件都已保存', 'All files are saved'), 'info');
       return;
     }
     let ok = 0;
@@ -1407,7 +1493,7 @@ export async function createApp() {
       const done = await app.saveTab(tab);
       if (done) ok += 1;
     }
-    toast(`已保存 ${ok} / ${dirtyTabs.length} 个文件`, ok ? 'success' : 'info');
+    toast(t(`已保存 ${ok} / ${dirtyTabs.length} 个文件`, `Saved ${ok} of ${dirtyTabs.length} files`), ok ? 'success' : 'info');
   };
 
   /** 重新加载当前文件（从磁盘）。 */
@@ -1420,7 +1506,7 @@ export async function createApp() {
     if (tab.nativePath && bridge && typeof bridge.readFile === 'function') {
       try {
         const res = await bridge.readFile(tab.nativePath);
-        if (!res || !res.ok) throw new Error((res && res.error) || '无法读取原文件');
+        if (!res || !res.ok) throw new Error((res && res.error) || t('无法读取原文件', 'Cannot read the original file'));
         const bytes = res.bytes instanceof Uint8Array ? res.bytes : new Uint8Array(res.bytes || []);
         const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
         const decoded = decodeBytes(buffer);
@@ -1436,20 +1522,20 @@ export async function createApp() {
         updateTitle();
         app.statusbar.update();
         updatePreview();
-        toast('已从磁盘重新加载', 'success');
+        toast(t('已从磁盘重新加载', 'Reloaded from disk'), 'success');
       } catch (err) {
-        toast(`重新加载失败：${err.message || err}`, 'error');
+        toast(t(`重新加载失败：${err.message || err}`, `Reload failed: ${err.message || err}`), 'error');
       }
       return;
     }
 
     if (!tab.handleKey) {
-      toast('该文件没有关联磁盘句柄，无法重新加载', 'info');
+      toast(t('该文件没有关联磁盘句柄，无法重新加载', 'This file has no disk handle, so it cannot be reloaded'), 'info');
       return;
     }
     const handle = await getFileHandle(tab.handleKey);
     if (!handle || !(await ensurePermission(handle, 'read'))) {
-      toast('无法读取原文件', 'error');
+      toast(t('无法读取原文件', 'Cannot read the original file'), 'error');
       return;
     }
     try {
@@ -1465,9 +1551,9 @@ export async function createApp() {
       updateTitle();
       app.statusbar.update();
       updatePreview();
-      toast('已从磁盘重新加载', 'success');
+      toast(t('已从磁盘重新加载', 'Reloaded from disk'), 'success');
     } catch (err) {
-      toast(`重新加载失败：${err.message || err}`, 'error');
+      toast(t(`重新加载失败：${err.message || err}`, `Reload failed: ${err.message || err}`), 'error');
     }
   };
 
@@ -1562,16 +1648,16 @@ export async function createApp() {
     try {
       await navigator.clipboard.writeText(text);
       if (abs) {
-        toast('完整路径已复制到剪贴板', 'success');
+        toast(t('完整路径已复制到剪贴板', 'Full path copied to the clipboard'), 'success');
       } else if (tab.handleKey) {
         // 旧版本用 File System Access API 保存的标签：文件在磁盘上，但句柄只有
         // 文件名、拿不到目录，所以这里**不能**说「尚未保存到磁盘」（那是假话）。
-        toast('该文件已保存，但系统没记录它的完整路径；用「另存为」重新存一次即可恢复', 'info', 4000);
+        toast(t('该文件已保存，但系统没记录它的完整路径；用「另存为」重新存一次即可恢复', 'This file is saved, but the system did not record its full path. Use "Save As" once to restore it.'), 'info', 4000);
       } else {
-        toast('该文件尚未保存到磁盘，已复制文件名', 'info');
+        toast(t('该文件尚未保存到磁盘，已复制文件名', 'This file is not on disk yet; the file name was copied instead'), 'info');
       }
     } catch {
-      toast('复制失败，请检查剪贴板权限', 'error');
+      toast(t('复制失败，请检查剪贴板权限', 'Copy failed. Please check the clipboard permission.'), 'error');
     }
   };
 
@@ -1585,19 +1671,19 @@ export async function createApp() {
     if (!abs) {
       toast(
         tab.handleKey
-          ? '该文件已保存，但系统没记录它的完整路径；用「另存为」重新存一次即可定位'
-          : '该文件还没有磁盘路径，无法在文件夹中定位',
+          ? t('该文件已保存，但系统没记录它的完整路径；用「另存为」重新存一次即可定位', 'This file is saved, but the system did not record its full path. Use "Save As" once to reveal it.')
+          : t('该文件还没有磁盘路径，无法在文件夹中定位', 'This file has no disk path yet, so it cannot be revealed in the folder'),
         'info',
         4000,
       );
       return;
     }
     if (!desktopBridge.canRevealInFolder()) {
-      toast('当前环境不支持打开文件所在位置', 'info');
+      toast(t('当前环境不支持打开文件所在位置', 'Revealing files in the folder is not supported in this environment'), 'info');
       return;
     }
     const res = await desktopBridge.revealInFolder(abs);
-    if (!res || !res.ok) toast(`定位失败：${(res && res.error) || '未知错误'}`, 'error', 3000);
+    if (!res || !res.ok) toast(t(`定位失败：${(res && res.error) || '未知错误'}`, `Could not reveal the file: ${(res && res.error) || 'unknown error'}`), 'error', 3000);
   };
 
   /**
@@ -1607,11 +1693,11 @@ export async function createApp() {
   app.revealInTree = async function revealInTree(tab) {
     if (!tab) return;
     if (!app.sidebar.handle) {
-      toast('还没有打开文件夹', 'info');
+      toast(t('还没有打开文件夹', 'No folder is open'), 'info');
       return;
     }
     const ok = await app.sidebar.revealPath(tab.path);
-    if (!ok) toast('文件树中找不到该文件', 'info');
+    if (!ok) toast(t('文件树中找不到该文件', 'The file was not found in the folder tree'), 'info');
     state.sidebarVisible = true;
     el.sidebar.hidden = false;
     el.sidebarResizer.hidden = false;
@@ -1738,7 +1824,7 @@ export async function createApp() {
     applySyntaxPalette(theme.id);
     app.editor.setTheme(theme.id);
     app.persistSettings();
-    toast(`主题已切换为 ${theme.label}`, 'info', 1500);
+    toast(t(`主题已切换为 ${theme.label}`, `Theme switched to ${theme.label}`), 'info', 1500);
   };
 
   /** 循环切换主题。 */
@@ -1797,7 +1883,7 @@ export async function createApp() {
     app.persistSettings();
     app.toolbar.update();
     app.statusbar.update();
-    toast(state.focusMode ? '专注模式已开启' : '专注模式已关闭', 'info', 1600);
+    toast(state.focusMode ? t('专注模式已开启', 'Focus mode on') : t('专注模式已关闭', 'Focus mode off'), 'info', 1600);
   };
 
   /**
@@ -1810,7 +1896,7 @@ export async function createApp() {
     app.persistSettings();
     app.toolbar.update();
     app.statusbar.update();
-    toast(state.typewriter ? '打字机模式已开启' : '打字机模式已关闭', 'info', 1600);
+    toast(state.typewriter ? t('打字机模式已开启', 'Typewriter mode on') : t('打字机模式已关闭', 'Typewriter mode off'), 'info', 1600);
   };
 
   /**
@@ -1831,7 +1917,7 @@ export async function createApp() {
     app.persistSettings();
     app.statusbar.update();
     app.toolbar.update();
-    toast(state.reduceMotion ? '已开启减少动效' : '已关闭减少动效', 'info', 1800);
+    toast(state.reduceMotion ? t('已开启减少动效', 'Reduce motion on') : t('已关闭减少动效', 'Reduce motion off'), 'info', 1800);
     return state.reduceMotion;
   };
 
@@ -1849,7 +1935,7 @@ export async function createApp() {
     app.persistSettings();
     app.statusbar.update();
     app.toolbar.update();
-    toast(state.reduceMotion ? '已开启减少动效' : '已关闭减少动效', 'info', 1800);
+    toast(state.reduceMotion ? t('已开启减少动效', 'Reduce motion on') : t('已关闭减少动效', 'Reduce motion off'), 'info', 1800);
     return state.reduceMotion;
   };
 
@@ -1859,7 +1945,7 @@ export async function createApp() {
     if (app.minimap) app.minimap.update();
     app.persistSettings();
     app.toolbar.update();
-    toast(state.minimapVisible ? '迷你地图已显示' : '迷你地图已隐藏', 'info', 1600);
+    toast(state.minimapVisible ? t('迷你地图已显示', 'Minimap shown') : t('迷你地图已隐藏', 'Minimap hidden'), 'info', 1600);
   };
 
   /**
@@ -1882,7 +1968,7 @@ export async function createApp() {
     state.zen = typeof value === 'boolean' ? value : !state.zen;
     el.app.classList.toggle('is-zen', state.zen);
     app.toolbar.update();
-    if (state.zen) toast('已进入禅模式，按 Esc 退出', 'info', 2000);
+    if (state.zen) toast(t('已进入禅模式，按 Esc 退出', 'Zen mode on. Press Esc to exit.'), 'info', 2000);
     requestAnimationFrame(() => app.editor.focus());
   };
 
@@ -1896,7 +1982,7 @@ export async function createApp() {
     const tab = activeTab();
     if (!tab) return;
     if (!isMarkdown(tab.language)) {
-      toast('只有 Markdown 文件支持预览', 'info');
+      toast(t('只有 Markdown 文件支持预览', 'Only Markdown files support preview'), 'info');
       return;
     }
     if (state.viewMode === 'split') {
@@ -1919,7 +2005,7 @@ export async function createApp() {
     const target = String(url || '').trim();
     if (!target) return false;
     if (!/^(https?:|mailto:)/i.test(target)) {
-      toast(`不是可打开的链接：${target.slice(0, 40)}`, 'info', 2400);
+      toast(t(`不是可打开的链接：${target.slice(0, 40)}`, `Not an openable link: ${target.slice(0, 40)}`), 'info', 2400);
       return false;
     }
     // 统一的「打开外部链接」出口：先派发 DOM 事件（桌面壳 / 测试桩 / 插件都能监听）
@@ -1958,7 +2044,7 @@ export async function createApp() {
     if (state.sidebarTab === 'outline') app.sidebar.renderBody();
     refreshViewMode();
     persistSession();
-    toast(`语言已切换为 ${languageLabel(id)}`, 'info', 1500);
+    toast(t(`语言已切换为 ${languageLabel(id)}`, `Language switched to ${languageLabel(id)}`), 'info', 1500);
   };
 
   /** 循环缩进设置。 */
@@ -1978,7 +2064,13 @@ export async function createApp() {
     app.editor.setAppearance({ indentSize: state.indentSize, useTabs: state.useTabs });
     app.persistSettings();
     app.statusbar.update();
-    toast(`缩进方式已切换为 ${next.tabs ? 'Tab' : `空格 ${next.size}`}`, 'info', 1800);
+    // 先算出缩进量词再拼句子：避免在一个 t() 里嵌套模板字符串导致两次求值。
+    const indentLabel = next.tabs ? 'Tab' : t(`空格 ${next.size}`, `${next.size} spaces`);
+    toast(
+      t(`缩进方式已切换为 ${indentLabel}`, `Indentation set to ${indentLabel}`),
+      'info',
+      1800,
+    );
   };
 
   /** 切换换行符。 */
@@ -1990,7 +2082,7 @@ export async function createApp() {
     app.tabsView.render();
     updateTitle();
     app.statusbar.update();
-    toast(`换行符已切换为 ${tab.eol}，保存后生效`, 'info', 2200);
+    toast(t(`换行符已切换为 ${tab.eol}，保存后生效`, `Line endings switched to ${tab.eol}; it takes effect after saving`), 'info', 2200);
     persistSession();
   };
 
@@ -2022,7 +2114,7 @@ export async function createApp() {
     }
     const entry = state.recent.find((r) => r.path === path);
     if (!entry) {
-      toast('找不到该文件的记录，请重新打开', 'info', 3000);
+      toast(t('找不到该文件的记录，请重新打开', 'No record of this file. Please open it again.'), 'info', 3000);
       return;
     }
     // 桌面壳里由系统打开的条目记的是绝对路径，直接走原生读取
@@ -2031,17 +2123,17 @@ export async function createApp() {
       return;
     }
     if (!entry.handleKey) {
-      toast('该文件没有可用的磁盘句柄，请重新打开', 'info', 3000);
+      toast(t('该文件没有可用的磁盘句柄，请重新打开', 'This file has no usable disk handle. Please open it again.'), 'info', 3000);
       return;
     }
     const handle = await getFileHandle(entry.handleKey);
     if (!handle) {
-      toast('无法恢复该文件，请重新打开', 'error');
+      toast(t('无法恢复该文件，请重新打开', 'Cannot restore this file. Please open it again.'), 'error');
       return;
     }
     const ok = await ensurePermission(handle, 'readwrite');
     if (!ok) {
-      toast('未获得文件访问权限', 'error');
+      toast(t('未获得文件访问权限', 'File access was not granted'), 'error');
       return;
     }
     await app.openFromHandle(handle, path);
@@ -2049,12 +2141,17 @@ export async function createApp() {
 
   /** 首次运行的欢迎文档。 */
   function openWelcomeDocument() {
+    // 欢迎文档的标签名也是界面文案，跟随当前语言；内容由 samples.js 的
+    // welcomeMarkdown() 在「读取点」按 getLocale() 取，不能用顶层常量
+    // WELCOME_MD（import 期会把语言冻结成默认中文）。
+    const welcomeName = t('欢迎.md', 'Welcome.md');
+    const md = welcomeMarkdown();
     const tab = {
       id: nextTabId(),
-      name: '欢迎.md',
-      path: '欢迎.md',
-      content: WELCOME_MD,
-      savedContent: WELCOME_MD,
+      name: welcomeName,
+      path: welcomeName,
+      content: md,
+      savedContent: md,
       savedEol: 'LF',
       language: 'markdown',
       eol: 'LF',
@@ -2068,6 +2165,29 @@ export async function createApp() {
   }
   app.openWelcomeDocument = openWelcomeDocument;
 
+  /**
+   * 欢迎文档跟随界面语言（applyLocale 时调用）。
+   *
+   * 标签名 / 路径始终换为当前语言（欢迎.md ↔ Welcome.md）；正文仅在仍是
+   * 模板原文（或会话瘦身恢复出的空正文）时替换为当前语言模板——用户改过
+   * 的一律不覆盖，只改名。会话恢复出的欢迎标签走同一条路径，无特殊分支。
+   */
+  function syncWelcomeDocs() {
+    const welcomeName = t('欢迎.md', 'Welcome.md');
+    for (const tab of app.state.tabs) {
+      if (!WELCOME_NAMES.includes(tab.path)) continue;
+      tab.name = welcomeName;
+      tab.path = welcomeName;
+      if (!tab.content || isWelcomeTemplate(tab.content)) {
+        const md = welcomeMarkdown();
+        tab.content = md;
+        tab.savedContent = md;
+        tab._dirtyShown = false;
+        if (app.state.activeTabId === tab.id) app.editor.resetContent(tab);
+      }
+    }
+  }
+
   /** 搜索相关入口。 */
   app.openFind = () => runCommand('search.find', app);
   app.openReplace = () => runCommand('search.replace', app);
@@ -2080,7 +2200,7 @@ export async function createApp() {
     const zone = document.createElement('div');
     zone.className = 'dropzone';
     zone.hidden = true;
-    zone.innerHTML = `<div class="dropzone__inner">${icon('openFile', 30)}松开即可打开文件</div>`;
+    zone.innerHTML = t(`<div class="dropzone__inner">${icon('openFile', 30)}松开即可打开文件</div>`, `<div class="dropzone__inner">${icon('openFile', 30)}Drop files here to open</div>`);
     document.body.appendChild(zone);
 
     let depth = 0;
@@ -2118,8 +2238,8 @@ export async function createApp() {
           for (const file of images) {
             // eslint-disable-next-line no-await-in-loop
             const res = await insertMarkdownImage(app, file);
-            if (!res.ok) toast(res.error || '插入图片失败', 'error', 3400);
-            else if (res.degraded) toast('已以内联 data URL 插入（建议先另存为）', 'info', 3200);
+            if (!res.ok) toast(res.error || t('插入图片失败', 'Failed to insert image'), 'error', 3400);
+            else if (res.degraded) toast(t('已以内联 data URL 插入（建议先另存为）', 'Inserted as an inline data URL. Save the file first.'), 'info', 3200);
           }
           const rest = files.filter((f) => !/^image\//.test(f.type || ''));
           if (!rest.length) return;
@@ -2138,15 +2258,129 @@ export async function createApp() {
         // eslint-disable-next-line no-await-in-loop
         await app.openFileObject(file);
       }
-      toast(`已打开 ${files.length} 个文件`, 'success');
+      toast(t(`已打开 ${files.length} 个文件`, `Opened ${files.length} files`), 'success');
     });
   }
 
-  /** 全局刷新（主题等外部变更后调用）。 */
+  /**
+   * 让编辑器内部的静态文案跟随语言。
+   *
+   * editor.js 已把 cmPlaceholder 放进 appearanceCompartment，并在构造里
+   * 监听 bus('locale') 自行 refreshLocale()；这里再显式调一次 setPlaceholder()
+   * （幂等的 Compartment 重配，撤销栈 / 选区 / 滚动都保留），保证即使编辑器层
+   * 没有监听到事件也能切到当前语言。文案与编辑器层的 t() 原文逐字一致。
+   * 若将来该方法被移除，退化为改写已渲染的 `.cm-placeholder` 节点。
+   */
+  function refreshEditorLocale() {
+    const text = t(
+      '以「Ctrl + N」新建文件，或把文件拖到这里打开',
+      'Press Ctrl + N to create a file, or drop one here',
+    );
+    if (typeof app.editor?.setPlaceholder === 'function') {
+      app.editor.setPlaceholder(text);
+      return;
+    }
+    document.querySelectorAll('.cm-placeholder').forEach((node) => {
+      node.textContent = text;
+    });
+  }
+
+  /** 拖拽浮层只在 setupDragAndDrop() 里创建一次，切语言时单独刷新文案。 */
+  function refreshDropzoneLabel() {
+    const inner = document.querySelector('.dropzone__inner');
+    if (!inner) return;
+    inner.innerHTML = `${icon('openFile', 30)}${t('松开即可打开文件', 'Drop files here to open')}`;
+  }
+
+  /**
+   * 全局刷新外壳（主题 / 界面语言等外部变更后调用）。
+   *
+   * 各 UI 模块的 render()/update() 都在渲染点求值 t()，因此只需重跑一遍；
+   * 命令面板的条目是打开时算出来的，先关掉避免显示旧语言标题。
+   */
   app.refreshChrome = function refreshChrome() {
-    app.toolbar.update();
-    app.statusbar.update();
+    if (app.palette && typeof app.palette.isOpen === 'function' && app.palette.isOpen()) {
+      app.palette.close();
+    }
+    if (app.menubar && typeof app.menubar.render === 'function') app.menubar.render();
+    else if (typeof app.refreshMenubar === 'function') app.refreshMenubar();
+    app.toolbar?.update?.();
+    app.statusbar?.update?.();
+    app.viewSwitch?.update?.();
+    app.tabsView?.render?.();
+    app.sidebar?.render?.();
+    app.welcome?.render?.();
+    // 面板若提供了 relabel()，只重算静态文案，不重建 DOM（避免重复绑定事件）。
+    if (typeof app.findInFiles?.relabel === 'function') app.findInFiles.relabel();
+    updateWelcome();
+    updateDegradeBanner();
+    refreshDropzoneLabel();
+    refreshEditorLocale();
     updateTitle();
+    applyStaticLabels();
+  };
+
+  /** 当前界面语言：供命令 / 插件 / 验收脚本读取。 */
+  app.getLocale = getLocale;
+  app.localeLabel = () => LOCALE_LABELS[getLocale()];
+
+  /**
+   * 切换界面语言。
+   *
+   * 刻意不用 location.reload()：persist.js 存会话时把 tab.content 清空，刷新会
+   * 丢掉用户没保存的内容。这里改为原地重算命令标题 + 重绘外壳，标签页内容与
+   * 光标位置都不动。
+   *
+   * @param {string} next 'zh-CN' | 'en'
+   * @return {Promise<string>} 生效后的语言码
+   */
+  app.applyLocale = async function applyLocale(next) {
+    const target = normalizeLocale(next);
+    if (target === getLocale()) return target;
+
+    setLocale(target);
+    if (app.settings) app.settings.locale = target;
+    // 必须走 persistSettings()（内部 collectSettings 把 state 里改过的主题 / 字号
+    // 一起收敛）；直接 saveSettings(app.settings) 会把启动时的旧快照写回磁盘。
+    if (typeof app.persistSettings === 'function') app.persistSettings();
+    else saveSettings(app.settings || {});
+
+    // 主进程原生对话框 / 插件错误不读 DOM，必须单独同步（失败不阻塞界面切换）。
+    try {
+      await window.quillpadDesktop?.setLocale?.(target);
+    } catch (err) {
+      console.warn('[QuillPad] 同步界面语言到主进程失败：', err);
+    }
+
+    // 命令标题是注册时求值的：清空后按新语言重注册。
+    // resetCommands() 只保留 plugin.*（插件贡献的动态命令）；其它命令一律
+    // 重新注册，包括 actions.js 里的 plugins.* 内置命令。
+    // 先快照一份：有些 UI 模块（如 ui/plugins.js 的 initPluginUI）会在
+    // registerCommands() 之外自己 defineCommand，它们必须自己监听 locale
+    // 事件用新语言重注册；下面对「没补回来的」做一次原样恢复，保证切语言
+    // 永远不会让菜单 / 快捷键丢入口（退化时标题可能仍是旧语言）。
+    const commandsBefore = allCommands();
+    resetCommands();
+    registerCommands(app);
+    // 给插件宿主 / UI 模块一个「语言变了」的信号：它们应按新语言重算自己的
+    // 命令标题（同步重注册即可，此时这些 id 已被清空，不会触发重复注册告警）。
+    bus.emit('locale', target);
+    for (const stale of commandsBefore) {
+      // plugin.* 由 resetCommands 原样保留，getCommand 一定命中；其余内置命令
+      // 由 registerCommands 重建，只有「外部注册却没监听 locale」的会走到这里。
+      if (!getCommand(stale.id)) defineCommand(stale);
+    }
+
+    // CodeMirror keymap 在启动时按命令对象生成，重注册后旧闭包还指向旧对象；
+    // 重建一次即可。全局 keydown 处理器每次事件都读 allCommands()，无需重绑。
+    app.editor?.setAppKeymap?.(buildCmKeymap((id) => runCommand(id, app)));
+
+    // 欢迎文档正文 / 标签名跟随界面语言（用户改过的内容不覆盖）
+    syncWelcomeDocs();
+
+    app.refreshChrome();
+    toast(t('界面语言已切换', 'Interface language changed'), 'info', 1800);
+    return target;
   };
 
   /**

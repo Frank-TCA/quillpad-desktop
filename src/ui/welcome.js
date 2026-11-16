@@ -7,6 +7,7 @@ import { state } from '../core/state.js';
 import { icon, brandSvg } from './icons.js';
 import { escapeHtml } from '../core/utils.js';
 import { getCommand, commandShortcutLabels } from '../core/commands.js';
+import { t } from '../core/i18n.js';
 
 /** 欢迎页上展示的快捷键（命令 id）。 */
 const HINTS = [
@@ -40,7 +41,7 @@ export function initWelcome(root, app) {
               `</button>`,
           )
           .join('')
-      : '<div style="font-size:11.5px;color:var(--text-faint);padding:6px 2px">还没有打开过文件</div>';
+      : `<div style="font-size:11.5px;color:var(--text-faint);padding:6px 2px">${t('还没有打开过文件', 'No files opened yet')}</div>`;
 
     const hintsHtml = HINTS.map((id) => {
       const cmd = getCommand(id);
@@ -60,32 +61,32 @@ export function initWelcome(root, app) {
       `<div class="welcome__head">` +
       `<div class="welcome__logo">${brandSvg(32)}</div>` +
       `<h1 class="welcome__title">QuillPad</h1>` +
-      `<p class="welcome__sub">一个安静、快速、键盘优先的文本与代码编辑器</p>` +
+      `<p class="welcome__sub">${t('一个安静、快速、键盘优先的文本与代码编辑器', 'A quiet, fast, keyboard-first text and code editor.')}</p>` +
       `</div>` +
       `<div class="welcome__cards">` +
       `<button class="welcome-card" data-welcome-act="new">` +
       `<span class="welcome-card__icon">${icon('newFile', 16)}</span>` +
-      `<span class="welcome-card__title">新建文件</span>` +
-      `<span class="welcome-card__desc">从一张白纸开始，立刻写下第一行</span>` +
+      `<span class="welcome-card__title">${t('新建文件', 'New File')}</span>` +
+      `<span class="welcome-card__desc">${t('从一张白纸开始，立刻写下第一行', 'Start from a blank page and write the first line right away.')}</span>` +
       `</button>` +
       `<button class="welcome-card" data-welcome-act="open">` +
       `<span class="welcome-card__icon">${icon('openFile', 16)}</span>` +
-      `<span class="welcome-card__title">打开文件</span>` +
-      `<span class="welcome-card__desc">支持多选，直接落到标签页</span>` +
+      `<span class="welcome-card__title">${t('打开文件', 'Open File')}</span>` +
+      `<span class="welcome-card__desc">${t('支持多选，直接落到标签页', 'Select multiple files and open them straight into tabs.')}</span>` +
       `</button>` +
       `<button class="welcome-card" data-welcome-act="folder">` +
       `<span class="welcome-card__icon">${icon('openFolder', 16)}</span>` +
-      `<span class="welcome-card__title">打开文件夹</span>` +
-      `<span class="welcome-card__desc">左侧出现可展开的文件树</span>` +
+      `<span class="welcome-card__title">${t('打开文件夹', 'Open Folder')}</span>` +
+      `<span class="welcome-card__desc">${t('左侧出现可展开的文件树', 'An expandable file tree appears on the left.')}</span>` +
       `</button>` +
       `</div>` +
       `<div class="welcome__cols">` +
       `<div class="welcome-block">` +
-      `<div class="welcome-block__title">最近文件</div>` +
+      `<div class="welcome-block__title">${t('最近文件', 'Recent Files')}</div>` +
       `<div class="recent-list">${recentHtml}</div>` +
       `</div>` +
       `<div class="welcome-block">` +
-      `<div class="welcome-block__title">常用快捷键</div>` +
+      `<div class="welcome-block__title">${t('常用快捷键', 'Shortcuts')}</div>` +
       `<div class="kbd-grid">${hintsHtml}</div>` +
       `</div>` +
       `</div>` +

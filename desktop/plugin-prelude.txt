@@ -3,6 +3,9 @@ const PLUGIN_ID = __QP_ID_JSON__;
 const MAIN_FILE = __QP_MAIN_JSON__;
 const BLOCKED = ["fetch","XMLHttpRequest","WebSocket","importScripts","document","process","require","__dirname","__filename","indexedDB","caches","SharedWorker","Worker","EventSource","WebTransport","BroadcastChannel","eval","Function"];
 const METHODS = ["commands.register","editor.getSelection","editor.getText","editor.replaceSelection","editor.insertText","files.getCurrent","files.save","files.saveAs","clipboard.read","clipboard.write","storage.get","storage.set","net.fetch","ui.showToast","ui.registerSidebarView","events.on"];
+const __qpLabels = {"插件无响应":"Plugin timed out"};
+let __qpLocale = "zh-CN";
+function __qpLabel(zh) { return __qpLocale === "en" ? (__qpLabels[zh] || zh) : zh; }
 for (const key of BLOCKED) {
   try { delete self[key]; } catch (e) { /* 不可配置时走下一行 */ }
   try { Object.defineProperty(self, key, { value: undefined, writable: false, configurable: false }); } catch (e) { /* 已存在即忽略 */ }
@@ -18,7 +21,7 @@ function call(method, params) {
     const id = 'p' + (++seq) + '-' + Date.now().toString(36);
     const timer = setTimeout(() => {
       pending.delete(id);
-      reject({ code: 'ETIMEOUT', message: '插件无响应' });
+      reject({ code: 'ETIMEOUT', message: __qpLabel("插件无响应") });
     }, 10000);
     pending.set(id, { resolve, reject, timer });
     __qpPostMessage({ __qp: 'rpc', req: { v: 1, id, method, params: params || {} } });
@@ -36,9 +39,9 @@ function setPath(root, dotted, fn) {
 const api = {};
 for (const method of METHODS) {
   if (method === "commands.register") {
-    setPath(api, method, (id, title, run) => {
+    setPath(api, method, (id, title, run, titleEn) => {
       if (typeof run === "function") handlers.set(String(id), run);
-      return call(method, { id: String(id || ''), title: String(title || id || '') });
+      return call(method, { id: String(id || ''), title: String(title || id || ''), titleEn: String(titleEn || '') });
     });
   } else if (method === "editor.replaceSelection" || method === "editor.insertText") {
     setPath(api, method, (text) => call(method, { text: String(text == null ? "" : text) }));
@@ -56,7 +59,7 @@ for (const method of METHODS) {
     setPath(api, method, (spec) => {
       const s = spec || {};
       if (typeof s.render === "function") viewRenders.set(String(s.id), s.render);
-      return call(method, { id: String(s.id || ""), title: String(s.title || s.id || "") });
+      return call(method, { id: String(s.id || ""), title: String(s.title || s.id || ""), titleEn: String(s.titleEn || "") });
     });
   } else {
     setPath(api, method, (arg) => call(method, arg && typeof arg === "object" ? arg : {}));
@@ -66,6 +69,10 @@ Object.freeze(api);
 self.quillpad = api;
 self.addEventListener('message', (event) => {
   const m = event.data || {};
+  if (m.__qp === 'locale') {
+    __qpLocale = String(m.locale || "zh-CN");
+    return;
+  }
   if (m.__qp === 'rpc-result') {
     const entry = m.msg && pending.get(String(m.msg.id));
     if (!entry) return;

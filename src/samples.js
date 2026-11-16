@@ -3,10 +3,12 @@
  * 关闭所有标签后，主界面会显示独立的欢迎页（见 ui/welcome.js）。
  */
 
+import { t, getLocale } from './core/i18n.js';
+
 const TICK = '```';
 
 /** 欢迎文档（Markdown），用于展示 QuillPad 的排版与语法高亮能力。 */
-export const WELCOME_MD = `# 欢迎使用 QuillPad
+const WELCOME_MD_ZH = t(`# 欢迎使用 QuillPad
 
 > 一支安静的羽毛笔，写给认真写字的人。QuillPad 是一个用 TypeScript 之外的一切
 > 现代 Web 能力堆出来的桌面级文本 / 代码编辑器：多标签、文件夹树、全文检索、
@@ -99,9 +101,149 @@ ${TICK}
 ---
 
 *现在，关掉这个标签，开始写你自己的东西吧。*
+`);
+
+/** 欢迎文档（Markdown，英文）。主题名 / 语言名是专有名词，保持原样。 */
+const WELCOME_MD_EN = `# Welcome to QuillPad
+
+> A quiet quill for people who take writing seriously. QuillPad is a desktop-grade
+> text / code editor built with every modern web capability except TypeScript:
+> tabs, a folder tree, full-text search, a command palette, four themes and live
+> Markdown preview — all of them included.
+
+---
+
+## Getting Started
+
+| What you want | Shortcut | Notes |
+| --- | --- | --- |
+| New file | \`Ctrl + N\` | Start writing the first line right away |
+| Open file | \`Ctrl + O\` | Multi-select supported; files land straight in tabs |
+| Open folder | \`Ctrl + K O\` | An expandable file tree appears on the left |
+| Save | \`Ctrl + S\` | Writes back in place, no Save As needed |
+| Command palette | \`Ctrl + Shift + P\` | Every feature, one phrase away |
+
+> Tip: if the browser supports the File System Access API (Chrome / Edge), QuillPad
+> will **really write back to files on disk**; otherwise it falls back to a download
+> and shows a notice in the lower-right corner.
+
+---
+
+## Editing at a Glance
+
+- **Multiple cursors**: \`Ctrl + Alt + ↑ / ↓\` adds a cursor above or below
+- **Whole-line operations**: \`Ctrl + D\` duplicates the current line, \`Ctrl + Shift + K\` deletes it
+- **Move lines**: \`Alt + ↑ / ↓\`
+- **Toggle comment**: \`Ctrl + /\`
+- **Selection highlight**: select any word and matching text is highlighted document-wide
+- **Bracket matching**: park the caret next to a bracket and see
+- **Code folding**: hover over the fold arrow in the line-number gutter
+
+---
+
+## Code You Can Actually See
+
+${TICK}typescript
+interface Document {
+  readonly id: string;
+  name: string;
+  content: string;
+  language: LanguageId;
+  eol: 'LF' | 'CRLF';
+}
+
+/** Summarize tab state for the status bar. */
+export function summarize(docs: readonly Document[]) {
+  const dirty = docs.filter((d) => d.content.length > 0);
+  return {
+    total: docs.length,
+    dirty: dirty.length,
+    bytes: docs.reduce((sum, d) => sum + d.content.length, 0),
+  };
+}
+${TICK}
+
+${TICK}python
+def read_text(path: str) -> str:
+    """Read as UTF-8; fall back to GBK on failure."""
+    raw = open(path, "rb").read()
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return raw.decode("gbk")
+${TICK}
+
+---
+
+## Themes
+
+Four themes. The syntax colours in the editor change along with them:
+
+1. **Aurora Dark** — the default. Deep-space background with blue-violet accents
+2. **Ivory Light** — paper white, easier on the eyes during long reading sessions
+3. **Nord** — cool grey-blue, a second choice for night work
+4. **Solarized Light** — a classic warm, low-contrast palette
+
+Cycle through them with \`Ctrl + K T\`; your choice is remembered.
+
+---
+
+## Small Details
+
+- The status bar is clickable: language, indent, line endings and encoding can all be switched
+- Drag the right edge of the sidebar to resize it; double-click to restore the default
+- Tabs can be reordered by dragging, closed with the middle button, and right-clicked for more actions
+- When a file larger than 2 MB is opened, QuillPad turns off syntax highlighting to stay responsive
+- Press \`F1\` any time for the full shortcut list
+
+---
+
+*Now close this tab and start writing your own things.*
 `;
 
-/** 一个新文件的默认名称模板。 */
+/**
+ * 按当前界面语言返回欢迎文档。
+ *
+ * 必须在读取点调用：`main.js` 的 `setLocale()` 晚于本模块的 import 期，
+ * 顶层常量会把语言冻结成默认中文。
+ *
+ * @return {string}
+ */
+export function welcomeMarkdown() {
+  return getLocale() === 'en' ? WELCOME_MD_EN : WELCOME_MD_ZH;
+}
+
+/**
+ * 欢迎文档的两种标签名 / 虚拟文档路径（中文名与英文名成对，作为标识逐一
+ * 匹配用；显示用的标签名在渲染点经 t('欢迎.md','Welcome.md') 取值）。
+ * @type {readonly [string, string]}
+ */
+export const WELCOME_NAMES = ['欢迎.md', 'Welcome.md'];
+
+/**
+ * 判断正文是否仍是某语言版本的欢迎模板原文。
+ * 切换界面语言时据此决定能否安全替换正文：仍是模板（或会话瘦身恢复出的
+ * 空正文）就整体换成当前语言模板；用户改过的一律不动，只改标签名。
+ * @param {string} content
+ * @return {boolean}
+ */
+export function isWelcomeTemplate(content) {
+  return content === WELCOME_MD_ZH || content === WELCOME_MD_EN;
+}
+
+/**
+ * 兼容既有 `import { WELCOME_MD }` 的常量导出（导出时按 `getLocale()` 取一份）。
+ * 新建欢迎标签时请改用 `welcomeMarkdown()`，以便切换语言后立即生效。
+ */
+export const WELCOME_MD = welcomeMarkdown();
+
+/**
+ * 一个新文件的默认名称模板。
+ * @param {number} index
+ * @return {string}
+ */
 export function untitledName(index) {
-  return index <= 1 ? '未命名.txt' : `未命名${index}.txt`;
+  return index <= 1
+    ? t('未命名.txt', 'Untitled.txt')
+    : t(`未命名${index}.txt`, `Untitled${index}.txt`);
 }

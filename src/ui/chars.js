@@ -20,6 +20,7 @@ import {
 } from '../core/chars.js';
 import { activeTab } from '../core/state.js';
 import { toast } from './toast.js';
+import { t, pickLocalized } from '../core/i18n.js';
 
 /** 当前打开的对话框。 */
 let current = null;
@@ -34,7 +35,7 @@ export function insertChar(app, ch) {
   if (!ch) return false;
   const tab = activeTab();
   if (!tab) {
-    toast('没有打开的文档', 'info', 1800);
+    toast(t('没有打开的文档', 'No document is open.'), 'info', 1800);
     return false;
   }
   const view = app.editor.view;
@@ -64,30 +65,30 @@ export function openCharsDialog(app) {
   modal.setAttribute('data-dialog', 'chars');
   modal.setAttribute('role', 'dialog');
   modal.setAttribute('aria-modal', 'true');
-  modal.setAttribute('aria-label', '插入特殊字符');
+  modal.setAttribute('aria-label', t('插入特殊字符', 'Insert Special Character'));
 
   modal.innerHTML =
     `<div class="modal__head">` +
     `<span class="modal__glyph is-info">${icon('symbol', 15)}</span>` +
-    `<span class="modal__title">插入特殊字符</span>` +
-    `<span class="qp-chars__count" data-role="count">${charCount()} 个</span>` +
-    `<button class="qp-pdf__close" data-role="close" aria-label="关闭">${icon('close', 14)}</button>` +
+    `<span class="modal__title">${t('插入特殊字符', 'Insert Special Character')}</span>` +
+    `<span class="qp-chars__count" data-role="count">${t(`${charCount()} 个`, `${charCount()} characters`)}</span>` +
+    `<button class="qp-pdf__close" data-role="close" aria-label="${t('关闭', 'Close')}">${icon('close', 14)}</button>` +
     `</div>` +
     `<div class="modal__body qp-chars__body">` +
     `<div class="qp-chars__search">` +
-    `<input type="text" class="text-input" data-role="search" placeholder="搜索：分组名，或直接输入码位（如 4E2D / U+4E2D）" />` +
+    `<input type="text" class="text-input" data-role="search" placeholder="${t('搜索：分组名，或直接输入码位（如 4E2D / U+4E2D）', 'Search: group name, or enter a code point (e.g. 4E2D / U+4E2D)')}" />` +
     `</div>` +
     `<div class="qp-chars__groups" data-role="groups"></div>` +
     `<div class="qp-chars__recent" data-role="recent-wrap" hidden>` +
-    `<div class="qp-chars__label">最近使用</div>` +
+    `<div class="qp-chars__label">${t('最近使用', 'Recent')}</div>` +
     `<div class="qp-chars__grid qp-chars__grid--recent" data-role="recent"></div>` +
     `</div>` +
-    `<div class="qp-chars__label" data-role="list-label">全部</div>` +
+    `<div class="qp-chars__label" data-role="list-label">${t('全部', 'All')}</div>` +
     `<div class="qp-chars__grid" data-role="grid"></div>` +
     `</div>` +
     `<div class="modal__foot">` +
-    `<span class="qp-chars__hint">点击字符即插入到光标处 · Esc 关闭</span>` +
-    `<button class="btn is-primary" data-role="close2">完成</button>` +
+    `<span class="qp-chars__hint">${t('点击字符即插入到光标处 · Esc 关闭', 'Click a character to insert it at the cursor · Esc to close')}</span>` +
+    `<button class="btn is-primary" data-role="close2">${t('完成', 'Done')}</button>` +
     `</div>`;
 
   backdrop.appendChild(modal);
@@ -106,12 +107,15 @@ export function openCharsDialog(app) {
 
   /** 渲染分组 chips。 */
   function renderGroups() {
-    const chips = [{ id: 'all', name: '全部' }, ...CHAR_GROUPS.map((g) => ({ id: g.id, name: g.name }))];
+    const chips = [
+      { id: 'all', name: t('全部', 'All'), nameEn: 'All' },
+      ...CHAR_GROUPS.map((g) => ({ id: g.id, name: g.name, nameEn: g.nameEn || '' })),
+    ];
     groupsEl.innerHTML = chips
       .map(
         (g) =>
           `<button class="qp-chars__chip${g.id === activeGroup ? ' is-active' : ''}" ` +
-          `data-group="${escapeHtml(g.id)}" type="button">${escapeHtml(g.name)}</button>`,
+          `data-group="${escapeHtml(g.id)}" type="button">${escapeHtml(pickLocalized(g, 'name'))}</button>`,
       )
       .join('');
   }
@@ -123,7 +127,7 @@ export function openCharsDialog(app) {
    */
   function renderGrid(chars, host) {
     if (!chars.length) {
-      host.innerHTML = '<div class="qp-chars__empty">没有匹配的字符</div>';
+      host.innerHTML = `<div class="qp-chars__empty">${t('没有匹配的字符', 'No matching characters')}</div>`;
       return;
     }
     host.innerHTML = chars
@@ -144,7 +148,9 @@ export function openCharsDialog(app) {
       const group = CHAR_GROUPS.find((g) => g.id === activeGroup);
       chars = group ? [...group.chars] : allChars();
     }
-    listLabel.textContent = query ? `搜索结果（${chars.length}）` : activeGroup === 'all' ? '全部' : '本组';
+    listLabel.textContent = query
+      ? t(`搜索结果（${chars.length}）`, `Search results (${chars.length})`)
+      : activeGroup === 'all' ? t('全部', 'All') : t('本组', 'This group');
     renderGrid(chars, gridEl);
 
     const recent = loadRecentChars();

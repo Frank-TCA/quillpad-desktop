@@ -8,6 +8,7 @@ import { icon } from './icons.js';
 import { openContextMenu } from './dropdown.js';
 import { escapeHtml } from '../core/utils.js';
 import { runCommand } from '../core/commands.js';
+import { t } from '../core/i18n.js';
 
 /**
  * 初始化标签栏。
@@ -24,7 +25,7 @@ export function initTabs(root, app) {
   let lastCloseClickAt = 0;
 
   // 空白处悬停时给出可发现性提示（标签自身有 title，会覆盖它）
-  root.title = '双击空白处新建文件';
+  root.title = t('双击空白处新建文件', 'Double-click empty space to create a new file');
 
   /** 清理拖放指示。 */
   const clearIndicators = () => {
@@ -82,12 +83,12 @@ export function initTabs(root, app) {
     navPrev = document.createElement('button');
     navPrev.className = 'tabnav tabnav--prev';
     navPrev.type = 'button';
-    navPrev.setAttribute('aria-label', '向左滚动标签');
+    navPrev.setAttribute('aria-label', t('向左滚动标签', 'Scroll Tabs Left'));
     navPrev.innerHTML = icon('chevronLeft', 13);
     navNext = document.createElement('button');
     navNext.className = 'tabnav tabnav--next';
     navNext.type = 'button';
-    navNext.setAttribute('aria-label', '向右滚动标签');
+    navNext.setAttribute('aria-label', t('向右滚动标签', 'Scroll Tabs Right'));
     navNext.innerHTML = icon('chevronRight', 13);
     navPrev.hidden = true;
     navNext.hidden = true;
@@ -110,8 +111,8 @@ export function initTabs(root, app) {
             `aria-selected="${active}" draggable="true" title="${escapeHtml(tab.path || tab.name)}">` +
             `<span class="tab__icon">${icon(app.tabIcon(tab), 13)}</span>` +
             `<span class="tab__name">${escapeHtml(tab.name)}</span>` +
-            (dirty ? '<span class="tab__dirty" aria-label="未保存"></span>' : '') +
-            `<span class="tab__close" data-close="${tab.id}" role="button" aria-label="关闭">${icon('close', 12)}</span>` +
+            (dirty ? `<span class="tab__dirty" aria-label="${t('未保存', 'Unsaved')}"></span>` : '') +
+            `<span class="tab__close" data-close="${tab.id}" role="button" aria-label="${t('关闭', 'Close')}">${icon('close', 12)}</span>` +
             `</div>`
           );
         })
@@ -119,8 +120,12 @@ export function initTabs(root, app) {
       // 最后一个标签之后的「+」：新建文件。标签多到溢出时它吸附在右边缘，
       // 不会随内容滚出视口（见 layout.css 的 .tabbar.has-overflow .tabadd）。
       `<button class="tabadd" type="button" data-newfile="1" ` +
-      `title="新建文件（Ctrl+N）" aria-label="新建文件">${icon('plus', 14)}</button>`;
+      `title="${t('新建文件（Ctrl+N）', 'New File (Ctrl+N)')}" aria-label="${t('新建文件', 'New File')}">${icon('plus', 14)}</button>`;
     root.innerHTML = html;
+    // 语言切换后重绘时，静态提示也要跟着更新（render() 由 refreshChrome() 调用）
+    root.title = t('双击空白处新建文件', 'Double-click empty space to create a new file');
+    navPrev?.setAttribute('aria-label', t('向左滚动标签', 'Scroll Tabs Left'));
+    navNext?.setAttribute('aria-label', t('向右滚动标签', 'Scroll Tabs Right'));
     // 一个标签都没有时整条标签栏隐藏（欢迎页占满编辑区），保留 v1 的布局
     root.classList.toggle('is-empty', state.tabs.length === 0);
 
@@ -206,16 +211,16 @@ export function initTabs(root, app) {
       // 标签栏空白处：文件级操作菜单
       e.preventDefault();
       openContextMenu(e, [
-        { label: '新建文件', keys: [['Ctrl', 'N']], run: () => runCommand('file.new', app) },
-        { label: '打开文件…', keys: [['Ctrl', 'O']], run: () => runCommand('file.open', app) },
-        { label: '打开文件夹…', run: () => runCommand('file.openFolder', app) },
+        { label: t('新建文件', 'New File'), keys: [['Ctrl', 'N']], run: () => runCommand('file.new', app) },
+        { label: t('打开文件…', 'Open File…'), keys: [['Ctrl', 'O']], run: () => runCommand('file.open', app) },
+        { label: t('打开文件夹…', 'Open Folder…'), run: () => runCommand('file.openFolder', app) },
         { separator: true },
-        { label: '保存全部', run: () => app.saveAll() },
+        { label: t('保存全部', 'Save All'), run: () => app.saveAll() },
         { separator: true },
-        { label: '关闭全部', disabled: state.tabs.length === 0, run: () => app.closeAllTabs() },
-        { label: '重新加载', disabled: !state.activeTabId, run: () => runCommand('file.reload', app) },
+        { label: t('关闭全部', 'Close All'), disabled: state.tabs.length === 0, run: () => app.closeAllTabs() },
+        { label: t('重新加载', 'Reload'), disabled: !state.activeTabId, run: () => runCommand('file.reload', app) },
         { separator: true },
-        { label: '命令面板…', run: () => runCommand('view.commandPalette', app) },
+        { label: t('命令面板…', 'Command Palette…'), run: () => runCommand('view.commandPalette', app) },
       ]);
       return;
     }
@@ -225,32 +230,32 @@ export function initTabs(root, app) {
     if (!tab) return;
     const fsPath = typeof app.tabFsPath === 'function' ? app.tabFsPath(tab) : '';
     openContextMenu(e, [
-      { label: '保存', run: () => runCommand('file.save', app) },
-      { label: '另存为…', run: () => runCommand('file.saveAs', app) },
+      { label: t('保存', 'Save'), run: () => runCommand('file.save', app) },
+      { label: t('另存为…', 'Save As…'), run: () => runCommand('file.saveAs', app) },
       { separator: true },
-      { label: '关闭', run: () => app.closeTab(id) },
-      { label: '关闭其他', run: () => app.closeOtherTabs(id) },
-      { label: '关闭全部', run: () => app.closeAllTabs() },
+      { label: t('关闭', 'Close'), run: () => app.closeTab(id) },
+      { label: t('关闭其他', 'Close Others'), run: () => app.closeOtherTabs(id) },
+      { label: t('关闭全部', 'Close All'), run: () => app.closeAllTabs() },
       { separator: true },
       {
-        label: '复制完整路径',
+        label: t('复制完整路径', 'Copy Full Path'),
         run: () => app.copyTabPath(id),
       },
       {
-        label: '复制文件名',
+        label: t('复制文件名', 'Copy File Name'),
         run: () => navigator.clipboard.writeText(tab.name),
       },
       {
-        label: '打开所在位置',
+        label: t('打开所在位置', 'Reveal in Folder'),
         // 只有「从未落盘」的新文档才置灰。用旧版 FSA 保存出来的标签虽然拿不到
         // 目录（句柄只有 name），但文件确实在磁盘上，点进去给的是可操作的提示，
         // 而不是让用户面对一个灰掉的菜单项无从下手。
         disabled: !fsPath && !tab.handleKey,
         run: () => app.revealTabInFolder(tab),
       },
-      { label: '在文件树中定位', run: () => app.revealInTree(tab) },
+      { label: t('在文件树中定位', 'Reveal in File Tree'), run: () => app.revealInTree(tab) },
       { separator: true },
-      { label: '重新加载', run: () => runCommand('file.reload', app) },
+      { label: t('重新加载', 'Reload'), run: () => runCommand('file.reload', app) },
     ]);
   });
 

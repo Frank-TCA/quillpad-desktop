@@ -31,6 +31,7 @@ import {
 import * as desktop from '../core/desktop.js';
 import { toast } from './toast.js';
 import { getThemeMeta } from '../editor/cm-themes.js';
+import { t } from '../core/i18n.js';
 
 /** 当前打开的对话框实例（同时只允许一个）。 */
 let current = null;
@@ -86,7 +87,7 @@ export function openPdfDialog(app, opts = {}) {
 
   const tab = activeTab();
   if (!tab) {
-    toast('没有打开的文档', 'info', 2000);
+    toast(t('没有打开的文档', 'No document is open.'), 'info', 2000);
     return null;
   }
 
@@ -102,71 +103,71 @@ export function openPdfDialog(app, opts = {}) {
   modal.setAttribute('data-dialog', 'pdf-export');
   modal.setAttribute('role', 'dialog');
   modal.setAttribute('aria-modal', 'true');
-  modal.setAttribute('aria-label', '导出为 PDF');
+  modal.setAttribute('aria-label', t('导出为 PDF', 'Export as PDF'));
 
   modal.innerHTML =
     `<div class="modal__head">` +
     `<span class="modal__glyph is-info">${icon('fileText', 15)}</span>` +
-    `<span class="modal__title">导出为 PDF</span>` +
-    `<button class="qp-pdf__close" data-role="close" aria-label="关闭">${icon('close', 14)}</button>` +
+    `<span class="modal__title">${t('导出为 PDF', 'Export as PDF')}</span>` +
+    `<button class="qp-pdf__close" data-role="close" aria-label="${t('关闭', 'Close')}">${icon('close', 14)}</button>` +
     `</div>` +
     `<div class="modal__body qp-pdf__body">` +
     /* --------------------------------- 设置 --------------------------------- */
     `<div class="qp-pdf__fields">` +
-    `<div class="qp-pdf__group">页面</div>` +
-    `<label class="qp-pdf__row"><span>纸张</span>` +
+    `<div class="qp-pdf__group">${t('页面', 'Page')}</div>` +
+    `<label class="qp-pdf__row"><span>${t('纸张', 'Page Size')}</span>` +
     `<select data-field="paper" data-role="field">` +
     optionsHtml(
       [
-        { value: 'A4', label: 'A4（210 × 297 mm）' },
-        { value: 'Letter', label: 'Letter（216 × 279 mm）' },
-        { value: 'custom', label: '自定义…' },
+        { value: 'A4', label: t('A4（210 × 297 mm）', 'A4 (210 × 297 mm)') },
+        { value: 'Letter', label: t('Letter（216 × 279 mm）', 'Letter (216 × 279 mm)') },
+        { value: 'custom', label: t('自定义…', 'Custom…') },
       ],
       values.paper,
     ) +
     `</select></label>` +
     `<label class="qp-pdf__row qp-pdf__row--custom" data-role="custom-size">` +
-    `<span>尺寸</span>` +
+    `<span>${t('尺寸', 'Size')}</span>` +
     `<span class="qp-pdf__pair">` +
-    `<input type="number" min="50" max="2000" step="1" data-field="customWidth" data-role="field" value="${values.customWidth}" aria-label="自定义宽度 mm" />` +
+    `<input type="number" min="50" max="2000" step="1" data-field="customWidth" data-role="field" value="${values.customWidth}" aria-label="${t('自定义宽度 mm', 'Custom width (mm)')}" />` +
     `<i>×</i>` +
-    `<input type="number" min="50" max="2000" step="1" data-field="customHeight" data-role="field" value="${values.customHeight}" aria-label="自定义高度 mm" />` +
+    `<input type="number" min="50" max="2000" step="1" data-field="customHeight" data-role="field" value="${values.customHeight}" aria-label="${t('自定义高度 mm', 'Custom height (mm)')}" />` +
     `<i>mm</i></span></label>` +
-    `<label class="qp-pdf__row"><span>方向</span>` +
+    `<label class="qp-pdf__row"><span>${t('方向', 'Orientation')}</span>` +
     `<select data-field="orientation" data-role="field">` +
     optionsHtml(
       [
-        { value: 'portrait', label: '纵向' },
-        { value: 'landscape', label: '横向' },
+        { value: 'portrait', label: t('纵向', 'Portrait') },
+        { value: 'landscape', label: t('横向', 'Landscape') },
       ],
       values.orientation,
     ) +
     `</select></label>` +
-    `<div class="qp-pdf__row qp-pdf__row--margin"><span>页边距</span>` +
+    `<div class="qp-pdf__row qp-pdf__row--margin"><span>${t('页边距', 'Margins')}</span>` +
     `<span class="qp-pdf__grid4">` +
-    `<label><i>上</i><input type="number" min="0" max="50" data-field="marginTop" data-role="field" value="${values.margin.top}" aria-label="上边距 mm" /></label>` +
-    `<label><i>下</i><input type="number" min="0" max="50" data-field="marginBottom" data-role="field" value="${values.margin.bottom}" aria-label="下边距 mm" /></label>` +
-    `<label><i>左</i><input type="number" min="0" max="50" data-field="marginLeft" data-role="field" value="${values.margin.left}" aria-label="左边距 mm" /></label>` +
-    `<label><i>右</i><input type="number" min="0" max="50" data-field="marginRight" data-role="field" value="${values.margin.right}" aria-label="右边距 mm" /></label>` +
+    `<label><i>${t('上', 'Top')}</i><input type="number" min="0" max="50" data-field="marginTop" data-role="field" value="${values.margin.top}" aria-label="${t('上边距 mm', 'Top margin (mm)')}" /></label>` +
+    `<label><i>${t('下', 'Bottom')}</i><input type="number" min="0" max="50" data-field="marginBottom" data-role="field" value="${values.margin.bottom}" aria-label="${t('下边距 mm', 'Bottom margin (mm)')}" /></label>` +
+    `<label><i>${t('左', 'Left')}</i><input type="number" min="0" max="50" data-field="marginLeft" data-role="field" value="${values.margin.left}" aria-label="${t('左边距 mm', 'Left margin (mm)')}" /></label>` +
+    `<label><i>${t('右', 'Right')}</i><input type="number" min="0" max="50" data-field="marginRight" data-role="field" value="${values.margin.right}" aria-label="${t('右边距 mm', 'Right margin (mm)')}" /></label>` +
     `</span></div>` +
 
-    `<div class="qp-pdf__group">外观</div>` +
-    `<label class="qp-pdf__row"><span>主题</span>` +
+    `<div class="qp-pdf__group">${t('外观', 'Appearance')}</div>` +
+    `<label class="qp-pdf__row"><span>${t('主题', 'Theme')}</span>` +
     `<select data-field="theme" data-role="field">` +
     optionsHtml(
       [
-        { value: 'follow', label: '跟随当前' },
-        { value: 'light', label: '浅色' },
-        { value: 'dark', label: '深色' },
+        { value: 'follow', label: t('跟随当前', 'Follow Current') },
+        { value: 'light', label: t('浅色', 'Light') },
+        { value: 'dark', label: t('深色', 'Dark') },
       ],
       values.theme,
     ) +
     `</select></label>` +
-    `<label class="qp-pdf__row"><span>代码配色</span>` +
+    `<label class="qp-pdf__row"><span>${t('代码配色', 'Code Theme')}</span>` +
     `<select data-field="codeTheme" data-role="field">` +
     optionsHtml(
       [
-        { value: 'follow', label: '跟随主题' },
+        { value: 'follow', label: t('跟随主题', 'Follow Theme') },
         { value: 'github-light', label: 'GitHub Light' },
         { value: 'one-dark', label: 'One Dark' },
         { value: 'solarized', label: 'Solarized' },
@@ -174,7 +175,7 @@ export function openPdfDialog(app, opts = {}) {
       values.codeTheme,
     ) +
     `</select></label>` +
-    `<label class="qp-pdf__row"><span>图片最大宽度</span>` +
+    `<label class="qp-pdf__row"><span>${t('图片最大宽度', 'Max Image Width')}</span>` +
     `<select data-field="imageMaxWidth" data-role="field">` +
     optionsHtml(
       [
@@ -187,74 +188,74 @@ export function openPdfDialog(app, opts = {}) {
     ) +
     `</select></label>` +
 
-    `<div class="qp-pdf__group">装饰</div>` +
-    `<label class="qp-pdf__row"><span>页码</span>` +
+    `<div class="qp-pdf__group">${t('装饰', 'Decorations')}</div>` +
+    `<label class="qp-pdf__row"><span>${t('页码', 'Page Number')}</span>` +
     `<select data-field="pageNumber" data-role="field"${desktopMode ? '' : ' disabled'}>` +
     optionsHtml(
       [
-        { value: 'off', label: '关' },
-        { value: 'footer-center', label: '页脚居中' },
-        { value: 'footer-right', label: '页脚右侧' },
+        { value: 'off', label: t('关', 'Off') },
+        { value: 'footer-center', label: t('页脚居中', 'Footer Center') },
+        { value: 'footer-right', label: t('页脚右侧', 'Footer Right') },
       ],
       values.pageNumber,
     ) +
     `</select></label>` +
-    `<label class="qp-pdf__row qp-pdf__row--check"><span>目录页</span>` +
+    `<label class="qp-pdf__row qp-pdf__row--check"><span>${t('目录页', 'Table of Contents')}</span>` +
     `<input type="checkbox" data-field="toc" data-role="field"${values.toc ? ' checked' : ''}${desktopMode ? '' : ' disabled'} />` +
-    `<i class="qp-pdf__hint">按 H1–H3 生成章节列表</i></label>` +
-    `<label class="qp-pdf__row"><span>页眉</span>` +
+    `<i class="qp-pdf__hint">${t('按 H1–H3 生成章节列表', 'Generate a chapter list from H1–H3 headings')}</i></label>` +
+    `<label class="qp-pdf__row"><span>${t('页眉', 'Header')}</span>` +
     `<select data-field="header" data-role="field"${desktopMode ? '' : ' disabled'}>` +
     optionsHtml(
       [
-        { value: 'none', label: '无' },
-        { value: 'filename', label: '文件名' },
-        { value: 'custom', label: '自定义…' },
+        { value: 'none', label: t('无', 'None') },
+        { value: 'filename', label: t('文件名', 'File Name') },
+        { value: 'custom', label: t('自定义…', 'Custom…') },
       ],
       values.header.mode,
     ) +
     `</select></label>` +
     `<label class="qp-pdf__row qp-pdf__row--text" data-role="header-text" hidden><span></span>` +
-    `<input type="text" maxlength="60" data-field="headerText" data-role="field" value="${escapeHtml(values.header.text || '')}" placeholder="页眉文字（≤60 字）"${desktopMode ? '' : ' disabled'} />` +
+    `<input type="text" maxlength="60" data-field="headerText" data-role="field" value="${escapeHtml(values.header.text || '')}" placeholder="${t('页眉文字（≤60 字）', 'Header text (≤60 characters)')}"${desktopMode ? '' : ' disabled'} />` +
     `</label>` +
-    `<label class="qp-pdf__row"><span>页脚</span>` +
+    `<label class="qp-pdf__row"><span>${t('页脚', 'Footer')}</span>` +
     `<select data-field="footer" data-role="field"${desktopMode ? '' : ' disabled'}>` +
     optionsHtml(
       [
-        { value: 'none', label: '无' },
-        { value: 'filename-date', label: '文件名 + 日期' },
-        { value: 'custom', label: '自定义…' },
+        { value: 'none', label: t('无', 'None') },
+        { value: 'filename-date', label: t('文件名 + 日期', 'File Name + Date') },
+        { value: 'custom', label: t('自定义…', 'Custom…') },
       ],
       values.footer.mode,
     ) +
     `</select></label>` +
     `<label class="qp-pdf__row qp-pdf__row--text" data-role="footer-text" hidden><span></span>` +
-    `<input type="text" maxlength="60" data-field="footerText" data-role="field" value="${escapeHtml(values.footer.text || '')}" placeholder="页脚文字（≤60 字）"${desktopMode ? '' : ' disabled'} />` +
+    `<input type="text" maxlength="60" data-field="footerText" data-role="field" value="${escapeHtml(values.footer.text || '')}" placeholder="${t('页脚文字（≤60 字）', 'Footer text (≤60 characters)')}"${desktopMode ? '' : ' disabled'} />` +
     `</label>` +
 
-    `<div class="qp-pdf__group">输出</div>` +
-    `<label class="qp-pdf__row"><span>文件名</span>` +
+    `<div class="qp-pdf__group">${t('输出', 'Output')}</div>` +
+    `<label class="qp-pdf__row"><span>${t('文件名', 'File Name')}</span>` +
     `<input type="text" data-field="fileName" data-role="field" value="${escapeHtml(values.fileName)}" />` +
     `</label>` +
-    `<label class="qp-pdf__row"><span>保存位置</span>` +
+    `<label class="qp-pdf__row"><span>${t('保存位置', 'Save Location')}</span>` +
     `<span class="qp-pdf__pair">` +
-    `<input type="text" data-field="dir" data-role="field" value="${escapeHtml(values.dir || '')}" placeholder="文档同目录" />` +
-    `<button type="button" class="btn btn--ghost qp-pdf__browse" data-role="browse">浏览…</button>` +
+    `<input type="text" data-field="dir" data-role="field" value="${escapeHtml(values.dir || '')}" placeholder="${t('文档同目录', 'Same folder as the document')}" />` +
+    `<button type="button" class="btn btn--ghost qp-pdf__browse" data-role="browse">${t('浏览…', 'Browse…')}</button>` +
     `</span></label>` +
     `</div>` +
     `</div>` +
     /* ------------------------------ 浏览器模式提示 ------------------------------ */
     `<div class="qp-pdf__notice" data-role="notice"${desktopMode ? ' hidden' : ''}>` +
-    `${icon('alert', 14)}<span>浏览器模式：无法控制页码与页眉页脚，请在打印窗口选择「另存为 PDF」。</span>` +
+    `${icon('alert', 14)}<span>${t('浏览器模式：无法控制页码与页眉页脚，请在打印窗口选择「另存为 PDF」。', 'Browser mode: page numbers, headers and footers cannot be controlled. Choose "Save as PDF" in the print dialog.')}</span>` +
     `</div>` +
     /* ---------------------------------- 底栏 ---------------------------------- */
     `<div class="modal__foot qp-pdf__foot">` +
     `<div class="qp-pdf__progress" data-role="progress" hidden>` +
     `<div class="qp-pdf__bar"><span data-role="bar"></span></div>` +
-    `<span class="qp-pdf__stage" data-role="stage">解析 Markdown…</span>` +
+    `<span class="qp-pdf__stage" data-role="stage">${t('解析 Markdown…', 'Parsing Markdown…')}</span>` +
     `</div>` +
     `<span class="qp-pdf__error" data-role="error" hidden></span>` +
-    `<button class="btn btn--ghost" data-role="cancel">取消</button>` +
-    `<button class="btn is-primary" data-role="export">导出 PDF</button>` +
+    `<button class="btn btn--ghost" data-role="cancel">${t('取消', 'Cancel')}</button>` +
+    `<button class="btn is-primary" data-role="export">${t('导出 PDF', 'Export PDF')}</button>` +
     `</div>`;
 
   backdrop.appendChild(modal);
@@ -334,14 +335,14 @@ export function openPdfDialog(app, opts = {}) {
   /** 设置进度显示。 */
   function setProgress(stage, pct) {
     const labels = {
-      parse: '解析 Markdown…',
-      layout: '版式计算…',
-      render: '渲染页面…',
-      write: '写入文件…',
+      parse: t('解析 Markdown…', 'Parsing Markdown…'),
+      layout: t('版式计算…', 'Calculating layout…'),
+      render: t('渲染页面…', 'Rendering pages…'),
+      write: t('写入文件…', 'Writing file…'),
     };
     progressEl.hidden = false;
     barEl.style.width = `${Math.max(4, Math.min(100, pct))}%`;
-    stageEl.textContent = labels[stage] || '处理中…';
+    stageEl.textContent = labels[stage] || t('处理中…', 'Working…');
   }
 
   /** 关闭对话框。 */
@@ -422,7 +423,7 @@ export function openPdfDialog(app, opts = {}) {
     // 浏览器模式没有目录选择 IPC，给出明确解释而不是静默失败
     const input = field('dir');
     if (!desktopMode) {
-      toast('浏览器模式无法指定保存目录，请在打印窗口里选择位置', 'info', 2600);
+      toast(t('浏览器模式无法指定保存目录，请在打印窗口里选择位置', 'Browser mode cannot set a save folder. Choose the location in the print dialog.'), 'info', 2600);
       return;
     }
     // 弹系统目录选择框；选定后回填保存位置，导出时直接写入不再弹框
@@ -430,7 +431,7 @@ export function openPdfDialog(app, opts = {}) {
     if (res && res.ok && res.path) {
       input.value = res.path;
       syncConditional();
-      toast(`导出位置：${res.path}`, 'info', 2400);
+      toast(t(`导出位置：${res.path}`, `Export location: ${res.path}`), 'info', 2400);
     }
   });
 
@@ -468,23 +469,24 @@ export function openPdfDialog(app, opts = {}) {
     if (result.ok) {
       close();
       if (result.degraded) {
-        toast('已调起打印窗口，请在系统对话框里选择「另存为 PDF」', 'info', 3600);
+        toast(t('已调起打印窗口，请在系统对话框里选择「另存为 PDF」', 'The print dialog is open. Choose "Save as PDF" in the system dialog.'), 'info', 3600);
       } else {
         const kb = result.bytes ? ` · ${(result.bytes / 1024).toFixed(0)} KB` : '';
-        toast(`已导出：${result.path || 'PDF'}${kb}`, 'success', 3200);
+        toast(t(`已导出：${result.path || 'PDF'}${kb}`, `Exported: ${result.path || 'PDF'}${kb}`), 'success', 3200);
       }
       if (typeof opts.onDone === 'function') opts.onDone(result);
       return;
     }
 
     if (result.code === 'EABORT' || result.code === 'ECANCELED') {
-      toast('已取消导出', 'info', 1800);
+      toast(t('已取消导出', 'Export cancelled'), 'info', 1800);
       return;
     }
 
-    const message = result.error || '导出失败';
+    const message = result.error || t('导出失败', 'Export failed');
+    const suffix = result.code ? t(`（${result.code}）`, ` (${result.code})`) : '';
     errorEl.hidden = false;
-    errorEl.textContent = `${message}${result.code ? `（${result.code}）` : ''}`;
+    errorEl.textContent = `${message}${suffix}`;
     toast(message, 'error', 3600);
     if (typeof opts.onDone === 'function') opts.onDone(result);
   });
