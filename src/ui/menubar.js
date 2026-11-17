@@ -59,6 +59,9 @@ function menuLayout() {
         '-',
         'file.copyPath',
         '-',
+        // 默认打开方式：安装时勾过一次，事后要改就从这里进
+        'file.associations',
+        '-',
         'pdf.export',
         'pdf.print',
         '-',

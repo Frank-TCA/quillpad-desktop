@@ -177,4 +177,24 @@ contextBridge.exposeInMainWorld('quillpadDesktop', {
   pluginRead: (id, rel) => ipcRenderer.invoke('qp:plugin-read', id, rel),
   pluginStorage: (payload) => ipcRenderer.invoke('qp:plugin-storage', payload || {}),
   nppScan: (payload) => ipcRenderer.invoke('qp:npp-scan', payload || {}),
+
+  /* ------------------------------------------------------------ 文件关联 */
+  /**
+   * 查这些扩展名当前指向谁。
+   * @param {{exts: string[]}} payload
+   * @return {Promise<{ok: boolean, items?: Array<{ext: string, def: string, userChoice: string}>,
+   *                   progId?: string, code?: string, error?: string}>}
+   */
+  assocStatus: (payload) => ipcRenderer.invoke('qp:assoc-status', payload || {}),
+  /**
+   * 把扩展名设为 / 取消默认用 QuillPad 打开。
+   * @param {{exts: string[], on?: boolean}} payload
+   * @return {Promise<{ok: boolean, count?: number, target?: string, code?: string, error?: string}>}
+   */
+  assocApply: (payload) => ipcRenderer.invoke('qp:assoc-apply', payload || {}),
+  /**
+   * 打开 Windows「设置 → 默认应用」。
+   * @return {Promise<{ok: boolean, url?: string, code?: string, error?: string}>}
+   */
+  openDefaultApps: () => ipcRenderer.invoke('qp:open-default-apps'),
 });

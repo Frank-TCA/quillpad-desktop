@@ -113,6 +113,10 @@ $out = [ordered]@{
   mui         = $mui
   toasts      = $toasts
   openWithList= $owl
+  capabilities= [bool](Test-Path 'HKCU:\\Software\\QuillPad\\Capabilities')
+  registeredApp = [bool]((Get-Item 'HKCU:\\Software\\RegisteredApplications').GetValue('QuillPad'))
+  defaultMd   = $(if (Test-Path 'HKCU:\\Software\\Classes\\.md') { [string](Get-Item 'HKCU:\\Software\\Classes\\.md').GetValue('') } else { '' })
+  defaultTxt  = $(if (Test-Path 'HKCU:\\Software\\Classes\\.txt') { [string](Get-Item 'HKCU:\\Software\\Classes\\.txt').GetValue('') } else { '' })
 }
 $out | ConvertTo-Json -Compress
 `;
@@ -180,10 +184,15 @@ const needReg = [
   'App Paths\\${QP_APP_EXE}',
   'MuiCache',
   'ApplicationAssociationToasts',
+  'RegisteredApplications',
 ];
 for (const k of needReg) {
   check(`清单覆盖注册表 ${k}`, traces.includes(k));
 }
+check(
+  '卸载会撤销指向本产品的默认关联（HKCU\\Software\\Classes\\.ext）',
+  /ReadRegStr\s+\$QpA\s+HKCU\s+"Software\\Classes\\\$\{EXT\}"\s+""/.test(traces),
+);
 check(
   '清单枚举 Uninstall 子树（键名是 GUID 也能找到）',
   /QP_SWEEP_UNINST_ROOT/.test(traces) && /EnumRegKey/.test(traces),
@@ -195,6 +204,25 @@ check(
 
 const extCount = (traces.match(/!insertmacro \$\{CALLER\} "/g) || []).length;
 check('扩展名清单集中在一处（QP_EACH_EXT）', extCount >= 45, `${extCount} 项`);
+
+// 安装端（NSIS）与界面端（associations.js）各有一份分组清单，必须完全一致 ——
+// 对不上的话，用户在「文件关联」页勾了某组，只会生效一半。
+{
+  const nsisExts = [...traces.matchAll(/!insertmacro \$\{CALLER\} "(\.[^"]+)"/g)].map((m) => m[1]);
+  const uiSrc = readFileSync(join(ROOT, 'src', 'core', 'associations.js'), 'utf8');
+  const uiExts = [...uiSrc.matchAll(/'\.[a-z0-9]+'/g)].map((m) => m[0].slice(1, -1));
+  const a = [...new Set(nsisExts)].sort();
+  const b = [...new Set(uiExts)].sort();
+  const onlyNsis = a.filter((x) => !b.includes(x));
+  const onlyUi = b.filter((x) => !a.includes(x));
+  check(
+    '安装器与界面端的分组清单一致',
+    onlyNsis.length === 0 && onlyUi.length === 0,
+    `NSIS ${a.length} 个 / 界面 ${b.length} 个` +
+      (onlyNsis.length ? ` · 仅 NSIS: ${onlyNsis.join(' ')}` : '') +
+      (onlyUi.length ? ` · 仅界面: ${onlyUi.join(' ')}` : ''),
+  );
+}
 check(
   '安装器没有硬编码扩展名列表（避免两边漂移）',
   (instNsh.match(/WriteRegStr HKCU "Software\\Classes\\\./g) || []).length === 0,
@@ -253,6 +281,13 @@ if (VERIFY_CLEAN) {
     check('MuiCache 无 QuillPad 残留', reg.mui === 0, `剩 ${reg.mui} 个值`);
     check('关联 Toast 无 QuillPad 残留', reg.toasts === 0, `剩 ${reg.toasts} 个值`);
     check('「打开方式」列表无 QuillPad 残留', reg.openWithList === 0, `剩 ${reg.openWithList} 个值`);
+    check('能力注册已删除（默认应用页不再有 QuillPad）', reg.capabilities === false);
+    check('「默认应用」注册表值已删除', reg.registeredApp === false);
+    check(
+      '默认关联已撤销（.md / .txt 不再指向 QuillPad）',
+      reg.defaultMd !== 'QuillPad.TextFile' && reg.defaultTxt !== 'QuillPad.TextFile',
+      `.md=${reg.defaultMd || '(空)'} .txt=${reg.defaultTxt || '(空)'}`,
+    );
   }
 
   const scan = runScan();

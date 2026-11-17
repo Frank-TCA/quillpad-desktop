@@ -403,6 +403,8 @@
   !insertmacro QP_REGKEY HKCU "Software\Microsoft\Windows\CurrentVersion\App Paths\${QP_APP_EXE}"
   !insertmacro QP_REGKEY HKCU "${QP_APP_KEY}"
   !insertmacro QP_REGKEY HKCU "Software\${QP_APP_EXE}"
+  ; 「设置 → 默认应用」里那条 QuillPad 记录（能力注册见 installer.nsh）
+  !insertmacro QP_REGVAL HKCU "Software\RegisteredApplications" "QuillPad"
   !insertmacro QP_REGVAL HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "QuillPad"
 
   ; 资源管理器 / 任务栏的可见痕迹：值名里带 QuillPad 的都清掉
@@ -412,13 +414,21 @@
 !macroend
 
 ; 扩展名清单：安装端注册、卸载端清理都用这一份，谁也别想偷偷加一个。
-!macro QP_EACH_EXT CALLER
-  !insertmacro ${CALLER} ".txt"
+;
+; 按「文件关联页上的勾选项」分成四组（Markdown / 纯文本 / 代码 / 配置与数据），
+; 装机时用户勾哪组就哪组设为默认打开方式。QP_EACH_EXT 是四组的并集，卸载端
+; 只认它 —— 勾没勾过都要清，否则漏掉的那几个会指向已经不存在的 exe。
+!macro QP_EXTS_MARKDOWN CALLER
   !insertmacro ${CALLER} ".md"
   !insertmacro ${CALLER} ".markdown"
+!macroend
+
+!macro QP_EXTS_PLAIN CALLER
+  !insertmacro ${CALLER} ".txt"
   !insertmacro ${CALLER} ".log"
-  !insertmacro ${CALLER} ".json"
-  !insertmacro ${CALLER} ".jsonc"
+!macroend
+
+!macro QP_EXTS_CODE CALLER
   !insertmacro ${CALLER} ".js"
   !insertmacro ${CALLER} ".mjs"
   !insertmacro ${CALLER} ".cjs"
@@ -430,17 +440,7 @@
   !insertmacro ${CALLER} ".css"
   !insertmacro ${CALLER} ".scss"
   !insertmacro ${CALLER} ".less"
-  !insertmacro ${CALLER} ".xml"
-  !insertmacro ${CALLER} ".svg"
-  !insertmacro ${CALLER} ".yml"
-  !insertmacro ${CALLER} ".yaml"
-  !insertmacro ${CALLER} ".toml"
-  !insertmacro ${CALLER} ".ini"
-  !insertmacro ${CALLER} ".cfg"
-  !insertmacro ${CALLER} ".conf"
-  !insertmacro ${CALLER} ".properties"
-  !insertmacro ${CALLER} ".env"
-  !insertmacro ${CALLER} ".csv"
+  !insertmacro ${CALLER} ".vue"
   !insertmacro ${CALLER} ".py"
   !insertmacro ${CALLER} ".java"
   !insertmacro ${CALLER} ".c"
@@ -452,6 +452,7 @@
   !insertmacro ${CALLER} ".rs"
   !insertmacro ${CALLER} ".php"
   !insertmacro ${CALLER} ".rb"
+  !insertmacro ${CALLER} ".lua"
   !insertmacro ${CALLER} ".sh"
   !insertmacro ${CALLER} ".bash"
   !insertmacro ${CALLER} ".zsh"
@@ -459,18 +460,52 @@
   !insertmacro ${CALLER} ".cmd"
   !insertmacro ${CALLER} ".ps1"
   !insertmacro ${CALLER} ".sql"
-  !insertmacro ${CALLER} ".lua"
-  !insertmacro ${CALLER} ".vue"
+!macroend
+
+!macro QP_EXTS_CONFIG CALLER
+  !insertmacro ${CALLER} ".json"
+  !insertmacro ${CALLER} ".jsonc"
+  !insertmacro ${CALLER} ".xml"
+  !insertmacro ${CALLER} ".svg"
+  !insertmacro ${CALLER} ".yml"
+  !insertmacro ${CALLER} ".yaml"
+  !insertmacro ${CALLER} ".toml"
+  !insertmacro ${CALLER} ".ini"
+  !insertmacro ${CALLER} ".cfg"
+  !insertmacro ${CALLER} ".conf"
+  !insertmacro ${CALLER} ".properties"
+  !insertmacro ${CALLER} ".env"
+  !insertmacro ${CALLER} ".csv"
   !insertmacro ${CALLER} ".tex"
   !insertmacro ${CALLER} ".rst"
 !macroend
 
+!macro QP_EACH_EXT CALLER
+  !insertmacro QP_EXTS_MARKDOWN ${CALLER}
+  !insertmacro QP_EXTS_PLAIN ${CALLER}
+  !insertmacro QP_EXTS_CODE ${CALLER}
+  !insertmacro QP_EXTS_CONFIG ${CALLER}
+!macroend
+
 ; 「打开方式」候选列表里的一项：删值、删空的 OpenWithProgids、撤销指向我们的
 ; UserChoice、清 OpenWithList 里指向本程序的槽位。
+;
+; 还要把「默认关联」收回来：装机时会把 HKCU\Software\Classes\.ext 的默认值写成
+; 本产品的 ProgID（用户勾了「默认用 QuillPad 打开」的类型）。卸载时只删指向
+; 自己的那一个 —— 用户后来在系统设置里改回别的程序时，那个值不是我们的，不能动。
 !macro QP_DROP_EXT EXT
   DeleteRegValue HKCU "Software\Classes\${EXT}\OpenWithProgids" "${QP_PROGID}"
   DeleteRegKey /ifempty HKCU "Software\Classes\${EXT}\OpenWithProgids"
   DeleteRegValue HKCU "Software\Classes\Applications\${QP_APP_EXE}\SupportedTypes" "${EXT}"
+
+  ReadRegStr $QpA HKCU "Software\Classes\${EXT}" ""
+  ${If} $QpA == "${QP_PROGID}"
+    IntOp $QpHitVals $QpHitVals + 1
+    !insertmacro QP_LOGLINE "    默认关联 ${EXT} → 已撤销"
+    ${If} $QpMode == "delete"
+      DeleteRegValue HKCU "Software\Classes\${EXT}" ""
+    ${EndIf}
+  ${EndIf}
 
   !insertmacro QP_PURGE_VALS_BY_DATA HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\${EXT}\OpenWithList" "quillpad"
 

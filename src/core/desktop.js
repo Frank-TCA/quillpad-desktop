@@ -344,3 +344,38 @@ export function pluginStorage(payload) {
 export function nppScan(payload) {
   return call('nppScan', payload || {});
 }
+
+/* --------------------------------------------------- 文件关联（默认程序） */
+
+/** 能否读写文件关联（只有桌面壳能改注册表）。 */
+export function canManageAssociations() {
+  return has('assocStatus') && has('assocApply');
+}
+
+/**
+ * 查询这些扩展名当前指向谁。
+ * @param {string[]} exts 形如 ['.md', '.txt']
+ * @return {Promise<{ok: boolean, items?: Array<{ext: string, def: string, userChoice: string}>,
+ *                   progId?: string, code?: string, error?: string}>}
+ */
+export function assocStatus(exts) {
+  return call('assocStatus', { exts: Array.isArray(exts) ? exts : [] });
+}
+
+/**
+ * 把扩展名设为 / 取消默认用 QuillPad 打开。
+ * @param {string[]} exts
+ * @param {boolean} [on] 默认 true
+ * @return {Promise<{ok: boolean, count?: number, target?: string, code?: string, error?: string}>}
+ */
+export function assocApply(exts, on = true) {
+  return call('assocApply', { exts: Array.isArray(exts) ? exts : [], on: !!on });
+}
+
+/**
+ * 打开 Windows「设置 → 默认应用」。
+ * @return {Promise<{ok: boolean, url?: string, code?: string, error?: string}>}
+ */
+export function openDefaultApps() {
+  return call('openDefaultApps');
+}

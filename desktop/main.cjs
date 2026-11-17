@@ -12,6 +12,7 @@
  */
 
 const { app, BrowserWindow, Menu, dialog, ipcMain, session, shell, screen, webContents } = require('electron');
+const { execFile } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -37,12 +38,23 @@ const PREFERRED_PORT = 41731;
  * 路径会作为普通参数传进来（含空格的路径已被系统加好引号，argv 里是一整项）。
  * 开发模式下 `electron .` 的 "." 不是绝对路径，会被这里过滤掉。
  *
+ * **必须跳过 argv[0]**：它永远是进程自己的可执行文件（打包后是
+ * `<安装目录>\QuillPad.exe`，238MB）。它既是绝对路径、又真实存在，
+ * 以前会被当成「用户要打开的文件」排进队列 —— 于是每次启动都读一遍整个
+ * exe（238MB 进内存），再被渲染层的 24MB 上限拦下，左下角固定弹一条
+ * 「文件过大（238.2 MB），已跳过」。跳过 argv[0] 比按大小过滤更本质：
+ * 参数位 0 从来不是待打开文件。
+ *
  * @param {string[]} argv
  * @return {string[]} 去重后的绝对路径
  */
 function collectFileArgs(argv) {
+  const list = Array.isArray(argv) ? argv : [];
+  const self = path.resolve(process.execPath || '');
   const found = [];
-  for (const raw of argv || []) {
+  // 从下标 1 开始：0 是进程自身。
+  for (let i = 1; i < list.length; i += 1) {
+    const raw = list[i];
     if (typeof raw !== 'string' || !raw || raw.startsWith('-')) continue;
     let candidate = raw.trim().replace(/^"(.*)"$/, '$1');
     if (candidate.startsWith('file://')) {
@@ -53,30 +65,53 @@ function collectFileArgs(argv) {
       }
     }
     if (!path.isAbsolute(candidate)) continue;
+    const absolute = path.resolve(candidate);
+    // 双保险：某些启动方式（快捷方式 / 单实例转发）会把 exe 自己也塞进参数
+    if (self && absolute.toLowerCase() === self.toLowerCase()) continue;
     try {
-      if (!fs.statSync(candidate).isFile()) continue;
+      if (!fs.statSync(absolute).isFile()) continue;
     } catch {
       continue;
     }
-    const absolute = path.resolve(candidate);
     if (!found.includes(absolute)) found.push(absolute);
   }
   return found;
 }
 
 /**
+ * 单文件读取上限，与渲染层 `src/app.js` 的 `MAX_FILE_SIZE` 保持一致（24MB）。
+ *
+ * 这里再拦一道不是为了重复校验，而是为了**别白读**：`fs.readFile` 会把整个
+ * 文件读进内存再传给 IPC，等渲染层拿到 `size` 才发现超限已经晚了（读 238MB
+ * 的 exe 要几百毫秒 + 238MB 堆）。先 stat，超限直接返回 TOO_LARGE。
+ */
+const MAX_TEXT_BYTES = 24 * 1024 * 1024;
+
+/**
  * 读取文本文件，返回原始字节交给渲染层解码。
  * 复用前端同一套 decodeBytes（UTF-8 / BOM / UTF-16 / GBK 回退），
  * 避免壳与页面各写一份编码探测逻辑而产生行为差异。
  *
+ * 超过 {@link MAX_TEXT_BYTES} 时返回 `{ok:false, code:'TOO_LARGE', size}`，
+ * 不读内容（渲染层据此提示「文件过大，已跳过」）。
+ *
  * @param {string} filePath
- * @return {Promise<{ok: boolean, error?: string, name?: string, path?: string,
- *   bytes?: Uint8Array, size?: number, modified?: number}>}
+ * @return {Promise<{ok: boolean, error?: string, code?: string, name?: string,
+ *   path?: string, bytes?: Uint8Array, size?: number, modified?: number}>}
  */
 async function readTextFile(filePath) {
   try {
     const stat = await fs.promises.stat(filePath);
     if (!stat.isFile()) return { ok: false, error: t('目标不是文件', 'Target is not a file') };
+    if (stat.size > MAX_TEXT_BYTES) {
+      return {
+        ok: false,
+        code: 'TOO_LARGE',
+        name: path.basename(filePath),
+        size: stat.size,
+        error: t('文件过大', 'File is too large'),
+      };
+    }
     const bytes = await fs.promises.readFile(filePath);
     return {
       ok: true,
@@ -1290,6 +1325,251 @@ ipcMain.handle('qp:read-file', (_event, filePath) => readTextFile(String(filePat
 ipcMain.handle('qp:write-file', (_event, filePath, text, opts) =>
   writeTextFile(String(filePath || ''), String(text ?? ''), opts || {}),
 );
+
+/* --------------------------------------------------------- 文件关联（默认程序）
+ *
+ * 安装器（build/installer.nsh）在装机时就写好了关联，这一组 IPC 负责「装完之后
+ * 还能改」：应用内「文件关联…」对话框读当前状态、按勾选重设，或直接把用户送到
+ * Windows 的默认应用页。
+ *
+ * 为什么走 PowerShell 而不是 node：Node 没有注册表 API，而 reg.exe 在部分机器
+ * （含本仓库的开发机）被安全策略列入程序黑名单。PowerShell 是 Windows 自带、
+ * 无需额外依赖、又能一次做完多键写入的选择。脚本用 -EncodedCommand 传，避免
+ * 中文与引号在命令行上被转义坏。
+ *
+ * 全部写 HKCU：与 per-user 安装一致，不需要提权。
+ */
+
+/** 与 installer.nsh / traces.nsh 里的 QP_PROGID 必须一致。 */
+const ASSOC_PROGID = 'QuillPad.TextFile';
+/** 关联页只认「.xxx」形状的扩展名，挡掉注入与拼写错误。 */
+const ASSOC_EXT_RE = /^\.[a-z0-9]{1,12}$/i;
+
+/**
+ * 关联命令里要写的可执行文件路径。
+ *
+ * 便携版不能用 `app.getPath('exe')` —— 那是解包到临时目录里的副本，退出就被清掉；
+ * electron-builder 会把真正的便携 exe 路径放在 PORTABLE_EXECUTABLE_FILE 里。
+ *
+ * @return {string}
+ */
+function assocTargetExe() {
+  const portable = String(process.env.PORTABLE_EXECUTABLE_FILE || '').trim();
+  if (portable) return portable;
+  return app.getPath('exe');
+}
+
+/**
+ * 把 PowerShell 的 stderr 整理成给人看的一句话。
+ *
+ * 非交互式 PowerShell 的 stderr 是 CLIXML（`#< CLIXML ... <S S="Error">…`），
+ * 直接塞进对话框会是一屏转义符。这里把 Error 段抽出来拼成一行，抽不到就退回原文。
+ *
+ * @param {string} raw
+ * @return {string}
+ */
+function cleanPowerShellError(raw) {
+  const text = String(raw || '');
+  const parts = [...text.matchAll(/<S S="Error">([\s\S]*?)<\/S>/g)].map((m) =>
+    m[1]
+      .replace(/_x000D__x000A_/g, ' ')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/\s+/g, ' ')
+      .trim(),
+  );
+  const joined = parts.filter(Boolean).join(' ').trim();
+  if (joined) return joined.slice(0, 400);
+  return text.replace(/#< CLIXML[\s\S]*/m, '').replace(/\s+/g, ' ').trim().slice(0, 400);
+}
+
+/**
+ * 跑一段 PowerShell，拿 stdout。
+ * @param {string} script
+ * @return {Promise<{ok: boolean, stdout?: string, error?: string}>}
+ */
+function runPowerShell(script) {
+  return new Promise((resolve) => {
+    const exe = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+    const encoded = Buffer.from(script, 'utf16le').toString('base64');
+    execFile(
+      exe,
+      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
+      { windowsHide: true, timeout: 20000, maxBuffer: 4 * 1024 * 1024 },
+      (err, stdout, stderr) => {
+        if (err) {
+          resolve({ ok: false, error: cleanPowerShellError(stderr || err.message || err) });
+          return;
+        }
+        resolve({ ok: true, stdout: String(stdout || '') });
+      },
+    );
+  });
+}
+
+/**
+ * 规整前端传来的扩展名列表。
+ * @param {unknown} raw
+ * @return {string[]}
+ */
+function normalizeAssocExts(raw) {
+  const list = Array.isArray(raw) ? raw : [];
+  const out = [];
+  for (const item of list) {
+    let ext = String(item || '').trim().toLowerCase();
+    if (!ext) continue;
+    if (!ext.startsWith('.')) ext = `.${ext}`;
+    if (!ASSOC_EXT_RE.test(ext)) continue;
+    if (!out.includes(ext)) out.push(ext);
+  }
+  return out;
+}
+
+ipcMain.handle('qp:assoc-status', async (_event, payload) => {
+  const exts = normalizeAssocExts(payload && payload.exts);
+  if (!exts.length) return { ok: false, code: 'EEMPTY', error: t('没有可查询的扩展名', 'No extensions to query') };
+  const list = exts.map((e) => `'${e}'`).join(',');
+  const script = `
+$ErrorActionPreference = 'SilentlyContinue'
+$items = @()
+foreach ($e in @(${list})) {
+  $def = ''
+  $k = "HKCU:\\Software\\Classes\\$e"
+  if (Test-Path $k) { $def = [string](Get-Item -LiteralPath $k).GetValue('') }
+  $uc = ''
+  $uk = "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\$e\\UserChoice"
+  if (Test-Path $uk) { $uc = [string](Get-ItemProperty -LiteralPath $uk).ProgId }
+  $items += [pscustomobject]@{ ext = $e; def = $def; userChoice = $uc }
+}
+@{ items = @($items); progId = '${ASSOC_PROGID}' } | ConvertTo-Json -Compress
+`;
+  const res = await runPowerShell(script);
+  if (!res.ok) return { ok: false, code: 'EPS', error: res.error };
+  try {
+    const data = JSON.parse(String(res.stdout || '').trim() || '{}');
+    return { ok: true, items: Array.isArray(data.items) ? data.items : [], progId: ASSOC_PROGID };
+  } catch {
+    return { ok: false, code: 'EPARSE', error: String(res.stdout || '').slice(0, 200) };
+  }
+});
+
+ipcMain.handle('qp:assoc-apply', async (_event, payload) => {
+  const exts = normalizeAssocExts(payload && payload.exts);
+  if (!exts.length) return { ok: false, code: 'EEMPTY', error: t('没有可设置的扩展名', 'No extensions to set') };
+  const on = payload && payload.on !== false;
+  const exe = assocTargetExe();
+  if (!app.isPackaged && !process.env.PORTABLE_EXECUTABLE_FILE) {
+    // 开发模式下 app.getPath('exe') 是 electron.exe，写进关联只会把文件指到壳上
+    return { ok: false, code: 'EDEV', error: t('开发模式下不修改文件关联', 'File associations are not modified in dev mode') };
+  }
+  const list = exts.map((e) => `'${e}'`).join(',');
+  const onFlag = on ? '$true' : '$false';
+  // 注册表里给人看的两个名字跟随界面语言（与安装器写的默认值同义）
+  const typeName = t('QuillPad 文本文件', 'QuillPad text file');
+  const appDesc = t('QuillPad 文本与 Markdown 编辑器', 'QuillPad text & Markdown editor');
+  const openVerb = t('用 QuillPad 打开(&Q)', 'Open with QuillPad');
+  const psq = (s) => `'${String(s).replace(/'/g, "''")}'`;
+  const script = `
+$ErrorActionPreference = 'Stop'
+$exe = ${psq(exe)}
+$progId = '${ASSOC_PROGID}'
+$base = 'HKCU:\\Software\\Classes'
+$appBase = "$base\\Applications\\QuillPad.exe"
+$on = ${onFlag}
+
+function Ensure-Key([string]$p) {
+  if (-not (Test-Path $p)) { New-Item -Path $p -Force | Out-Null }
+}
+function Set-Def([string]$p, [string]$v) {
+  Ensure-Key $p
+  Set-ItemProperty -Path $p -Name '(default)' -Value $v
+}
+
+# ProgID + "Open with" identity. The installer already wrote these on installed
+# machines; a portable copy relies on this branch to register them.
+Set-Def "$base\\$progId" ${psq(typeName)}
+Set-ItemProperty -Path "$base\\$progId" -Name 'FriendlyTypeName' -Value ${psq(typeName)}
+Set-Def "$base\\$progId\\DefaultIcon" ($exe + ',0')
+Set-Def "$base\\$progId\\shell\\open" ${psq(openVerb)}
+Set-Def "$base\\$progId\\shell\\open\\command" ('"' + $exe + '" "%1"')
+
+Ensure-Key $appBase
+Set-ItemProperty -Path $appBase -Name 'FriendlyAppName' -Value 'QuillPad'
+Set-Def "$appBase\\DefaultIcon" ($exe + ',0')
+Set-Def "$appBase\\shell\\open" ${psq(openVerb)}
+Set-Def "$appBase\\shell\\open\\command" ('"' + $exe + '" "%1"')
+
+# Capabilities: makes QuillPad appear under Settings > Apps > Default apps.
+Ensure-Key "HKCU:\\Software\\QuillPad\\Capabilities\\FileAssociations"
+Set-ItemProperty -Path "HKCU:\\Software\\QuillPad\\Capabilities" -Name 'ApplicationName' -Value 'QuillPad'
+Set-ItemProperty -Path "HKCU:\\Software\\QuillPad\\Capabilities" -Name 'ApplicationDescription' -Value ${psq(appDesc)}
+Set-ItemProperty -Path "HKCU:\\Software\\QuillPad\\Capabilities" -Name 'ApplicationIcon' -Value ($exe + ',0')
+Ensure-Key 'HKCU:\\Software\\RegisteredApplications'
+Set-ItemProperty -Path 'HKCU:\\Software\\RegisteredApplications' -Name 'QuillPad' -Value 'Software\\QuillPad\\Capabilities'
+
+$done = @()
+foreach ($e in @(${list})) {
+  $ck = "$base\\$e"
+  $uk = "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\$e\\UserChoice"
+  if ($on) {
+    Set-Def $ck $progId
+    # UserChoice is hash-protected: it cannot be rewritten, only removed so that
+    # Windows falls back to the default value set above.
+    if (Test-Path $uk) { Remove-Item $uk -Recurse -Force }
+    Ensure-Key "$ck\\OpenWithProgids"
+    New-ItemProperty -Path "$ck\\OpenWithProgids" -Name $progId -Value '' -PropertyType String -Force | Out-Null
+    Ensure-Key "$appBase\\SupportedTypes"
+    New-ItemProperty -Path "$appBase\\SupportedTypes" -Name $e -Value '' -PropertyType String -Force | Out-Null
+    Set-ItemProperty -Path "HKCU:\\Software\\QuillPad\\Capabilities\\FileAssociations" -Name $e -Value $progId
+  } else {
+    $def = ''
+    if (Test-Path $ck) { $def = [string](Get-Item -LiteralPath $ck).GetValue('') }
+    # 默认值没有名字，只能用 RegistryKey.DeleteValue('') 删：
+    #   · Remove-ItemProperty -Name '(default)' 会抛 PSArgumentException（找不到该属性）
+    #   · Get-Item 拿到的是只读句柄，直接 DeleteValue 会抛 UnauthorizedAccessException
+    # 所以必须显式 OpenSubKey(..., $true) 拿可写句柄。
+    if ($def -eq $progId) {
+      $rk = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey("Software\\Classes\\$e", $true)
+      if ($rk) { $rk.DeleteValue('', $false); $rk.Close() }
+    }
+    Remove-ItemProperty -Path "$ck\\OpenWithProgids" -Name $progId -Force -ErrorAction SilentlyContinue
+    if (Test-Path $uk) {
+      $uc = [string](Get-ItemProperty -LiteralPath $uk).ProgId
+      if ($uc -eq $progId) { Remove-Item $uk -Recurse -Force }
+    }
+    Remove-ItemProperty -Path "HKCU:\\Software\\QuillPad\\Capabilities\\FileAssociations" -Name $e -Force -ErrorAction SilentlyContinue
+  }
+  $done += $e
+}
+
+@{ ok = $true; count = $done.Count; target = $exe } | ConvertTo-Json -Compress
+`;
+  const res = await runPowerShell(script);
+  if (!res.ok) return { ok: false, code: 'EPS', error: res.error };
+  const text = String(res.stdout || '').trim();
+  try {
+    const data = JSON.parse(text.split('\n').pop() || '{}');
+    return { ok: data.ok !== false, count: Number(data.count) || exts.length, target: data.target || exe };
+  } catch {
+    return { ok: true, count: exts.length, target: exe };
+  }
+});
+
+ipcMain.handle('qp:open-default-apps', async () => {
+  // Win11 22H2+ 支持按应用过滤；老系统直接落到「默认应用」页
+  const candidates = ['ms-settings:defaultapps?registeredAppUser=QuillPad', 'ms-settings:defaultapps'];
+  for (const url of candidates) {
+    try {
+      await shell.openExternal(url);
+      return { ok: true, url };
+    } catch {
+      /* 试下一个 */
+    }
+  }
+  return { ok: false, code: 'EOPEN', error: t('打不开系统的默认应用设置', 'Could not open the Windows default apps settings') };
+});
 
 ipcMain.on('qp:window', (event, action) => {
   const win = BrowserWindow.fromWebContents(event.sender);

@@ -8,6 +8,9 @@ import { escapeHtml } from '../core/utils.js';
 import { allCommands, commandShortcutLabels, IS_MAC } from '../core/commands.js';
 import { APP_VERSION_LABEL } from '../core/version.js';
 import { LANGUAGES, languageLabel } from '../editor/languages.js';
+import { assocGroups, assocAllExts, ASSOC_PROGID } from '../core/associations.js';
+import { assocStatus, assocApply, openDefaultApps, canManageAssociations } from '../core/desktop.js';
+import { toast } from './toast.js';
 import { t } from '../core/i18n.js';
 
 /** 当前打开的模态框栈。 */
@@ -598,5 +601,182 @@ export function aboutDialog() {
       `</div>` +
       `</div>`,
     actions: [{ label: t('关闭', 'Close'), value: true, kind: 'primary', defaultAction: true }],
+  });
+}
+
+/**
+ * 文件关联对话框。
+ *
+ * 勾选框 = 「这一组默认用 QuillPad 打开」。打开时按注册表的真实状态回填
+ * （全是我们就是勾上、部分是我们就是半选），点「应用」只对**发生变化的组**
+ * 下发一次写操作 —— 全部都没变时不会白跑一遍注册表写入。
+ *
+ * 写注册表在主进程（`qp:assoc-apply`），这里只管界面与状态回读。
+ * 浏览器模式下不可用，命令本身会被置灰。
+ *
+ * @return {Promise<{changed: number}|null>} 取消返回 null
+ */
+export function associationsDialog() {
+  if (!canManageAssociations()) {
+    return openModal({
+      title: t('文件关联', 'File Associations'),
+      glyph: 'info',
+      bodyHtml:
+        `<p class="field-hint">${t(
+          '只有桌面版（Windows 安装版 / 便携版）能修改文件关联，浏览器里没有这个能力。',
+          'File associations can only be changed in the desktop build (installed or portable); a browser cannot.',
+        )}</p>`,
+    }).then(() => null);
+  }
+
+  const groups = assocGroups();
+  const exts = assocAllExts();
+
+  /**
+   * 组内的扩展名摘要：前 4 个原样列出，剩下的折成「+N」。
+   * 从清单动态生成，增删扩展名时不会和界面文案脱节。
+   * @param {string[]} list
+   * @return {string}
+   */
+  const summarize = (list) =>
+    list.length <= 4 ? list.join(' ') : `${list.slice(0, 4).join(' ')} +${list.length - 4}`;
+
+  const rows = groups
+    .map(
+      (g) =>
+        `<label class="qp-assoc__row">` +
+        `<input type="checkbox" data-group="${escapeHtml(g.id)}" />` +
+        `<span class="qp-assoc__name">${escapeHtml(g.label)}</span>` +
+        `<span class="qp-assoc__exts">${escapeHtml(summarize(g.exts))}</span>` +
+        `<span class="qp-assoc__state" data-state="${escapeHtml(g.id)}">${t('读取中…', 'Checking…')}</span>` +
+        `</label>`,
+    )
+    .join('');
+
+  return openModal({
+    title: t('文件关联', 'File Associations'),
+    glyph: 'info',
+    wide: true,
+    bodyHtml:
+      `<p class="qp-assoc__intro">${t(
+        '勾选的类型双击时用 QuillPad 打开。取消勾选会把指向 QuillPad 的默认关联撤下（系统回到它原来的默认程序）。',
+        'Checked types open in QuillPad on double-click. Unchecking removes the association pointing at QuillPad and lets Windows fall back to its previous default.',
+      )}</p>` +
+      rows +
+      `<p class="qp-assoc__note" data-note>${t(
+        '状态来自注册表：显示「全部为默认」的组不用再应用一次。',
+        'Status is read from the registry — groups already fully associated need no change.',
+      )}</p>` +
+      `<button class="btn is-ghost qp-assoc__sysbtn" data-open-default-apps type="button">${t(
+        '打开 Windows 默认应用设置…',
+        'Open Windows Default Apps…',
+      )}</button>`,
+    actions: [
+      { label: t('取消', 'Cancel'), value: null, kind: 'ghost' },
+      { label: t('应用', 'Apply'), value: '__APPLY__', kind: 'primary', defaultAction: true },
+    ],
+    onMount: (body, api) => {
+      const note = body.querySelector('[data-note]');
+      /** @type {Map<string, {def: string, userChoice: string}>} 扩展名 -> 当前指向 */
+      let current = new Map();
+
+      /** 该组里有多少扩展名当前指向我们。 */
+      const oursCount = (g) =>
+        g.exts.filter((e) => {
+          const item = current.get(e);
+          if (!item) return false;
+          return (item.userChoice || item.def) === ASSOC_PROGID;
+        }).length;
+
+      const fillChecked = () => {
+        for (const g of groups) {
+          const box = body.querySelector(`[data-group="${g.id}"]`);
+          const cell = body.querySelector(`[data-state="${g.id}"]`);
+          const n = oursCount(g);
+          if (cell) {
+            cell.textContent =
+              n === 0
+                ? t('未设为默认', 'Not default')
+                : n === g.exts.length
+                  ? t('全部为默认', 'All default')
+                  : t(`${n}/${g.exts.length} 为默认`, `${n}/${g.exts.length} default`);
+            cell.dataset.state = n === 0 ? 'none' : n === g.exts.length ? 'all' : 'some';
+          }
+          if (box) {
+            box.checked = n === g.exts.length;
+            box.indeterminate = n > 0 && n < g.exts.length;
+          }
+        }
+      };
+
+      const refresh = async () => {
+        const res = await assocStatus(exts);
+        if (!res.ok) {
+          if (note) note.textContent = res.error || t('读取文件关联失败', 'Could not read file associations');
+          return false;
+        }
+        current = new Map((res.items || []).map((i) => [i.ext, i]));
+        fillChecked();
+        return true;
+      };
+
+      const applyBtn = body.parentElement.querySelector('.btn.is-primary');
+      const apply = async () => {
+        if (applyBtn) applyBtn.disabled = true;
+        if (note) note.textContent = t('正在写入…', 'Applying…');
+        let changed = 0;
+        const errs = [];
+        try {
+          for (const g of groups) {
+            const box = body.querySelector(`[data-group="${g.id}"]`);
+            const wantOn = !!(box && box.checked);
+            const n = oursCount(g);
+            // 已经是目标状态就跳过：没变化的组不值得再跑一次写入
+            if (wantOn ? n === g.exts.length : n === 0) continue;
+            const res = await assocApply(g.exts, wantOn);
+            if (!res.ok) errs.push(`${g.label}：${res.error || res.code || 'error'}`);
+            else changed += res.count || g.exts.length;
+          }
+        } finally {
+          if (applyBtn) applyBtn.disabled = false;
+        }
+        if (errs.length) {
+          if (note) {
+            note.textContent = errs.join('；');
+            note.classList.add('is-error');
+          }
+          await refresh();
+          return;
+        }
+        if (changed) toast(t(`已更新 ${changed} 个文件关联`, `Updated ${changed} file associations`), 'success');
+        api.resolve({ changed });
+      };
+
+      // 「应用」自己接管：要先落盘再关框（默认动作只会把 '__APPLY__' 回传）
+      if (applyBtn) {
+        applyBtn.addEventListener(
+          'click',
+          (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            void apply();
+          },
+          true,
+        );
+      }
+
+      const sysBtn = body.querySelector('[data-open-default-apps]');
+      if (sysBtn) {
+        sysBtn.addEventListener('click', async () => {
+          const res = await openDefaultApps();
+          if (!res.ok && note) {
+            note.textContent = res.error || t('打不开系统设置', 'Could not open Windows settings');
+            note.classList.add('is-error');
+          }
+        });
+      }
+
+      void refresh();
+    },
   });
 }

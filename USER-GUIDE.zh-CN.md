@@ -1,14 +1,14 @@
-# QuillPad 1.0.2 使用说明
+# QuillPad 1.0.3 使用说明
 
-> 简体中文 · 对应 v1.0.2 · MIT 许可 · 仓库 <https://github.com/Frank-TCA/quillpad-desktop>
+> 简体中文 · 对应 v1.0.3 · MIT 许可 · 仓库 <https://github.com/Frank-TCA/quillpad-desktop>
 
 安装包位于 `dist/release/` 目录（可复制到任意位置使用）：
 
 | 文件 | 说明 | 大小 |
 | --- | --- | --- |
-| `QuillPad-Setup-v1.0.2.exe` | 安装版 | 约 127 MB |
-| `QuillPad-v1.0.2-portable.exe` | 便携版 | 约 115 MB |
-| `QuillPad-Uninstaller-v1.0.2.exe` | 独立卸载器（仅安装版需要） | 约 80 KB |
+| `QuillPad-Setup-v1.0.3.exe` | 安装版 | 约 127 MB |
+| `QuillPad-v1.0.3-portable.exe` | 便携版 | 约 115 MB |
+| `QuillPad-Uninstaller-v1.0.3.exe` | 独立卸载器（仅安装版需要） | 约 80 KB |
 
 > 每个文件的精确字节数与 SHA256 见对应 Release 页面的附件说明。
 
@@ -51,7 +51,7 @@
 
 ## 二、安装版用法（推荐）
 
-1. 双击 `QuillPad-Setup-v1.0.2.exe`。
+1. 双击 `QuillPad-Setup-v1.0.3.exe`。
 2. 首次运行可能弹「Windows 已保护你的电脑」—— 这是未购买代码签名证书的新程序都会有的提示，不是病毒。点「更多信息」→「仍要运行」。
 3. 安装器是中文界面，可选安装目录；`perMachine=false`，装到当前用户目录，不需要管理员权限、不弹 UAC。装完可勾选立即运行。
 4. 会创建开始菜单与桌面快捷方式；卸载程序 `Uninstall QuillPad.exe` 就在安装目录里，不会单独留在下载文件夹。
@@ -59,26 +59,44 @@
 
 ### 右键菜单 / 文件关联
 
-安装时会注册 `QuillPad.TextFile` ProgID、App Paths、常见文本与代码扩展名的 `OpenWithProgids`，以及所有文件的右键菜单「用 QuillPad 打开(&Q)」。
+安装时会注册 `QuillPad.TextFile` ProgID、App Paths、50 个文本与代码扩展名的 `OpenWithProgids`，以及所有文件的右键菜单「用 QuillPad 打开(&Q)」。
 
-对任意文件右键 →「用 QuillPad 打开」即可；也可在「打开方式」里选 QuillPad。选中多个文件时只会打开第一个（Windows 对自定义动词的限制）。
+**「文件关联」是安装流程里的一页**（选完安装目录后的那一步），四组勾选、默认全选：
 
-安装器只登记「候选程序」，不会抢走你已有的默认关联；想设为默认请在「打开方式」里勾选「始终使用此应用」。这些注册项都在 `HKCU` 下，不需要管理员权限，卸载时全部反注册。
+| 分组 | 扩展名 |
+| --- | --- |
+| Markdown 文档 | `.md`、`.markdown` |
+| 纯文本与日志 | `.txt`、`.log` |
+| 代码文件（31） | `.js` `.mjs` `.cjs` `.jsx` `.ts` `.tsx` `.html` `.htm` `.css` `.scss` `.less` `.vue` `.py` `.java` `.c` `.h` `.cpp` `.hpp` `.cs` `.go` `.rs` `.php` `.rb` `.lua` `.sh` `.bash` `.zsh` `.bat` `.cmd` `.ps1` `.sql` |
+| 配置与数据（15） | `.json` `.jsonc` `.xml` `.svg` `.yml` `.yaml` `.toml` `.ini` `.cfg` `.conf` `.properties` `.env` `.csv` `.tex` `.rst` |
+
+勾选的分组会**真正设为默认打开方式**，双击文件就用 QuillPad 打开。实现上要做两件事：把 `HKCU\Software\Classes\.ext` 的默认值写成 `QuillPad.TextFile`，并删掉 Windows 的 `UserChoice` 记录 —— 后者自 Windows 8 起优先于前者，且带哈希校验，程序改不了、只能整键删除，删掉后系统才回落到默认值。所以**你之前手动指定过的默认程序会被按勾选覆盖**；不想要的分组在安装时取消勾选即可。
+
+取消勾选的分组只登记为「打开方式」候选，不动系统默认程序。
+
+装完之后还能改：**菜单 → 文件 → 文件关联…**。对话框按注册表真实状态回填（全部为默认 / 部分 / 未设），勾选后点「应用」，只对发生变化的组写一次；里面的「打开 Windows 默认应用设置…」直接跳到系统页面，也能在「设置 → 应用 → 默认应用 → QuillPad」里逐项改。
+
+企业批量部署想完全不动默认关联：`QuillPad-Setup-v1.0.3.exe /S /NOASSOC`。
+
+这些注册项都在 `HKCU` 下，不需要管理员权限；卸载时默认关联、能力注册（`Software\QuillPad\Capabilities` 与 `RegisteredApplications`）、ProgID、右键菜单全部反注册。**只撤销指向 QuillPad 的项**：你后来自己改回别的程序的类型不会被误删。
+
+对任意文件右键 →「用 QuillPad 打开」也可以；选中多个文件时只会打开第一个（Windows 对自定义动词的限制）。
 
 ## 三、便携版用法
 
-1. 把 `QuillPad-v1.0.2-portable.exe` 单独放到一个空文件夹（例如 U 盘目录），双击即可运行。它是单文件自解压包，不需要安装、不写注册表、不创建快捷方式。
+1. 把 `QuillPad-v1.0.3-portable.exe` 单独放到一个空文件夹（例如 U 盘目录），双击即可运行。它是单文件自解压包，不需要安装、不写注册表、不创建快捷方式。
 2. 启动要 3–5 秒：单文件版每次会先把自身解压到系统临时目录。
 3. 所有用户数据（会话、主题、最近文件、窗口位置、宏、插件与插件状态、缓存）都写在 exe **同目录**下的 `QuillPad-Data\` 文件夹里。实测：运行后该目录含 `window-state.json` 等 81 个文件；`%APPDATA%\QuillPad` 在便携运行期间没有新增任何文件。
 4. 更换电脑或移动 exe 时，连同 `QuillPad-Data\` 一起拷贝即可带走全部设置。
-5. 便携版不写注册表，所以没有右键菜单和文件关联；把文件拖到窗口里、或用「打开文件」打开，同样能直接保存回原文件。
+5. 便携版安装时**不写注册表**，所以初始没有右键菜单和文件关联；把文件拖到窗口里、或用「打开文件」打开，同样能直接保存回原文件。
+6. 需要关联时，用**菜单 → 文件 → 文件关联…** 勾选即可：注册表项会指向便携 exe 本体（不是每次启动解包出来的临时副本），卸载/换机时把 `QuillPad-Data\` 与 exe 一起删掉，再在系统「默认应用」里改回即可。
 
 ## 四、四种卸载入口与独立卸载器
 
 1. 开始菜单 →「卸载 QuillPad」快捷方式；
 2. 安装目录下的 `Uninstall QuillPad.exe`；
 3. Windows「设置 → 应用 → 已安装的应用」（或控制面板「程序和功能」）里选中「QuillPad 文本编辑器」→ 卸载；
-4. 直接双击分发文件 `QuillPad-Uninstaller-v1.0.2.exe`（独立卸载器，约 78 KB）。
+4. 直接双击分发文件 `QuillPad-Uninstaller-v1.0.3.exe`（独立卸载器，约 78 KB）。
 
 四个入口执行的是同一套清理逻辑，效果一致，任选其一。
 
@@ -94,8 +112,8 @@
 命令行用法（脚本 / 批处理）：
 
 ```bat
-QuillPad-Uninstaller-v1.0.2.exe /S          静默卸载，不弹对话框
-QuillPad-Uninstaller-v1.0.2.exe /SCAN /S    只扫描不删除
+QuillPad-Uninstaller-v1.0.3.exe /S          静默卸载，不弹对话框
+QuillPad-Uninstaller-v1.0.3.exe /SCAN /S    只扫描不删除
 ```
 
 退出码：`0` = 干净，`1` = 有痕迹，`2` = 清理时有删不掉的项，`3` = 用户取消。
@@ -117,7 +135,7 @@ QuillPad-Uninstaller-v1.0.2.exe /SCAN /S    只扫描不删除
 
 ### 便携版
 
-不写任何注册表、不建快捷方式，因此**不需要卸载程序**：直接删除 `QuillPad-v1.0.2-portable.exe` 和同目录的 `QuillPad-Data\` 文件夹即可。实测删除 `QuillPad-Data\` 后，exe 所在目录只剩 exe 本身，`%APPDATA%\QuillPad` 无新增文件，系统里不残留用户数据。
+不写任何注册表、不建快捷方式，因此**不需要卸载程序**：直接删除 `QuillPad-v1.0.3-portable.exe` 和同目录的 `QuillPad-Data\` 文件夹即可。实测删除 `QuillPad-Data\` 后，exe 所在目录只剩 exe 本身，`%APPDATA%\QuillPad` 无新增文件，系统里不残留用户数据。
 
 ### 一句话区别
 

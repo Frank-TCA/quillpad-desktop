@@ -1,7 +1,7 @@
 /**
  * QuillPad · 装机后验收冒烟（对已安装正式版一键跑，版本号自动读取 package.json）
  *
- * 覆盖 6 组断言（默认全量，对已安装应用）：
+ * 覆盖 7 组断言（默认全量，对已安装应用）：
  *  1. 标题栏「界面语言」按钮：存在 / 排在按钮区最后 / tooltip 中英 /
  *     下拉含简体中文与 English / 勾选态 / 切换生效
  *  2. 插件管理器：市场安装 quillpad.text-tools → 已安装列表出现 → 卸载 →
@@ -14,6 +14,9 @@
  *     切回中文恢复；用户编辑过只改名不覆盖
  *  6. 文件级检查（无需启动应用）：docs/screenshots/ 四张截图存在非空且被
  *     README.md / README.en.md 引用；dist/release/ 三产物存在且达到体积门槛
+ *  7. 启动参数与文件关联：安装器写下的 .md/.txt 默认关联、能力注册、应用内 IPC
+ *     读得到；第二实例转交文件能打开，且不再误报「文件过大」（argv[0] 不再是
+ *     待打开文件，程序自己的 238MB exe 不再被读一遍）
  *
  * 用法：
  *   node scripts/smoke-installed.mjs              # 全量（启动已安装应用）
@@ -23,7 +26,7 @@
  *       本脚本只读不装，全量模式结束时会把界面语言 / 欢迎文档 / 插件列表复原。
  * 环境坑：WorkBuddy 沙箱 shell 带 ELECTRON_RUN_AS_NODE=1 + NODE_OPTIONS，
  *        spawn 前必须从 env 删掉这两个键，否则 Electron 报 `bad option`。
- * 执行顺序：第 6 项（文件级，先行 fail-fast）→ 第 1–5 项（启动应用）。
+ * 执行顺序：第 6 项（文件级，先行 fail-fast）→ 第 1–5、7 项（启动应用）。
  */
 
 import { _electron as electron } from 'playwright-core';
@@ -31,7 +34,7 @@ import { existsSync, statSync, readFileSync, writeFileSync, mkdtempSync, rmSync 
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execSync } from 'node:child_process';
+import { execSync, spawn, spawnSync } from 'node:child_process';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
@@ -441,12 +444,121 @@ async function sectionWelcomeDoc() {
   await win.waitForTimeout(600);
 }
 
+/* ================================================ 第 7 项 · 启动参数与文件关联 */
+/**
+ * 读文件关联相关注册表项（reg.exe 在本机安全策略里被禁，走 PowerShell）。
+ * @return {{md?: string, txt?: string, capabilities?: boolean, registeredApp?: boolean}}
+ */
+function readAssocRegistry() {
+  const ps = `
+$ErrorActionPreference = 'SilentlyContinue'
+function Def([string]$k) {
+  $v = ''
+  if (Test-Path $k) { $v = [string](Get-Item -LiteralPath $k).GetValue('') }
+  return $v
+}
+@{ md = (Def 'HKCU:\\Software\\Classes\\.md')
+   txt = (Def 'HKCU:\\Software\\Classes\\.txt')
+   capabilities = [bool](Test-Path 'HKCU:\\Software\\QuillPad\\Capabilities')
+   registeredApp = [bool]((Get-Item 'HKCU:\\Software\\RegisteredApplications').GetValue('QuillPad')) } |
+  ConvertTo-Json -Compress
+`;
+  const r = spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', ps], {
+    encoding: 'utf8',
+    windowsHide: true,
+    timeout: 30000,
+  });
+  try {
+    return JSON.parse(String(r.stdout || '').trim() || '{}');
+  } catch {
+    return {};
+  }
+}
+
+async function sectionAssociations() {
+  console.log('── 第 7 项 · 启动参数与文件关联');
+
+  // ---- 7.1–7.3 安装器写下的默认关联 ----
+  const reg = readAssocRegistry();
+  check('7.1 .md 默认程序是 QuillPad', reg.md === 'QuillPad.TextFile', reg.md || '(空)');
+  check('7.2 .txt 默认程序是 QuillPad', reg.txt === 'QuillPad.TextFile', reg.txt || '(空)');
+  check(
+    '7.3 能力注册存在（设置→默认应用里能看到）',
+    reg.capabilities === true && reg.registeredApp === true,
+    JSON.stringify(reg).slice(0, 140),
+  );
+
+  // ---- 7.4 应用内 IPC 读得到同样的状态 ----
+  const st = await win.evaluate(() =>
+    window.quillpadDesktop.assocStatus({ exts: ['.md', '.txt'] }),
+  );
+  check(
+    '7.4 应用内能查到关联状态',
+    !!st && st.ok === true && Array.isArray(st.items) && st.items.length === 2,
+    JSON.stringify(st).slice(0, 160),
+  );
+
+  // ---- 7.5 第二个实例把文件转交给已开窗口 ----
+  // 这条同时验证了关联命令行（"exe" "%1"）真的能打开文件，以及 argv[0]
+  // （进程自身的 238MB exe）没有被当成待打开文件 —— 后者正是「文件过大，已跳过」
+  // 那条误报的来源：以前每次启动 / 每次右键打开都会先把 exe 读进内存再被拦住。
+  await win.evaluate(() => {
+    window.__qpToasts = [];
+    const root = document.getElementById('toast-root');
+    if (!root) return;
+    new MutationObserver((muts) => {
+      for (const m of muts) {
+        for (const n of m.addedNodes) {
+          if (n.nodeType === 1 && n.classList && n.classList.contains('toast')) {
+            window.__qpToasts.push(n.textContent || '');
+          }
+        }
+      }
+    }).observe(root, { childList: true });
+  });
+
+  const tmpDir = mkdtempSync(path.join(os.tmpdir(), 'qp-assoc-'));
+  const tmpFile = path.join(tmpDir, 'assoc-sample.md');
+  writeFileSync(tmpFile, '# 关联测试\n\n由第二实例转交打开。\n', 'utf8');
+  spawn(EXE, [tmpFile], { env, windowsHide: true, stdio: 'ignore' });
+
+  const opened = await win
+    .waitForFunction(
+      (p) => (window.quillpad.state.tabs || []).some((t) => (t.nativePath || '') === p),
+      tmpFile,
+      { timeout: 25000 },
+    )
+    .then(() => true)
+    .catch(() => false);
+  check('7.5 系统传入的文件被打开', opened, opened ? path.basename(tmpFile) : '25s 内没出现对应标签');
+
+  await win.waitForTimeout(800);
+  const toasts = await win.evaluate(() => window.__qpToasts || []);
+  const oversize = toasts.filter((x) => /文件过大|too large/i.test(x));
+  check('7.6 不再误报「文件过大」', oversize.length === 0, oversize.join(' | ') || '无相关提示');
+
+  const selfTab = await win.evaluate(() =>
+    (window.quillpad.state.tabs || []).some((t) => /QuillPad\.exe$/i.test(t.name || '')),
+  );
+  check('7.7 没把程序自身当成待打开文件', selfTab === false, selfTab ? '出现了 QuillPad.exe 标签' : '无');
+
+  // 收尾：关掉临时标签并删目录，别把「打不开的文件」留在会话里
+  await win
+    .evaluate((p) => {
+      const t = (window.quillpad.state.tabs || []).find((x) => (x.nativePath || '') === p);
+      if (t) void window.quillpad.closeTab(t.id, true);
+    }, tmpFile)
+    .catch(() => {});
+  rmSync(tmpDir, { recursive: true, force: true });
+}
+
 for (const [tag, fn] of [
   ['第 1 项', sectionLocaleButton],
   ['第 2 项', sectionPluginUninstall],
   ['第 3 项', sectionFilePicker],
   ['第 4 项', sectionGutterPolicy],
   ['第 5 项', sectionWelcomeDoc],
+  ['第 7 项', sectionAssociations],
 ]) {
   try {
     await fn();

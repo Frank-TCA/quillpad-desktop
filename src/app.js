@@ -1282,6 +1282,12 @@ export async function createApp() {
 
     try {
       const res = await bridge.readFile(target);
+      // 主进程先 stat 再读：超限时压根没读内容，只回一个 TOO_LARGE 信封。
+      // 这条分支必须排在最前面，否则会被下面的「打开文件失败」当成读取错误。
+      if (res && !res.ok && res.code === 'TOO_LARGE') {
+        toast(t(`文件过大（${((res.size || 0) / 1024 / 1024).toFixed(1)} MB），已跳过`, `File too large (${((res.size || 0) / 1024 / 1024).toFixed(1)} MB). Skipped.`), 'error', 3600);
+        return false;
+      }
       if (!res || !res.ok) {
         toast(t(`打开文件失败：${(res && res.error) || '无法读取文件'}`, `Failed to open file: ${(res && res.error) || 'cannot read file'}`), 'error', 3600);
         return false;

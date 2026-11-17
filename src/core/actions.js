@@ -9,7 +9,8 @@ import { t, LOCALE_ZH, LOCALE_EN, LOCALE_LABELS } from './i18n.js';
 import { activeTab, isDirty, state } from './state.js';
 import { undo, redo, selectAll, cursorMatchingBracket, addCursorAbove, addCursorBelow, deleteLine, moveLineUp, moveLineDown, toggleComment, copyLineDown } from '@codemirror/commands';
 import { openFindPanel } from '../ui/findbar.js';
-import { gotoLineDialog, shortcutsDialog, aboutDialog } from '../ui/dialogs.js';
+import { gotoLineDialog, shortcutsDialog, aboutDialog, associationsDialog } from '../ui/dialogs.js';
+import { canManageAssociations } from './desktop.js';
 import { toast } from '../ui/toast.js';
 import {
   changeCase,
@@ -363,6 +364,16 @@ export function registerCommands(app) {
       title: t('刷新文件夹树', 'Refresh Folder Tree'),
       category: t('文件', 'File'),
       run: () => app.refreshFolder(),
+    },
+    {
+      // 装完之后还能改默认打开方式：安装器里勾过一次，事后想调整不必重装。
+      // 只有桌面壳能写注册表，浏览器模式置灰。
+      // 成功提示由对话框自己发（带条数），这里不重复 toast。
+      id: 'file.associations',
+      title: t('文件关联…', 'File Associations…'),
+      category: t('文件', 'File'),
+      enabled: () => canManageAssociations(),
+      run: () => associationsDialog(),
     },
     {
       id: 'file.closeFolder',
