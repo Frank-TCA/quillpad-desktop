@@ -1526,10 +1526,10 @@ foreach ($e in @(${list})) {
   } else {
     $def = ''
     if (Test-Path $ck) { $def = [string](Get-Item -LiteralPath $ck).GetValue('') }
-    # 默认值没有名字，只能用 RegistryKey.DeleteValue('') 删：
-    #   · Remove-ItemProperty -Name '(default)' 会抛 PSArgumentException（找不到该属性）
-    #   · Get-Item 拿到的是只读句柄，直接 DeleteValue 会抛 UnauthorizedAccessException
-    # 所以必须显式 OpenSubKey(..., $true) 拿可写句柄。
+    # A default value has no name, so it can only be removed via RegistryKey.DeleteValue(''):
+    #   - Remove-ItemProperty -Name '(default)' throws PSArgumentException (no such property)
+    #   - the key from Get-Item is a read-only handle; DeleteValue on it throws UnauthorizedAccessException
+    # hence OpenSubKey(..., $true) to get a writable handle first.
     if ($def -eq $progId) {
       $rk = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey("Software\\Classes\\$e", $true)
       if ($rk) { $rk.DeleteValue('', $false); $rk.Close() }
