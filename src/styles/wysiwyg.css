@@ -32,16 +32,15 @@
   margin: 0 auto;
 }
 
-/* 空行压缩：预览里段落之间只有 12px 外边距，源码里却是整行 28px 空行。
-   这里把无块级语义的空行压到 --qp-blank-h（12px，等于预览的段落间距），
-   段落节奏于是与预览一致；光标仍可落在该行（保留 12px 可点区域）。 */
+/* 空行：与正文行**同高**（--qp-blank-h = 正文 16px × 1.75 = 28px）。
+   v1.0.3 之前这里把空行压到 12px，并配了一整套「连续空行折叠、紧邻标题 /
+   代码围栏 / 表格 / 分隔线时归零、挨着引用块时 16px」的补偿规则。补偿本身
+   就说明压缩是错的：空行的可点区域只剩十几像素，光标很难落进去，连续两个
+   空行塌成一条，用户看到的就是「空行被吃掉了」。
+   现在空行占满一整行：行高映射只认 `.cm-line` 的 rect，占满一行即与正文行
+   完全一致，任何额外的压缩 / 折叠规则都不再需要（已全部删除）。 */
 .cm-line.qp-blank {
-  line-height: var(--qp-blank-h, 12px);
-}
-
-/* 连续空行只算一次（预览里 2 个空行与 1 个空行等价） */
-.cm-line.qp-blank + .cm-line.qp-blank {
-  line-height: 0;
+  line-height: var(--qp-blank-h, 28px);
 }
 
 /* 折叠箭头的**可点区域**撑满整个槽位（源码 / 分栏视图）。
@@ -66,62 +65,63 @@
   z-index: 1;
 }
 
-/* 引用块上下各有 1em 外边距（预览 blockquote）；空行按同一量级补偿，
-   否则引用会比预览「贴」得多。 */
-/* 引用块上下外边距 1em(16px)，与相邻段落 12px 折叠后取 16px */
-.cm-line.qp-blank:has(+ .cm-line.qp-quote),
-.cm-line.qp-quote + .cm-line.qp-blank {
-  line-height: 16px;
-}
-
-/* 相邻块自带更大的上下间距时（标题 / 代码块 / 表格 / 分隔线），空行按
-   CSS 外边距折叠的语义让位：该侧归零，或从块的 padding 里抵扣掉，
-   否则 WYSIWYG 会比预览多出一个空行的高度。 */
-.cm-line.qp-h + .cm-line.qp-blank,
-.cm-line.qp-code-fence + .cm-line.qp-blank,
-.cm-line:has(.qp-table-wrap) + .cm-line.qp-blank,
-.cm-line:has(.qp-hr) + .cm-line.qp-blank {
-  line-height: 0;
-}
-
+/* 「空行 + 自带大间距的块」的补偿：空行自己已经贡献了整行高度，块的上间距
+   只需补差值，不要重复叠加 —— 与预览里「外边距折叠取最大值」等价。
+   注意差值可能是负数（例如 h4：1.7em≈27px − 28px）。Chromium 会把 calc() 的
+   负结果按属性区间**裁剪成 0px**（实测 `padding-top: calc(10px - 100px)` →
+   computed 0px，不是把声明丢掉），所以这里写不写 max() 结果都一样；
+   写 `max(0px, …)` 是为了把「差额为负时就是 0」这层意图写在代码里，
+   不再依赖浏览器的裁剪行为。 */
 .cm-line.qp-blank + .cm-line.qp-h1 {
-  padding-top: calc(var(--qp-h1-gap-top, 2.6em) - var(--qp-blank-h, 12px));
+  padding-top: max(0px, calc(var(--qp-h1-gap-top, 2.6em) - var(--qp-blank-h, 28px)));
 }
 
 .cm-line.qp-blank + .cm-line.qp-h2 {
-  padding-top: calc(var(--qp-h2-gap-top, 2.2em) - var(--qp-blank-h, 12px));
+  padding-top: max(0px, calc(var(--qp-h2-gap-top, 2.2em) - var(--qp-blank-h, 28px)));
 }
 
 .cm-line.qp-blank + .cm-line.qp-h3 {
-  padding-top: calc(var(--qp-h3-gap-top, 1.9em) - var(--qp-blank-h, 12px));
+  padding-top: max(0px, calc(var(--qp-h3-gap-top, 1.9em) - var(--qp-blank-h, 28px)));
 }
 
 .cm-line.qp-blank + .cm-line.qp-h4,
 .cm-line.qp-blank + .cm-line.qp-h5,
 .cm-line.qp-blank + .cm-line.qp-h6 {
-  padding-top: calc(var(--qp-h4-gap-top, 1.7em) - var(--qp-blank-h, 12px));
+  padding-top: max(0px, calc(var(--qp-h4-gap-top, 1.7em) - var(--qp-blank-h, 28px)));
 }
 
 .cm-line.qp-blank + .cm-line.qp-code-fence {
-  padding-top: calc(var(--qp-code-gap, 16px) - var(--qp-blank-h, 12px));
+  padding-top: max(0px, calc(var(--qp-code-gap, 16px) - var(--qp-blank-h, 28px)));
 }
 
-/* 分隔线之后紧跟标题：hr 行的下内边距（32px）已经落在自己那一行的行盒里，
-   标题的 padding-top 只需补差值。否则两段间距相加，会多出一整块空白
-   （预览里这两个外边距是折叠取最大值，不是相加）。 */
+/* 分隔线之后紧跟标题：hr 行的下内边距（32px）与中间那条空行的整行高度都已
+   落在各自的行盒里，标题的 padding-top 只需补差值。否则三段间距相加，会多出
+   一整块空白（预览里这些外边距是折叠取最大值，不是相加）。 */
 .cm-line:has(.qp-hr) + .cm-line.qp-blank + .cm-line.qp-h1 {
-  padding-top: calc(var(--qp-h1-gap-top, 2.6em) - var(--qp-hr-margin, 32px));
+  padding-top: max(
+    0px,
+    calc(var(--qp-h1-gap-top, 2.6em) - var(--qp-hr-margin, 32px) - var(--qp-blank-h, 28px))
+  );
 }
 .cm-line:has(.qp-hr) + .cm-line.qp-blank + .cm-line.qp-h2 {
-  padding-top: calc(var(--qp-h2-gap-top, 2.2em) - var(--qp-hr-margin, 32px));
+  padding-top: max(
+    0px,
+    calc(var(--qp-h2-gap-top, 2.2em) - var(--qp-hr-margin, 32px) - var(--qp-blank-h, 28px))
+  );
 }
 .cm-line:has(.qp-hr) + .cm-line.qp-blank + .cm-line.qp-h3 {
-  padding-top: calc(var(--qp-h3-gap-top, 1.9em) - var(--qp-hr-margin, 32px));
+  padding-top: max(
+    0px,
+    calc(var(--qp-h3-gap-top, 1.9em) - var(--qp-hr-margin, 32px) - var(--qp-blank-h, 28px))
+  );
 }
 .cm-line:has(.qp-hr) + .cm-line.qp-blank + .cm-line.qp-h4,
 .cm-line:has(.qp-hr) + .cm-line.qp-blank + .cm-line.qp-h5,
 .cm-line:has(.qp-hr) + .cm-line.qp-blank + .cm-line.qp-h6 {
-  padding-top: calc(var(--qp-h4-gap-top, 1.7em) - var(--qp-hr-margin, 32px));
+  padding-top: max(
+    0px,
+    calc(var(--qp-h4-gap-top, 1.7em) - var(--qp-hr-margin, 32px) - var(--qp-blank-h, 28px))
+  );
 }
 
 /* 文档首行标题与预览一致：去掉上外边距（`.markdown-body > *:first-child`） */
@@ -413,15 +413,61 @@
   padding-bottom: var(--qp-code-gap, 16px);
 }
 
+/* 闭围栏后面**紧跟空行**：空行自己已经贡献了整行高度，这段 16px 让位
+   （与上侧 `.cm-line.qp-blank + .cm-line.qp-code-fence` 的 max() 同语义）。
+   否则「段落 → 空行 → 代码块 → 空行 → 段落」的上间距是 28px、下间距是 44px，
+   代码块看起来整体偏下。闭围栏后直接跟段落时本规则不匹配，间距保持原样。 */
+.cm-line.qp-code-fence:has(+ .cm-line.qp-blank) {
+  padding-bottom: max(0px, calc(var(--qp-code-gap, 16px) - var(--qp-blank-h, 28px)));
+}
+
 .cm-line.qp-code-line {
+  /* ::before 的行号要绝对定位在这行的左内边距里 */
+  position: relative;
   font-family: var(--font-mono);
   font-size: var(--qp-code-size, 0.85em);
   line-height: var(--qp-code-leading, 1.65);
   background: var(--bg-panel);
   border-left: 1px solid var(--border);
   border-right: 1px solid var(--border);
-  padding-left: var(--qp-code-pad-x, 16px);
+  /* 左侧留出「内边距 + 行号槽」两块：行号画在行号槽里，代码正文从槽右缘起排。
+     代价是正文可用宽度少一个槽宽（24px），长行会比没有行号时更早折行 ——
+     这是行号栏的必然成本，位置见 theme.css 的 --qp-code-ln-w 说明。 */
+  padding-left: calc(var(--qp-code-pad-x, 16px) + var(--qp-code-ln-w, 24px));
   padding-right: var(--qp-code-pad-x, 16px);
+}
+
+/* 行号：绝对定位在左内边距里，**不参与行内排布** —— 若用行内 ::before 占位，
+   它会把代码文字再挤走一次（宽度被算了两次），长行换行位置就会变。
+   `padding-top: inherit` 拿到与本行相同的上内边距（首行 14px，其余 0），
+   行号基线与代码首行自然对齐，不需要为「首行 / 末行」各写一份。
+   行号不是 DOM 文本，选中复制时不会被带走。 */
+.cm-line.qp-code-line::before {
+  content: attr(data-qp-ln);
+  position: absolute;
+  top: 0;
+  left: 0;
+  /* 行号槽右缘距代码正文 8px：宽度 = 内边距 + 槽宽 − 8px，数字靠右对齐。
+     槽宽按**4 位数**预留（32px ≥ 4 位数字实测 31.88px）。 */
+  width: calc(var(--qp-code-pad-x, 16px) + var(--qp-code-ln-w, 24px) - 8px);
+  padding-top: inherit;
+  text-align: right;
+  /* 行号是**原子文本**，绝不能继承 CodeMirror lineWrapping 的
+     `white-space: break-spaces` + `overflow-wrap: anywhere`：
+     槽宽一旦比数字窄，伪元素内部就会换行，4 位数 1199 被拆成 `119` + 残留的 `0`
+     （实测 1200 行代码块的末两行就是这样错的）。
+     `white-space: pre` 让数字整体右溢出 1~2px，肉眼不可见，但内容永远正确。 */
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: keep-all;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  /* 与源码模式的 gutterFg 同量级：--text-dim 在四套主题里都刚好比正文暗一档，
+     不硬编码颜色（4 套主题自动跟随）。 */
+  color: var(--text-dim);
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: none;
 }
 
 /* 首行贴上边框与上圆角：预览的 `<pre>` 是四边框 + 8px 圆角，原先只在末行
@@ -689,9 +735,10 @@
   padding-bottom: var(--qp-hr-margin, 32px);
 }
 
-/* 前一行已经是 12px 的空行（空行被压扁但仍占高）→ 上间距扣掉这段 */
+/* 前一行已经是整行高度的空行（--qp-blank-h = 28px）→ 上间距扣掉这段，
+   否则 28 + 32 会比预览的 32px 多出一截。负值时按 0 处理。 */
 .cm-line.qp-blank + .cm-line:has(.qp-hr) {
-  padding-top: calc(var(--qp-hr-margin, 32px) - var(--qp-blank-h, 12px));
+  padding-top: max(0px, calc(var(--qp-hr-margin, 32px) - var(--qp-blank-h, 28px)));
 }
 
 .cm-line.qp-table-line,

@@ -43,9 +43,13 @@
   --qp-body-size: 16px;
   --qp-body-leading: 1.75;
   --qp-para-gap: 0.9em;
-  /* WYSIWYG 里源码空行压缩后的高度：等于预览 `.markdown-body p` 的段落外边距。
-     两者必须一致，否则同一份文档在两种视图里段落节奏不同。 */
-  --qp-blank-h: 12px;
+  /* WYSIWYG 里源码空行的高度：**与正文行同高**（16px × 1.75 = 28px）。
+     旧值 12px（= 预览 `.markdown-body p` 的段落外边距）追求「与预览同节奏」，
+     但代价是空行只剩十几像素可点、连续空行互相折叠、紧邻标题 / 围栏 / 表格 /
+     分隔线时被归零 —— 用户直观感受是「空行被吃掉了」。空行占满一整行后，
+     行高映射（只认 `.cm-line` 的 rect）与正文行完全一致，无需任何折叠补偿。
+     CSS 自定义属性在运行时解析，此处引用上文定义的 --qp-body-* 成立。 */
+  --qp-blank-h: calc(var(--qp-body-size, 16px) * var(--qp-body-leading, 1.75));
   --qp-measure: 46em;
 
   --qp-h1-size: 1.9em;
@@ -74,6 +78,10 @@
   --qp-code-leading: 1.65;
   --qp-code-pad-y: 14px;
   --qp-code-pad-x: 16px;
+  /* 代码块行号槽宽度（从代码正文可用宽度里划出来的一块：正文列因此窄 24px，
+     长行会比没有行号时更早折行）。按 4 位数预留：4 位数字在 13.6px 等宽字体下
+     实测 31.88px，槽内可写宽度 = 16 + 24 − 8 = 32px。 */
+  --qp-code-ln-w: 24px;
   /* 代码块与上下文的间距（= 预览 pre 的 1em margin） */
   --qp-code-gap: 16px;
   --qp-code-radius: 8px;

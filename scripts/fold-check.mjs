@@ -166,36 +166,69 @@ check(
 );
 
 /* ------------------------------------------------------------- 3. 拖选定位 */
-const rows = await page.evaluate(() => {
-  const view = window.quillpad.editor.view;
-  const doc = view.state.doc;
-  const out = [];
-  for (const el of Array.from(view.contentDOM.querySelectorAll('.cm-line'))) {
-    const no = doc.lineAt(view.posAtDOM(el, 0)).number;
-    if (![3, 9, 19, 24].includes(no)) continue;
-    const r = el.getBoundingClientRect();
-    const range = document.createRange();
-    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-    let node;
-    let rect = null;
-    while ((node = walker.nextNode())) {
-      if (!node.nodeValue.trim()) continue;
-      range.setStart(node, 0);
-      range.setEnd(node, Math.min(1, node.nodeValue.length));
-      const rr = range.getBoundingClientRect();
-      if (rr.height > 0) {
-        rect = rr;
-        break;
+
+/**
+ * 量出 3 / 9 / 19 / 24 行首个可见字符的坐标。
+ *
+ * **只能在视口内拖**：鼠标坐标落到视口外时，落点要靠 CodeMirror 的拖选自动
+ * 滚动去逼近，实测同一个坐标连续 5 轮分别落到 L23 / L25（±1 抖动）。
+ * 空行改成整行高度后欢迎文档整体高了约 100px，第 24 行掉到 900px 视口外
+ * （y=977），这条断言就变成了 flaky —— 是量法不稳，不是落点算错：
+ * 两端都在视口内时 5/5 精确命中。所以先滚到起点可见，再只在**完整可见**的
+ * 候选行里挑最远的一行作为终点（断言本身不变）。
+ *
+ * @return {Promise<Array<{no:number,left:number,top:number}>>}
+ */
+const measureRows = () =>
+  page.evaluate(() => {
+    const view = window.quillpad.editor.view;
+    const doc = view.state.doc;
+    const out = [];
+    for (const el of Array.from(view.contentDOM.querySelectorAll('.cm-line'))) {
+      const no = doc.lineAt(view.posAtDOM(el, 0)).number;
+      if (![3, 9, 19, 24].includes(no)) continue;
+      const r = el.getBoundingClientRect();
+      const range = document.createRange();
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      let node;
+      let rect = null;
+      while ((node = walker.nextNode())) {
+        if (!node.nodeValue.trim()) continue;
+        range.setStart(node, 0);
+        range.setEnd(node, Math.min(1, node.nodeValue.length));
+        const rr = range.getBoundingClientRect();
+        if (rr.height > 0) {
+          rect = rr;
+          break;
+        }
       }
+      out.push({
+        no,
+        left: Math.round(rect ? rect.left : r.left),
+        top: Math.round(rect ? rect.top : r.top),
+      });
     }
-    out.push({
-      no,
-      left: Math.round(rect ? rect.left : r.left),
-      top: Math.round(rect ? rect.top : r.top),
-    });
-  }
-  return out.sort((a, b) => a.no - b.no);
-});
+    return out.sort((a, b) => a.no - b.no);
+  });
+
+let rows = await measureRows();
+if (rows.length >= 2) {
+  // 起点滚到视口上部，然后在完整可见的候选行里挑最远的一行当终点
+  await page.evaluate((no) => {
+    const view = window.quillpad.editor.view;
+    const sc = view.scrollDOM;
+    const block = view.lineBlockAt(view.state.doc.line(no).from);
+    sc.scrollTop = Math.max(0, block.top - 80);
+  }, rows[0].no);
+  await page.waitForTimeout(320);
+  const box = await page.evaluate(() => {
+    const r = document.querySelector('.cm-scroller').getBoundingClientRect();
+    return { top: r.top, bottom: r.bottom };
+  });
+  const all = await measureRows();
+  const visible = all.filter((r) => r.top > box.top + 8 && r.top + 24 < box.bottom - 8);
+  if (visible.length >= 2) rows = visible;
+}
 if (rows.length >= 2) {
   const a = rows[0];
   const b = rows[rows.length - 1];

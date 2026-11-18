@@ -34,9 +34,11 @@ const REPLACEABLE = new Set(['table', 'frontmatter', 'math-block', 'image-row'])
 /**
  * 「渲染态看不见的行」的 gutter 标记：空行、代码围栏行。
  *
- * 这些行在 WYSIWYG 里被压成 0~16px 的间距（空行）或 0 高度（围栏），行号槽
- * 却按真实槽高定位，一个行号塞进去就和下一行叠在一起。它们的行号本身也没有
- * 意义（空行是间距、``` 已被隐藏），直接藏掉；源码 / 分栏视图不受影响。
+ * 这些行在 WYSIWYG 里没有自己的字形：围栏行的 ``` 已被零宽隐藏、高度压到 0
+ * 只留上下间距；空行虽然与正文行同高（--qp-blank-h = 28px），但行内没有任何
+ * 字符，行号本身没有意义。行号槽按真实槽高定位，一个行号塞进 0 高度的围栏行
+ * 就会和下一行叠在一起，所以这两类行直接把行号藏掉；
+ * 源码 / 分栏视图不受影响（那边有真实的 gutter 与字形）。
  *
  * 注意 `gutterLineClass` 收的是 `GutterMarker` 而不是 `Decoration`
  * （它读 `elementClass` 和 `compare`），给成 Decoration 会在 syncGutters 里抛
@@ -72,8 +74,9 @@ export function createBlockField(opts) {
     },
     provide: (field) => [
       EditorView.decorations.from(field, (v) => v.deco),
-      // 空行的行号要单独压掉：空行在 WYSIWYG 里被压成 0/12/16px 的间距，
-      // 行号槽却按真实槽高定位，一行号只能挤在十几像素里，和下一行叠在一起。
+      // 空行与代码围栏行的行号要单独压掉：围栏行高度是 0（只有上下间距），
+      // 空行没有任何字形，行号槽却按真实槽高定位，一个行号挤进去就会和下一行
+      // 叠在一起（见 collapsedGutterMarker 的说明）。
       gutterLineClass.from(field, (v) => v.gutter),
     ],
   });
@@ -130,9 +133,16 @@ export function computeBlocks(state, opts, prev) {
     lineAttrs.set(n, cur);
   };
 
+  /* 代码块内的行号（WYSIWYG 专属，每个代码块各自从 1 起）。
+     计数器只认 `kind === 'code'` 的连续行：一旦遇到非代码行（开 / 闭围栏、
+     空行、正文…）立刻归零，所以同一个文档里的多个代码块互不影响；
+     围栏行本身不带 data-qp-ln，也就不显示行号。 */
+  let codeLineNo = 0;
+
   for (const info of scan.lines) {
     if (!info) continue;
     const n = info.number;
+    if (info.kind !== 'code') codeLineNo = 0;
     switch (info.kind) {
       case 'heading': {
         const level = info.level || 1;
@@ -178,7 +188,14 @@ export function computeBlocks(state, opts, prev) {
         break;
       }
       case 'code': {
-        addLine(n, { 'data-qp-node': 'code-line' }, 'qp-code-line');
+        // 代码行序号：CSS 用 `::before { content: attr(data-qp-ln) }` 渲染。
+        // 空行（块内空行）也算一行，序号连续不跳号。
+        codeLineNo += 1;
+        addLine(
+          n,
+          { 'data-qp-node': 'code-line', 'data-qp-ln': String(codeLineNo) },
+          'qp-code-line',
+        );
         break;
       }
       case 'fence': {
@@ -213,9 +230,8 @@ export function computeBlocks(state, opts, prev) {
     decos.push(lineDecoration(entry.attrs, [...entry.classes].join(' ')).range(line.from));
   }
 
-  /* 空行：预览里段落之间是 CSS 外边距，源码里却是一整行空行（28px）。
-     标记出来交给 CSS 压到 0.75em（= 预览段落间距），避免 WYSIWYG 段落之间
-     比预览空得多。只处理无其它块级语义的纯空行。 */
+  /* 空行：类名 `qp-blank` 保留给 CSS 与其它模块判「这是无块级语义的空行」，
+     但 v1.0.3 起 CSS 不再压缩它 —— 空行与正文行同高（整行 28px）。 */
   for (const info of scan.lines) {
     if (!info || info.kind !== 'plain') continue;
     const line = state.doc.line(info.number);
