@@ -1,14 +1,14 @@
-# QuillPad 1.0.3 User Guide
+# QuillPad 1.0.4 User Guide
 
-> English · for v1.0.3 · MIT licensed · repository <https://github.com/Frank-TCA/quillpad-desktop>
+> English · for v1.0.4 · MIT licensed · repository <https://github.com/Frank-TCA/quillpad-desktop>
 
 The installers live in `dist/release/` (you can copy them anywhere):
 
 | File | Purpose | Size |
 | --- | --- | --- |
-| `QuillPad-Setup-v1.0.3.exe` | Installer | ~127 MB |
-| `QuillPad-v1.0.3-portable.exe` | Portable | ~115 MB |
-| `QuillPad-Uninstaller-v1.0.3.exe` | Standalone uninstaller (installer build only) | ~80 KB |
+| `QuillPad-Setup-v1.0.4.exe` | Installer | ~128 MB |
+| `QuillPad-v1.0.4-portable.exe` | Portable | ~115 MB |
+| `QuillPad-Uninstaller-v1.0.4.exe` | Standalone uninstaller (installer build only) | ~80 KB |
 
 > Exact byte counts and SHA256 checksums are listed on the corresponding release page.
 
@@ -25,9 +25,10 @@ QuillPad is open source under the MIT license: <https://github.com/Frank-TCA/qui
 
 ### Typesetting and writing
 
-- Three view modes — source / WYSIWYG / split — switch directly with `Ctrl+Shift+1` / `2` / `3`. Source mode is a code editor with a fixed 14 px monospace face; WYSIWYG and the split preview are reading surfaces with a 16 px / 28 px line-height / 736 px (46 em) width sans-serif body. **WYSIWYG shows no line-number column and no fold arrows** (a reading surface does not need them); switch to source or split when you want them.
+- Three view modes — source / WYSIWYG / split — switch directly with `Ctrl+Shift+1` / `2` / `3`. Source mode is a code editor with a fixed 14 px monospace face; WYSIWYG and the split preview are reading surfaces with a 16 px / 28 px line-height / 736 px (46 em) width sans-serif body. All three views keep the line-number column and fold arrows, and in WYSIWYG both stay aligned row by row with the text.
 - WYSIWYG renders headings, bold and italic, strikethrough, inline code, links, quotes, lists, task items, code blocks, tables, images, math (KaTeX), footnotes, and a table of contents in place; source markers appear on the line your cursor is on. A single click selects a whole table block, a double click enters cell editing.
 - Table parsing/serialization, adding and removing rows and columns, cycling column alignment, `Tab` to move between cells; drag or paste an image and it lands in an `assets\` folder next to the document, with a random suffix when the name is taken — existing files are never overwritten.
+- The Markdown toolbar places **Insert table** right after Insert image: one click drops a 3-column, 2-row table skeleton with the caret in the first cell. Bullet, numbered and task lists, Heading 2 and Blockquote also work **on an empty line** (no need to type text first) — the caret lands after the prefix, ready for input.
 - Macro recording, playback, and persistence (a red breathing dot appears in the **bottom-right** of the status bar while recording; click it to stop and name the macro); rectangular (column) selection with insert, delete, align, and number; a searchable panel of ~840 special characters in 10 categories (plus the last 20 you used); find history (up to 20 entries — press `↓` in an empty search box to recall the most recent one).
 - Design tokens (`--qp-*` variables) with four themes; **Reduce Motion** is supported.
 
@@ -51,7 +52,7 @@ QuillPad is open source under the MIT license: <https://github.com/Frank-TCA/qui
 
 ## 2. Using the installer build (recommended)
 
-1. Double-click `QuillPad-Setup-v1.0.3.exe`.
+1. Double-click `QuillPad-Setup-v1.0.4.exe`.
 2. On first run Windows may show “Windows protected your PC”. Every new program without a code-signing certificate gets this prompt; it does not mean the file is infected. Click **More info** → **Run anyway**.
 3. **The installer's own UI is Chinese** — only `zh_CN` is bundled (`installerLanguages: zh_CN`, language id 2052). You can still pick the installation directory on the page with the path field. `perMachine=false`, so it installs into your user profile: no administrator rights and no UAC prompt. You can tick “run now” at the end.
 4. Start menu and desktop shortcuts are created; the uninstaller `Uninstall QuillPad.exe` lives in the installation directory rather than being left behind in your downloads folder.
@@ -76,7 +77,7 @@ Unticked groups are only registered as candidates in **Open with** and never tou
 
 You can change it later without reinstalling: **menu → File → File Associations…**. The dialog is filled from the registry's real state (all default / some / none), and **Apply** only writes the groups that actually differ. Its **Open Windows Default Apps…** button jumps to the system page, where **Settings → Apps → Default apps → QuillPad** also lets you flip individual types.
 
-For unattended deployment that must not touch default associations: `QuillPad-Setup-v1.0.3.exe /S /NOASSOC`.
+For unattended deployment that must not touch default associations: `QuillPad-Setup-v1.0.4.exe /S /NOASSOC`.
 
 All of these entries live under `HKCU`, need no administrator rights, and are unregistered on uninstall — including the default associations, the capability registration (`Software\QuillPad\Capabilities` plus `RegisteredApplications`), the ProgID and the context menu. **Only entries pointing at QuillPad are removed**; a type you later reassigned to another program is left alone.
 
@@ -84,7 +85,7 @@ Right-click any file → **Open with QuillPad** works too. Selecting several fil
 
 ## 3. Using the portable build
 
-1. Put `QuillPad-v1.0.3-portable.exe` by itself in an empty folder (a USB stick works) and double-click it. It is a single-file self-extracting package: nothing to install, no registry writes, no shortcuts.
+1. Put `QuillPad-v1.0.4-portable.exe` by itself in an empty folder (a USB stick works) and double-click it. It is a single-file self-extracting package: nothing to install, no registry writes, no shortcuts.
 2. Startup takes 3–5 seconds because the single-file build unpacks itself into the system temp directory each time.
 3. All user data (session, theme, recent files, window position, macros, plugins and their state, caches) is written to a `QuillPad-Data\` folder **next to the exe**. Measured: after a run that folder holds 81 files including `window-state.json`, and `%APPDATA%\QuillPad` gains nothing while the portable build runs.
 4. To move to another machine, copy the exe together with `QuillPad-Data\` and all your settings come along.
@@ -96,7 +97,7 @@ Right-click any file → **Open with QuillPad** works too. Selecting several fil
 1. Start menu → the **卸载 QuillPad** shortcut;
 2. `Uninstall QuillPad.exe` in the installation directory;
 3. Windows **Settings → Apps → Installed apps** (or **Programs and Features** in Control Panel) → select **QuillPad 文本编辑器** → Uninstall;
-4. Double-click the distributed `QuillPad-Uninstaller-v1.0.3.exe` (the standalone uninstaller, about 78 KB).
+4. Double-click the distributed `QuillPad-Uninstaller-v1.0.4.exe` (the standalone uninstaller, about 78 KB).
 
 All four run the same cleanup logic and behave identically — pick whichever is convenient.
 
@@ -112,8 +113,8 @@ The fourth one is a small tool with its own scavenger that depends on nothing in
 Command line (for scripts and batch files):
 
 ```bat
-QuillPad-Uninstaller-v1.0.3.exe /S          silent uninstall, no dialogs
-QuillPad-Uninstaller-v1.0.3.exe /SCAN /S    scan only, delete nothing
+QuillPad-Uninstaller-v1.0.4.exe /S          silent uninstall, no dialogs
+QuillPad-Uninstaller-v1.0.4.exe /SCAN /S    scan only, delete nothing
 ```
 
 Exit codes: `0` = clean, `1` = traces found, `2` = some items could not be deleted, `3` = cancelled by the user.
@@ -135,7 +136,7 @@ Deleting only the installation directory leaves dead entries in the context menu
 
 ### Portable build
 
-No registry writes and no shortcuts, so **no uninstaller is needed**: delete `QuillPad-v1.0.3-portable.exe` and the `QuillPad-Data\` folder next to it. Measured: afterwards only the exe remains in its folder, `%APPDATA%\QuillPad` has gained nothing, and no user data is left on the system.
+No registry writes and no shortcuts, so **no uninstaller is needed**: delete `QuillPad-v1.0.4-portable.exe` and the `QuillPad-Data\` folder next to it. Measured: afterwards only the exe remains in its folder, `%APPDATA%\QuillPad` has gained nothing, and no user data is left on the system.
 
 ### The one-line difference
 

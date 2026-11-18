@@ -1,6 +1,6 @@
 {
   "name": "quillpad",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "private": true,
   "type": "module",
   "description": "QuillPad — 面向 Notepad++ 用户的现代文本/代码编辑器",

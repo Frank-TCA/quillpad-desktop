@@ -202,7 +202,7 @@ export function computeBlocks(state, opts, prev) {
   }
 
   /* 空行：类名 `qp-blank` 保留给 CSS 与其它模块判「这是无块级语义的空行」，
-     但 v1.0.3 起 CSS 不再压缩它 —— 空行与正文行同高（整行 28px）。 */
+     但 v1.0.4 起 CSS 不再压缩它 —— 空行与正文行同高（整行 28px）。 */
   for (const info of scan.lines) {
     if (!info || info.kind !== 'plain') continue;
     const line = state.doc.line(info.number);
