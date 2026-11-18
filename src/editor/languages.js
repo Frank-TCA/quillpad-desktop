@@ -433,26 +433,42 @@ export function resolveLangId(raw) {
 }
 
 /**
- * 围栏标记的展示名（`bash` → `Shell`）。
+ * 围栏标记的展示名。
+ *
+ * **原样返回围栏里写的标记**（```js 显示 `js`，```py 显示 `py`）。
+ * 之前会归一成语言表里的 label（`js` → `JavaScript`、`py` → `Python`），
+ * 于是代码块右上角写的和用户在源码里标注的对不上 —— 用户改围栏为 `js`，
+ * 标签却仍显示 `JavaScript`，看起来像「标签不跟随」。
+ *
+ * 只有围栏没写标记时才给一个占位文案。
  *
  * @param {string} raw 围栏标记
- * @return {string} 中文展示名；无法识别时原样返回标记
+ * @return {string} 围栏里原样写的标记；空标记返回「纯文本」
  */
 export function codeTagLabel(raw) {
   const tag = String(raw || '').trim();
   if (!tag) return t('纯文本', 'Plain Text');
-  const id = resolveLangId(tag);
-  return BY_ID.has(id) ? languageLabel(id) : tag;
+  return tag;
 }
 
 /**
  * 按需加载语言扩展。
+ *
+ * `fresh` 用来打破「重新配置了却还是老语法树」的僵局：CodeMirror 的
+ * `Compartment.reconfigure` 拿到**同一个**扩展实例时，会认为语言没有变化，
+ * 于是不重新解析文档。markdown 的围栏语言是异步加载的 —— 首屏解析时语言
+ * 还没就绪，代码块被当成纯文本；等语言就绪后再拿缓存里的同一个实例去
+ * reconfigure，解析器根本不会重跑，关键字永远不着色。
+ * 传 `fresh: true` 会重新执行一次 `def.load()`（markdown 只是重新构造一个
+ * LanguageSupport，不涉及网络），得到新实例，reconfigure 才会真正重解析。
+ *
  * @param {string} id 语言 id
+ * @param {{fresh?: boolean}} [opts]
  * @return {Promise<any>} CodeMirror 扩展
  */
-export function loadLanguage(id) {
+export function loadLanguage(id, opts = {}) {
   const def = getLanguageDef(id);
-  if (extCache.has(def.id)) return extCache.get(def.id);
+  if (!opts.fresh && extCache.has(def.id)) return extCache.get(def.id);
   const p = Promise.resolve()
     .then(() => def.load())
     .then((ext) => {
@@ -464,7 +480,14 @@ export function loadLanguage(id) {
       console.warn(`[QuillPad] 加载语言 "${def.id}" 失败：`, err);
       return [];
     });
-  extCache.set(def.id, p);
+  if (!opts.fresh) extCache.set(def.id, p);
+  else {
+    // fresh 只更新「已加载语言」表（codeLanguages 用），不污染缓存。
+    p.then((ext) => {
+      const lang = pickLanguage(ext);
+      if (lang) loadedLanguages.set(def.id, lang);
+    });
+  }
   return p;
 }
 

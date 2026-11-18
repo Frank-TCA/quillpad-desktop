@@ -23,12 +23,12 @@
   font-size: var(--qp-body-size, 16px);
   line-height: var(--qp-body-leading, 1.75);
   /* 与分栏预览、PDF 打印稿保持同一阅读栏宽（46em）。
-     行盒自带 `0 14px 0 6px` 左右内边距（编辑基线的光标呼吸区），
-     因此容器多留 20px，保证**文字列**正好 46em —— 换行位置才能与预览
-     逐行对上（否则同样的引用块会少折一行）。
-     不直接把 .cm-line 的 padding 归零：那会连带压掉引用块缩进与
-     嵌套列表缩进，需要一堆补偿规则。 */
-  width: calc(var(--qp-measure, 46em) + 20px);
+     行盒的左右内边距在所见即所得下**归零**（见下面 `.cm-line` 那条）：
+     块级元素（表格 / 代码块 / 引用 / 分隔线）的外框都铺满整个内容列，
+     正文行若自己带 6/14px 的呼吸区，右端就会比它们短 14px。归零之后
+     正文排版宽度 = 46em = 表格宽度，四者右端严格对齐。
+     所以容器宽度不再需要「46em + 20px」那 20px 补偿。 */
+  width: var(--qp-measure, 46em);
   max-width: 100%;
   /* 居中交给 `.cm-scroller` 的 justify-content：行号槽是 scroller 的 flex 兄弟，
      用 `margin: 0 auto` 只能让正文列在「槽位右侧的剩余空间」里居中，行号就会
@@ -38,6 +38,16 @@
   margin: 0;
   flex: 0 1 auto;
   min-width: 0;
+}
+
+/* 所见即所得：行盒左右内边距归零（通过主题里的变量，不直接改 padding ——
+   直接写 `.qp-wy .cm-line { padding: 0 }` 特异性更高，会连带压掉
+   `.cm-line.qp-quote` 的引用缩进与 `.qp-li` 的列表缩进）。
+   源码模式保留 6 / 14px 的呼吸区；所见即所得要求「正文 / 分隔线 / 表格 /
+   引用」右端全部落在同一条 46em 边界上，6/14px 会让正文与分隔线比表格窄 14px。 */
+.cm-editor.qp-wy {
+  --qp-line-pad-l: 0px;
+  --qp-line-pad-r: 0px;
 }
 
 /* 所见即所得：行号槽与正文列作为**一组**居中。
@@ -366,10 +376,9 @@
      这里只在**首行/末行**补足这 28px，中间行保持 0，多行引用才不会被撑开。 */
   padding-top: 0;
   padding-bottom: 0;
-  /* 行盒基线左内边距是 6px，这里要**叠加**而不是替换：预览的引用块内边距
-     是 15px + 3px 边框，正文列因此比段落窄 18px。若只写 15px，引用行反而
-     比预览宽 6px，长句就会少折一行。 */
-  padding-left: calc(var(--qp-quote-indent, 15px) + 6px);
+  /* 预览的引用块内边距是 15px + 3px 边框。所见即所得下正文行盒的左右内边距
+     已归零，所以这里只写 15px 就能与预览等宽（原先要叠加行盒的 6px 基线内边距）。 */
+  padding-left: var(--qp-quote-indent, 15px);
   color: var(--text-dim);
   background: var(--accent-soft);
   border-left: var(--qp-quote-bar, 3px) solid var(--accent);
@@ -391,11 +400,11 @@
 }
 
 .cm-line.qp-quote[data-qp-depth='2'] {
-  padding-left: calc(var(--qp-quote-indent, 15px) + 18px + 6px);
+  padding-left: calc(var(--qp-quote-indent, 15px) + 18px);
 }
 
 .cm-line.qp-quote[data-qp-depth='3'] {
-  padding-left: calc(var(--qp-quote-indent, 15px) + 36px + 6px);
+  padding-left: calc(var(--qp-quote-indent, 15px) + 36px);
 }
 
 /* ------------------------------------------------------------ 6. 代码块
@@ -543,6 +552,28 @@
   padding: 0 6px;
 }
 
+/* 代码块里的选中态。
+   CodeMirror 把选区画在 `.cm-selectionLayer` 上，那一层默认 `z-index: -2`、
+   位于内容**下方**；普通行背景透明，所以选取得见。代码块行有 `--qp-code-bg`
+   这类不透明底色，直接把选区层盖住了 —— 选中代码块里的文字看起来毫无反应。
+   这里只在所见即所得下把选区层提到内容之上，并换成半透明色，
+   保证文字仍然可读（原生选区本来就是覆盖式绘制）。 */
+.cm-editor.qp-wy .cm-selectionLayer {
+  /* CodeMirror 给选区层写的是**内联** `z-index: -2`（layer 插件按绘制顺序
+     动态赋值），普通 CSS 优先级压不过内联样式，必须 !important。 */
+  z-index: 3 !important;
+}
+
+.cm-editor.qp-wy .cm-selectionBackground {
+  background-color: color-mix(in srgb, var(--accent) 28%, transparent) !important;
+}
+
+/* 深色主题下 30% 的强调色偏暗，补一档亮度让选中区域仍然显眼。 */
+html[data-theme='aurora'] .cm-editor.qp-wy .cm-selectionBackground,
+html[data-theme='nord'] .cm-editor.qp-wy .cm-selectionBackground {
+  background-color: color-mix(in srgb, var(--accent) 40%, transparent) !important;
+}
+
 /* --------------------------------------------------------------- 7. 图片 */
 
 .qp-img-wrap {
@@ -564,11 +595,12 @@
 }
 
 /* 图片行组：软换行的多行图片在预览里是**同一个段落**，靠 inline 流排成一行。
-   这个块级 widget 顶替那 N 个 `.cm-line`，用同样的 inline 流重排，行高与
-   左右内边距都复制正文行盒（`0 14px 0 6px`），图片左缘才和正文首字对齐。 */
+   这个块级 widget 顶替那 N 个 `.cm-line`，用同样的 inline 流重排。左右内边距
+   跟随所见即所得的行盒一起归零（原先复制 `0 14px 0 6px`），图片左缘才落在
+   46em 内容列的边界上、与表格 / 引用 / 分隔线一致。 */
 .qp-img-row {
   display: block;
-  padding: 0 14px 0 6px;
+  padding: 0;
   font-size: var(--qp-body-size, 16px);
   line-height: var(--qp-body-leading, 1.75);
 }
@@ -685,6 +717,19 @@
   color: var(--text);
 }
 
+/* 删除类操作（删行 / 删列）单独用危险色：图标本身已经按「横条 / 竖条」区分，
+   再加一层颜色区别，误点代价最高的两个按钮就不会和插入类混在一起。 */
+.qp-table-ops__btn[data-op='rowDelete'],
+.qp-table-ops__btn[data-op='colDelete'] {
+  color: var(--danger);
+}
+
+.qp-table-ops__btn[data-op='rowDelete']:hover,
+.qp-table-ops__btn[data-op='colDelete']:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
 /* 单元格浮层输入框（挂在 body，不在 widget 内 —— spike S1 结论） */
 .qp-cell-editor {
   position: fixed;
@@ -729,6 +774,33 @@
   line-height: 0;
   padding-top: var(--qp-hr-margin, 32px);
   padding-bottom: var(--qp-hr-margin, 32px);
+}
+
+/* 光标落在分隔线这一行时，`---` 的标记从「零宽隐藏」切成「可见弱化」
+   （`.qp-md-mark`），但行盒的 `font-size: 0` 会把这段文字继续压成 0 宽 0 高 ——
+   用户看到的是「光标进到这一行就什么都不剩了」。
+   这里把字号还回来，同时**保持 `line-height: 0`**：字形正常绘制、行盒仍为 0，
+   行高完全由上下 padding 决定，所以文档总高不变、下方内容不跳。
+   垂直位置由 `.qp-md-mark` 自己的相对位移补足（见下一条）。 */
+.cm-editor.qp-wy .cm-line.qp-hr-line:has(.qp-md-mark) {
+  font-size: var(--qp-body-size, 16px);
+  line-height: 0;
+  /* 绝对定位的标记需要一个定位容器。 */
+  position: relative;
+}
+
+/* 标记本身**完全脱离布局**：行盒高度仍只由上下 padding 决定（36 / 64px），
+   光标进出这一行时文档总高不变、下方内容不跳。
+   用 inline-block 或 inline 都会把 28px 的行盒高度加进父行（实测 +13px）。 */
+.cm-editor.qp-wy .cm-line.qp-hr-line:has(.qp-md-mark) .qp-md-mark {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--font-mono);
+  font-size: var(--qp-code-size, 0.85em);
+  line-height: var(--qp-blank-h, 28px);
+  white-space: pre;
 }
 
 /* 前一行已经是整行高度的空行（--qp-blank-h = 28px）→ 上间距扣掉这段，

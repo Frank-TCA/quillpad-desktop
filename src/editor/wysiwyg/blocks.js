@@ -240,7 +240,12 @@ export function computeBlocks(state, opts, prev) {
     if (!REPLACEABLE.has(block.kind)) continue;
     blocks.push(block);
     const active = selectionTouches(state, block.from, block.to);
-    if (active) {
+    /* 表格例外：光标停在表格里时**照样渲染表格**。
+       否则「插入表格」刚落地时光标正好落在表格首行，用户看到的是三行源码，
+       要先把光标移开表格才变成表格 —— 这就是「插入表格不立即渲染」的成因。
+       表格的编辑走单元格浮层（单击选中整块、双击进单元格），不需要露源码；
+       想直接改源码可以切源码视图。 */
+    if (active && block.kind !== 'table') {
       // 光标进入 → 露出源码。front matter 额外保留一条细标题栏，
       // 保证 `[data-qp-node="frontmatter"]` 在两种状态下都存在（T04 ⑥）。
       if (block.kind === 'frontmatter' && resolveFeatures(opts).frontmatter !== false) {

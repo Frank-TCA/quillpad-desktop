@@ -213,7 +213,12 @@ function makeEditorTheme(p) {
         padding: '10px 0',
       },
       '.cm-line': {
-        padding: '0 14px 0 6px',
+        /* 行盒左右呼吸区走变量：源码 / 分栏保持 6 / 14px（等宽代码需要贴边的
+           点选边缘），所见即所得在 `.qp-wy` 上把两个变量置 0 —— 那样正文、
+           分隔线、表格、引用才共用同一条 46em 内容边界。
+           不能直接用一条 `.qp-wy .cm-line { padding: 0 }` 去覆盖：那会把
+           `.cm-line.qp-quote` / `.qp-li` 自己的缩进一起压掉（特异性更高）。 */
+        padding: '0 var(--qp-line-pad-r, 14px) 0 var(--qp-line-pad-l, 6px)',
       },
       '&.cm-focused .cm-cursor, .cm-cursor': {
         borderLeftColor: p.caret,
@@ -239,8 +244,12 @@ function makeEditorTheme(p) {
         color: p.gutterActive,
       },
       '.cm-lineNumbers .cm-gutterElement': {
-        padding: '0 10px 0 16px',
-        minWidth: '42px',
+        /* 槽宽收紧：原先 `0 10px 0 16px` + minWidth 42px 让两位行号也占 42px，
+           实际数字只有 16px 宽，行号栏里一半是空白。改成 12/8 的呼吸区、
+           minWidth 36px —— 两位数正好贴住，四位数仍按内容自动撑开。
+           源码模式与所见即所得共用这一条，两边宽度恒等。 */
+        padding: '0 8px 0 12px',
+        minWidth: '36px',
       },
       '.cm-foldGutter .cm-gutterElement': {
         padding: '0 4px',

@@ -102,6 +102,11 @@ const PATHS = {
   /* v2 · 富内容 / 编辑辅助 */
   copyCode: '<path d="M9 9h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2z"/><path d="M5 15V4a2 2 0 0 1 2-2h9"/>',
   table: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18"/><path d="M3 15h18"/><path d="M10 4v16"/>',
+  /* 删除行 / 删除列：两者原先共用 `trash`，在表格浮层里分不清。
+     现在都用「两条边框 + 中间一个减号」表达「砍掉一整条」，方向区分意图：
+     横条（上下两条边 + 中间横减号）= 删行，竖条（左右两条边 + 中间竖减号）= 删列。 */
+  rowDelete: '<path d="M4 5h16"/><path d="M4 19h16"/><path d="M7 12h10"/>',
+  colDelete: '<path d="M5 4v16"/><path d="M19 4v16"/><path d="M12 7v10"/>',
   image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="m21 16-5-5-9 9"/>',
   formula: '<path d="M4 20V6h8"/><path d="M4 13h6"/><path d="M14 20l6-9"/><path d="M20 20l-6-9"/>',
   footnote: '<path d="M6 4h6v16"/><path d="M9 4v16"/><path d="M15 9h5"/><path d="M15 14h5"/>',

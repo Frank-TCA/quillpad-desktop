@@ -140,6 +140,8 @@ export class EditorManager {
 
     this.activeTabId = null;
     this._suspend = false;
+    /** 每个标签「已带着全套围栏语言重新配置过」的正文快照（见 `_primeFencesSoon`）。 */
+    this._fenceParsed = new Map();
     this._appearance = { fontSize: 14, indentSize: 2, useTabs: false, wordWrap: false };
     this._themeId = 'ivory';
     /** @type {import('@codemirror/view').KeyBinding[]} */
@@ -379,10 +381,20 @@ export class EditorManager {
     this._fenceTimer = setTimeout(async () => {
       this._fenceTimer = null;
       if (!id || this.loadedLang.get(id) !== 'markdown') return;
-      const pending = await primeFenceLanguages(state.doc.toString());
-      if (!pending.length) return;
+      const text = state.doc.toString();
+      const pending = await primeFenceLanguages(text);
+      /* 关键：`pending` 为空**不代表已经解析过**。
+         首次解析时 `codeLanguages` 回调见语言还没就绪，会返回 null 并顺手
+         `void loadLanguage()`；等 400ms 后这里再查，语言其实已经加载完了，
+         pending 就是空的 —— 若此时直接 return，语法树永远停在「整块纯文本」，
+         关键字一辈子不着色（改文档、切模式才偶尔好一次）。
+         所以按「这一版正文是否已经带着全套语言重新配置过」去重，而不是按 pending。 */
+      if (!pending.length && this._fenceParsed.get(id) === text) return;
       if (this.loadedLang.get(id) !== 'markdown') return;
-      const ext = await loadLanguage('markdown');
+      // fresh：必须给 reconfigure 一个**新**的 markdown 实例，否则 CM 认为
+      // 语言没变、不重新解析，围栏里的代码块会一直停在「整块纯文本」。
+      const ext = await loadLanguage('markdown', { fresh: true });
+      this._fenceParsed.set(id, text);
       this._reconfigureFor(id, this.langCompartment, ext);
     }, 400);
   }
@@ -468,6 +480,7 @@ export class EditorManager {
     this.states.delete(id);
     this.scrollTops.delete(id);
     this.loadedLang.delete(id);
+    this._fenceParsed.delete(id);
   }
 
   /**
@@ -482,6 +495,7 @@ export class EditorManager {
     // 拿不到语言扩展，markdown 语法树为空，WYSIWYG 装饰与折叠箭头全部消失（切界面
     // 语言重写欢迎文档后正是这条路径，重启才恢复）。
     this.loadedLang.delete(tab.id);
+    this._fenceParsed.delete(tab.id);
     if (tab.id === this.activeTabId) {
       this._suspend = true;
       this.view.setState(st);

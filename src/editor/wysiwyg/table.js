@@ -50,7 +50,7 @@ export const TABLE_OP_SPEC = [
     get label() {
       return t('删除行', 'Delete Row');
     },
-    glyph: 'trash',
+    glyph: 'rowDelete',
   },
   {
     op: 'colLeft',
@@ -71,7 +71,7 @@ export const TABLE_OP_SPEC = [
     get label() {
       return t('删除列', 'Delete Column');
     },
-    glyph: 'trash',
+    glyph: 'colDelete',
   },
   {
     op: 'alignCycle',
