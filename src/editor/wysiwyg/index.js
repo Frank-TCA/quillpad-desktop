@@ -13,7 +13,8 @@
  *  3. `update()` 内同步重算（不放 rAF），否则滚动会闪烁。
  */
 
-import { EditorView, Decoration, ViewPlugin } from '@codemirror/view';
+import { EditorView, Decoration, ViewPlugin, keymap } from '@codemirror/view';
+import { Prec } from '@codemirror/state';
 import {
   scanMarkdown,
   activeLineNumbers,
@@ -37,6 +38,43 @@ import { collectHeadingsFromScan } from './toc.js';
 import { collectFootnotes } from './footnotes.js';
 
 /**
+ * 删除光标紧邻的那张表（表前 / 表后一格之内的边界都算）。
+ *
+ * 见 `tableEdgeDelete` 的说明：CM 的原子区间只拦「跨界删除」，表前后各有一条
+ * 换行挡着，单按一格退格只会把两行粘起来。这里直接把整块连同它一侧的换行删掉。
+ *
+ * @param {import('@codemirror/view').EditorView} view
+ * @param {any} blockField 块层 StateField
+ * @return {boolean} 是否处理了这次按键
+ */
+function deleteTableAtCursor(view, blockField) {
+  const sel = view.state.selection.main;
+  if (!sel.empty) return false;
+  const value = view.state.field(blockField, false);
+  if (!value || !value.blocks) return false;
+  const block = value.blocks.find(
+    (b) => b.kind === 'table' && (b.from === sel.head || b.to === sel.head),
+  );
+  if (!block) return false;
+
+  const doc = view.state.doc;
+  let from = block.from;
+  let to = block.to;
+  // 吃掉表格最后一行的换行：删完这一行才算真的没了
+  if (to < doc.length && doc.sliceString(to, to + 1) === '\n') to += 1;
+  // 表前后都是空行时，再吃掉表前那个换行 —— 否则删完会留下连续两条空行
+  if (
+    from >= 2 &&
+    doc.sliceString(from - 1, from) === '\n' &&
+    doc.sliceString(from - 2, from - 1) === '\n'
+  ) {
+    from -= 1;
+  }
+  view.dispatch({ changes: { from, to }, selection: { anchor: from } });
+  return true;
+}
+
+/**
  * 生成 WYSIWYG 扩展。
  *
  * @param {object} opts
@@ -55,9 +93,117 @@ export function createWysiwygExtension(opts) {
   const blockField = createBlockField(opts);
   const inlinePlugin = createInlinePlugin(opts);
 
+  /**
+   * 点在表格左右两侧的空白处 → 把光标放到表格之前 / 之后。
+   *
+   * 表格是被整块替换的 widget：它占满内容列，`row` 的行盒根本不存在，所以
+   * 点它左边或右边的空白，CM 只能按 `posAtCoords` 就近吸附 —— 左空白吸到
+   * 表格首字符、右空白吸到文末，光标停在「块内边界」上，`Delete` / `Backspace`
+   * 都删不掉整张表（它们是原子区间，只有从**外侧**退格才会整块删除）。
+   *
+   * 这里按几何判断：竖直方向落在某张表的高度范围内、水平方向又在表格矩形
+   * 之外，就把光标送到 `from - 1`（表前一行行尾）或 `to`（表格最后一格之后）。
+   * 行号槽 / 折叠箭头不拦（`cm-gutters` 有自己的点击语义）。
+   *
+   * @param {import('@codemirror/view').EditorView} view
+   * @param {MouseEvent} event
+   * @return {{pos: number}|null}
+   */
+  function tableBlankTarget(view, event) {
+    if (event.button !== 0) return null;
+    if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return null;
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return null;
+    // 单元格 / 操作条自己处理；行号槽与折叠槽保留原生行为
+    if (target.closest('.qp-table-wrap')) return null;
+    if (target.closest('.cm-gutters')) return null;
+
+    const wraps = Array.from(view.contentDOM.querySelectorAll('.qp-table-wrap'));
+    if (!wraps.length) return null;
+    let side = 0;
+    let from = null;
+    for (const el of wraps) {
+      const r = el.getBoundingClientRect();
+      if (event.clientY < r.top || event.clientY > r.bottom) continue;
+      if (event.clientX < r.left) side = -1;
+      else if (event.clientX > r.right) side = 1;
+      from = Number(el.getAttribute('data-qp-from'));
+      break;
+    }
+    if (!side || !Number.isFinite(from)) return null;
+
+    const value = view.state.field(blockField, false);
+    const block =
+      value && value.blocks
+        ? value.blocks.find((b) => b.kind === 'table' && b.from === from)
+        : null;
+    if (!block) return null;
+    /* 落在表格**边界**上（块首 / 块末），不是相邻文字里：光标贴在表格外侧，
+       再按 Delete / Backspace 由下方那条按键规则整块删掉这张表。 */
+    const pos = side < 0 ? block.from : block.to;
+    return { pos };
+  }
+
+  /**
+   * 光标贴在表格边界上时，Delete / Backspace 删掉整张表。
+   *
+   * 为什么不能靠 CM 的 `atomicRanges` 自己搞定：原子区间只在「删除范围**跨进**
+   * 区间」时生效 —— 表前一个字符是换行，退格删的是那个换行（两行被粘起来），
+   * 表格纹丝不动；表后同理。所以在这里显式接管：光标恰好等于某张表的 `from`
+   * 或 `to`，就整块删除，并连带吃掉它后面那行的换行（表后没内容时吃前面的），
+   * 保证删完不留一串空行。
+   *
+   * 只在 WYSIWYG 装的块层里注册，源码 / 分栏模式没有 `blockField`，按键照旧。
+   *
+   * @type {import('@codemirror/view').KeyBinding}
+   */
+  const tableEdgeDelete = {
+    key: 'Delete',
+    run: (view) => deleteTableAtCursor(view, blockField),
+  };
+  const tableEdgeBackspace = {
+    key: 'Backspace',
+    run: (view) => deleteTableAtCursor(view, blockField),
+  };
+
+  /**
+   * 表格外侧空白的点击接管。
+   *
+   * 挂在 `.cm-scroller` 的**捕获阶段**：表格左右两侧的空白既不在 `.cm-content`
+   * 里（内容列只有 46em 宽），也不在 widget 里，命中的元素是 `.cm-scroller`
+   * 本身 —— `EditorView.domEventHandlers` 只监听内容节点，收不到这种事件。
+   * 捕获期拦下还能抢在 CM 自己的 mousedown 之前，`stopPropagation()` 就不会
+   * 再被它的 `posAtCoords` 就近吸附改写一次。
+   */
+  const tableBlankPlugin = ViewPlugin.fromClass(
+    class {
+      /** @param {import('@codemirror/view').EditorView} view */
+      constructor(view) {
+        this.view = view;
+        this.onMouseDown = (event) => {
+          const hit = tableBlankTarget(view, event);
+          if (!hit) return;
+          event.preventDefault();
+          event.stopPropagation();
+          view.dispatch({ selection: { anchor: hit.pos } });
+          view.focus();
+        };
+        view.scrollDOM.addEventListener('mousedown', this.onMouseDown, true);
+      }
+
+      destroy() {
+        this.view.scrollDOM.removeEventListener('mousedown', this.onMouseDown, true);
+      }
+    },
+  );
+
   /** @type {any} */
   const extension = [
     blockField,
+    // 光标贴在表格边界上时，Delete / Backspace 删整张表（见 tableEdgeDelete）
+    Prec.high(keymap.of([tableEdgeDelete, tableEdgeBackspace])),
+    // 点在表格左右两侧的空白处 → 光标停到表格外侧（见 tableBlankTarget）
+    tableBlankPlugin,
     inlinePlugin,
     // 行号 / 折叠箭头与行内容对齐（标题有几十像素的 padding-top、代码行字号又
     // 与正文不同，不处理就会出现「数字浮在文字上方」）
@@ -78,6 +224,7 @@ export function createWysiwygExtension(opts) {
           if (href && opts.onOpenLink) opts.onOpenLink(href);
           return true;
         }
+
 
         /* 点击落点兜底校正（v1.0.1 起已是「保险」，不是主力）。
 

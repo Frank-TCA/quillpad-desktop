@@ -86,6 +86,50 @@ export const TABLE_OP_SPEC = [
 let cellInput = null;
 
 /**
+ * 表格块的「当前单元格」记忆。
+ *
+ * 为什么不能只放在 `TableWidget` 实例上：操作浮层的每个按钮都会 dispatch 一次
+ * 改动，`TableWidget.eq()` 因为 `aligns` / `rows` 变了返回 false，CodeMirror
+ * 随即**销毁旧实例、新建一个 widget**（DOM 也是新的）。实例字段 `activeCell`
+ * 于是被重置成默认的 `{r:0,c:0}` —— 这正是「切换对齐第二次点击开始总是改首列」
+ * 的成因：第一次点对了列，之后每次都被当成表头首格。
+ *
+ * 记忆按「表格块起始偏移」索引（同一张表做对齐 / 增删行列时 `from` 不变，
+ * 表前正文改动导致 `from` 变化时自然失配、回落到本实例的 activeCell）。
+ *
+ * @type {Map<number, {r: number, c: number}>}
+ */
+const cellMemory = new Map();
+
+/**
+ * 记下某张表最后操作的单元格。
+ * @param {number} from 表格块起始偏移
+ * @param {number} r DOM 行下标（0 = 表头）
+ * @param {number} c 列下标
+ */
+function rememberCell(from, r, c) {
+  cellMemory.set(from, { r, c });
+}
+
+/**
+ * 取某张表最后操作的单元格，并夹紧到当前表格尺寸内
+ * （中间可能删过行 / 列，下标会越界）。
+ * @param {number} from 表格块起始偏移
+ * @param {number} rowCount 数据行数
+ * @param {number} colCount 列数
+ * @return {{r: number, c: number}}
+ */
+function recallCell(from, rowCount, colCount) {
+  const got = cellMemory.get(from);
+  const r = got ? got.r : 0;
+  const c = got ? got.c : 0;
+  return {
+    r: Math.min(Math.max(0, rowCount), Math.max(0, r)),
+    c: Math.min(Math.max(0, colCount - 1), Math.max(0, c)),
+  };
+}
+
+/**
  * 取（或懒创建）浮层输入框。
  * @param {object} handlers
  * @return {HTMLInputElement}
@@ -121,7 +165,13 @@ function ensureCellInput(handlers) {
     if (e.key === 'Enter') {
       e.preventDefault();
       e.stopImmediatePropagation();
+      /* 末尾单元格（最后一行 × 最右一列）敲回车 = 「表格写完了」，把光标送到
+         表格之外的下一行；其余单元格回车只是提交（保持原来的手感）。 */
+      const r = Number(el.dataset.r);
+      const c = Number(el.dataset.c);
+      const last = typeof h.isLastCell === 'function' ? h.isLastCell(r, c) : false;
       commitCellEditor(false);
+      if (last && typeof h.onExitBelow === 'function') h.onExitBelow();
       return;
     }
     if (e.key === 'Tab') {
@@ -163,14 +213,19 @@ function ensureCellInput(handlers) {
  * @param {Function} [params.onInsertRowBelow]
  * @param {Function} [params.onEscape]
  * @param {Function} [params.onEscapeVertical]
+ * @param {(r: number, c: number) => boolean} [params.isLastCell] 是否末尾单元格
+ * @param {Function} [params.onExitBelow] 末尾单元格回车 → 光标出表
+ * @param {DOMRect} [params.rect] 单元格矩形（调用方已按旧布局量好时传入）
  */
 export function openCellEditor(params) {
   const el = ensureCellInput({
     onInsertRowBelow: params.onInsertRowBelow,
     onEscape: params.onEscape,
     onEscapeVertical: params.onEscapeVertical,
+    isLastCell: params.isLastCell,
+    onExitBelow: params.onExitBelow,
   });
-  const rect = params.td.getBoundingClientRect();
+  const rect = params.rect || params.td.getBoundingClientRect();
   el.style.left = `${Math.round(rect.left)}px`;
   el.style.top = `${Math.round(rect.top)}px`;
   el.style.width = `${Math.max(72, Math.round(rect.width))}px`;
@@ -376,6 +431,10 @@ export class TableWidget extends WidgetType {
     const wrap = document.createElement('div');
     wrap.className = 'qp-table-wrap';
     wrap.setAttribute('contenteditable', 'false');
+    /* 记下自己的块起始偏移：点击表格外侧的空白时，靠它把 DOM 反查回块区间。
+       不要按「第几个 .qp-table-wrap」下标去对 `blocks` —— 解析失败的表格不会
+       生成 widget，下标就会整体错位，点第二张表删掉的却是第一张。 */
+    wrap.setAttribute('data-qp-from', String(model.from));
     // 关键：块级 widget 必须给像素宽度（spike S1 结论），禁止 width:100%。
     // 宽度按 .cm-content 内容列计算 → 右缘与正文右端对齐；
     // ResizeObserver 跟随窗口缩放 / 分屏 / 侧栏 / 迷你地图 / 字号变化。
@@ -442,38 +501,34 @@ export class TableWidget extends WidgetType {
       cell.textContent = unescapeCell(raw);
       const align = this.model.aligns[c];
       if (align) cell.style.textAlign = align;
-      cell.title = t('双击编辑单元格', 'Double-click to edit cell');
+      cell.title = t('单击编辑单元格', 'Click to edit cell');
       cell.addEventListener('mousedown', (e) => {
         e.preventDefault();
         e.stopPropagation();
+        if (e.button !== 0) return;
         this.activeCell = { r: domRow, c };
-        // 单击：只把文档光标落到表格块首（菜单里的 7 个表格操作据此定位），
-        // 保证「点击编辑区 = 聚焦文档」这一基本契约不被 widget 打断；
-        // 双击（e.detail >= 2）：才唤起浮层 input 做单元格所见即所得编辑。
-        if (e.detail >= 2) {
-          this._openEditor(view, cell, domRow, c);
-          return;
+        rememberCell(this.model.from, domRow, c);
+        /* 双击的第二下：浮层已经开在同一格，别重开 —— 重开等于先按「提交」
+           再打开，会把没改动的文本再写一遍文档（多一条无意义的撤销记录）。 */
+        if (e.detail >= 2 && isCellEditorOpen() && cellInput) {
+          const sameCell =
+            cellInput.dataset.from === String(this.model.from) &&
+            Number(cellInput.dataset.r) === domRow &&
+            Number(cellInput.dataset.c) === c;
+          if (sameCell) {
+            cellInput.focus();
+            cellInput.select();
+            return;
+          }
         }
-        this._focusBlock(view);
+        // 几何先量：打开浮层的过程中可能 dispatch（widget 重建会换掉单元格节点，
+        // 之后 getBoundingClientRect() 只能拿到 0×0）
+        const rect = cell.getBoundingClientRect();
+        this._openEditor(view, cell, domRow, c, rect);
       });
       tr.appendChild(cell);
     });
     return tr;
-  }
-
-  /**
-   * 单击单元格 → 把文档光标落到表格块**前一个字符**并聚焦编辑器。
-   * 注意不能落在 `block.from`：光标与块区间相接会触发「光标进入 → 露出源码」
-   * （A3 契约），widget 被移除，随后的双击就落不到单元格上了。
-   * 落在 `from - 1` 既能让光标可见，又能让 `nearestTableBlock()` 命中本表。
-   * @param {import('@codemirror/view').EditorView} view
-   */
-  _focusBlock(view) {
-    const pos = this.model.from - 1;
-    if (pos >= 0) {
-      view.dispatch({ selection: { anchor: pos } });
-    }
-    view.focus();
   }
 
   /**
@@ -482,20 +537,27 @@ export class TableWidget extends WidgetType {
    * @param {HTMLTableCellElement} cell
    * @param {number} domRow
    * @param {number} col
+   * @param {DOMRect} [rect] 打开前量好的单元格矩形
    */
-  _openEditor(view, cell, domRow, col) {
+  _openEditor(view, cell, domRow, col, rect) {
     const model = parseTable(
       view.state.doc.sliceString(this.model.from, this.model.to),
       this.model.from,
       this.model.to,
     ) || this.model;
+    // DOM 行下标：0 = 表头，1..rows.length = 数据行
+    const lastRow = model.rows.length;
+    const lastCol = Math.max(0, model.headers.length - 1);
     openCellEditor({
       view,
       td: cell,
+      rect,
       r: domRow,
       c: col,
       value: unescapeCell(domRow === 0 ? model.headers[col] : (model.rows[domRow - 1] || [])[col]),
       model,
+      isLastCell: (r, c) => r === lastRow && c === lastCol,
+      onExitBelow: () => this._exitBelow(view, model),
       apply: (change, options) => this._applyCell(view, model, change, options),
       onInsertRowBelow: () => {
         this._applyOp(view, 'rowBelow', { row: Math.max(0, domRow - 1), col });
@@ -515,6 +577,37 @@ export class TableWidget extends WidgetType {
         view.focus();
       },
     });
+  }
+
+  /**
+   * 末尾单元格回车 → 把光标送到表格之外的下一行。
+   *
+   * 表格块覆盖的行没有行盒，光标无法「落在表格内部」再按 → 出来，所以这里
+   * 直接把选区放到表格末行之后：
+   *  - 表格后面还有内容（常见是那条空行）→ 落到下一行行首；
+   *  - 表格就在文末 → 先补一个换行，再落到这个新空行上（否则没有「下一行」）。
+   *
+   * 行数用模型算（表头 + 分隔行 + 数据行），不依赖 `this.model.to`：提交编辑
+   * 时那次 dispatch 已经改过文本，旧的偏移可能短一截。
+   *
+   * @param {import('@codemirror/view').EditorView} view
+   * @param {import('./table-model.js').TableModel} model
+   */
+  _exitBelow(view, model) {
+    const doc = view.state.doc;
+    const blockLines = model.rows.length + 2;
+    const startNo = doc.lineAt(Math.min(model.from, doc.length)).number;
+    const endNo = Math.min(doc.lines, startNo + blockLines - 1);
+    const endLine = doc.line(endNo);
+    if (endNo < doc.lines) {
+      view.dispatch({ selection: { anchor: endLine.to + 1 } });
+    } else {
+      view.dispatch({
+        changes: { from: endLine.to, insert: '\n' },
+        selection: { anchor: endLine.to + 1 },
+      });
+    }
+    view.focus();
   }
 
   /**
@@ -539,6 +632,7 @@ export class TableWidget extends WidgetType {
     const base = live || model;
     const next = applyCellEdit(base, change.r - 1, change.c, change.value);
     this._dispatchModel(view, next, base);
+    rememberCell(base.from, change.r, change.c);
     const dir = options && options.focusNext ? options.focusNext : 0;
     if (dir) {
       // Tab / Shift-Tab：换到相邻单元格（行末跳到下一行首格）
@@ -551,7 +645,15 @@ export class TableWidget extends WidgetType {
       const target = cells[idx + dir];
       if (target) {
         this.activeCell = { r: target.r, c: target.c };
-        requestAnimationFrame(() => this._openEditor(view, target.el, target.r, target.c));
+        rememberCell(base.from, target.r, target.c);
+        // 下一帧重新取节点：这一帧里可能又有 dispatch 把 widget 换掉了
+        requestAnimationFrame(() => {
+          const el = view.dom.querySelector(
+            `.qp-table__cell[data-r="${target.r}"][data-c="${target.c}"]`,
+          );
+          if (!el) return;
+          this._openEditor(view, el, target.r, target.c, el.getBoundingClientRect());
+        });
         return;
       }
     }
@@ -618,10 +720,12 @@ export class TableWidget extends WidgetType {
         e.stopPropagation();
         const view = this._view || (this.opts.getView ? this.opts.getView() : null);
         if (!view) return;
-        this._applyOp(view, spec.op, {
-          row: Math.max(0, this.activeCell.r - 1),
-          col: this.activeCell.c,
-        });
+        /* 用「记忆里的那一格」而不是实例字段：每次操作都会让 widget 重建、
+           新实例的 `activeCell` 回到 {0,0}，直接用它会从第二次点击起一律改首列
+           （用户报的「切换对齐」Bug）。 */
+        const at = recallCell(this.model.from, this.model.rows.length, this.model.headers.length);
+        this.activeCell = at;
+        this._applyOp(view, spec.op, { row: Math.max(0, at.r - 1), col: at.c });
       });
       bar.appendChild(btn);
     }

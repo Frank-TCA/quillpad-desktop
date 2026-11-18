@@ -556,6 +556,64 @@ check(
   `横线=${hr.width}px 内容列=${hr.contentW}px 左偏=${hr.left}px`,
 );
 
+/* ---------- 9. 行首 ← 不跳到上一行尾（v1.0.4 第五轮） ---------- */
+/**
+ * 三种视图 + 非 Markdown 文档都要一致：空选区、光标在**逻辑行首**时按 ←
+ * 原地不动。行中照常左移，`Shift+←` 仍扩选（扩选走另一个按键名）。
+ */
+async function arrowLeftAt(doc, lineNo, col, mode) {
+  await page.evaluate(
+    async ([text, no, at, m]) => {
+      const app = window.quillpad;
+      const tab = app.state.tabs.find((x) => x.id === app.state.activeTabId);
+      if (app.state.viewMode !== m) app.setViewMode(m, { user: true });
+      app.setTabContent(tab.id, text);
+      app.refreshViewMode();
+      await new Promise((res) => setTimeout(res, 350));
+      const v = app.editor.view;
+      const line = v.state.doc.line(no);
+      v.dispatch({ selection: { anchor: line.from + at } });
+      v.focus();
+    },
+    [doc, lineNo, col, mode],
+  );
+  await page.waitForTimeout(300);
+  await page.keyboard.press('ArrowLeft');
+  await page.waitForTimeout(250);
+  return page.evaluate(() => {
+    const v = window.quillpad.editor.view;
+    const s = v.state.selection.main;
+    const line = v.state.doc.lineAt(s.head);
+    return { head: s.head, line: line.number, col: s.head - line.from };
+  });
+}
+
+const ARROW_DOC = '第一行文字\n\n第三行文字\n';
+for (const mode of ['wysiwyg', 'source', 'split']) {
+  const r = await arrowLeftAt(ARROW_DOC, 3, 0, mode);
+  check(`行首按 ← 留在本行（${mode}）`, r.line === 3 && r.col === 0, `落点 L${r.line}:${r.col}`);
+}
+const midLeft = await arrowLeftAt('第一行文字\n\n第三行文字\n', 3, 3, 'wysiwyg');
+check('行中按 ← 正常左移一格（所见即所得）', midLeft.line === 3 && midLeft.col === 2, `落点 L${midLeft.line}:${midLeft.col}`);
+
+await page.evaluate(() => {
+  const v = window.quillpad.editor.view;
+  const line = v.state.doc.line(3);
+  v.dispatch({ selection: { anchor: line.from + 2 } });
+  v.focus();
+});
+await page.waitForTimeout(200);
+await page.keyboard.press('Shift+ArrowLeft');
+await page.waitForTimeout(250);
+const shiftLeft = await page.evaluate(() => {
+  const s = window.quillpad.editor.view.state.selection.main;
+  return { empty: s.empty, len: s.to - s.from };
+});
+check('Shift+← 仍可扩选（未被行首拦截误伤）', !shiftLeft.empty && shiftLeft.len === 1, `选区长=${shiftLeft.len}`);
+
+const txtLeft = await arrowLeftAt('abc\ndef\n', 2, 0, 'wysiwyg');
+check('纯文本文档行首按 ← 也留在本行', txtLeft.line === 2 && txtLeft.col === 0, `落点 L${txtLeft.line}:${txtLeft.col}`);
+
 check('无运行时错误', errors.length === 0, errors.join(' | '));
 
 await browser.close();

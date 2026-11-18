@@ -609,6 +609,181 @@ async function sectionHrLayout() {
   await win.waitForTimeout(500);
 }
 
+/* ================================================ 第 6c 项 · 表格交互（v1.0.4 第五轮） */
+/**
+ * 1) 单击单元格就进编辑（不再需要双击）；
+ * 2) 切换对齐按钮连点：每次都作用在**同一列**（widget 重建后列号不能漂回首列）；
+ * 3) 末尾单元格回车 → 光标落到表格之外；
+ * 4) 表格左右两侧空白点击 → 光标停在表外，Delete / Backspace 删掉整张表。
+ */
+async function sectionTableInteraction() {
+  console.log('── 第 6c 项 · 表格交互');
+  await win.evaluate(() => window.quillpad.setViewMode('wysiwyg', { user: true }));
+  await win.waitForTimeout(700);
+
+  const TABLE_DOC = '# 表\n\n| 列一 | 列二 | 列三 |\n| --- | --- | --- |\n| a1 | b1 | c1 |\n| a2 | b2 | c2 |\n\n表后段落。\n';
+  const saved = await win.evaluate((d) => {
+    const app = window.quillpad;
+    const tab = app.state.tabs.find((t) => t.id === app.state.activeTabId);
+    const before = tab.content;
+    app.setTabContent(tab.id, d);
+    app.refreshViewMode();
+    return { id: tab.id, before };
+  }, TABLE_DOC);
+  await win.waitForTimeout(900);
+
+  const loadTable = async () => {
+    await win.evaluate((d) => {
+      const app = window.quillpad;
+      const tab = app.state.tabs.find((t) => t.id === app.state.activeTabId);
+      app.setTabContent(tab.id, d);
+      app.refreshViewMode();
+    }, TABLE_DOC);
+    await win.waitForTimeout(800);
+  };
+  /** 单元格中心点 */
+  const cellAt = (r, c) =>
+    win.evaluate(([rr, cc]) => {
+      const el = document.querySelector(`.qp-table__cell[data-r="${rr}"][data-c="${cc}"]`);
+      if (!el) return null;
+      const b = el.getBoundingClientRect();
+      return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
+    }, [r, c]);
+  /** 点一格（并退出浮层，避免影响下一步按键） */
+  const pickCell = async (r, c) => {
+    const p = await cellAt(r, c);
+    if (!p) return false;
+    await win.mouse.click(p.x, p.y);
+    await win.waitForTimeout(350);
+    return true;
+  };
+  const delimiter = () =>
+    win.evaluate(() => window.quillpad.editor.view.state.doc.line(4).text);
+  const caret = () =>
+    win.evaluate(() => {
+      const v = window.quillpad.editor.view;
+      const s = v.state.selection.main;
+      const line = v.state.doc.lineAt(s.head);
+      return { head: s.head, line: line.number, col: s.head - line.from, docLen: v.state.doc.length };
+    });
+  const overlay = () =>
+    win.evaluate(() => {
+      const el = document.querySelector('.qp-cell-editor:not([hidden])');
+      return el
+        ? { open: true, value: el.value, r: Number(el.dataset.r), c: Number(el.dataset.c) }
+        : { open: false };
+    });
+
+  /* 6c.1 单击即编辑 */
+  await pickCell(1, 1);
+  const one = await overlay();
+  check(
+    '6c.1 单击单元格即进入编辑（浮层值 = 该格文本）',
+    one.open && one.value === 'b1' && one.r === 1 && one.c === 1,
+    JSON.stringify(one),
+  );
+  await win.keyboard.press('Escape');
+  await win.waitForTimeout(300);
+
+  /* 6c.2 对齐按钮连点：列不漂移 */
+  await loadTable();
+  await pickCell(2, 2);
+  await win.keyboard.press('Escape');
+  await win.waitForTimeout(300);
+  const alignBtn = () =>
+    win.evaluate(() => {
+      const b = document.querySelector('.qp-table-ops__btn[data-op="alignCycle"]');
+      if (!b) return null;
+      const r = b.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    });
+  const d = [];
+  for (let i = 0; i < 2; i += 1) {
+    const a = await alignBtn();
+    if (!a) break;
+    await win.mouse.click(a.x, a.y);
+    await win.waitForTimeout(400);
+    d.push(await delimiter());
+  }
+  const colAt = (line, i) => (line || '').split('|').map((x) => x.trim()).filter(Boolean)[i] || '';
+  check(
+    '6c.2 切换对齐连点两次都作用在第三列（不会漂回首列）',
+    d.length === 2 && colAt(d[0], 2) === ':---' && colAt(d[1], 2) === ':---:' && colAt(d[1], 0) === '---',
+    JSON.stringify(d),
+  );
+
+  /* 6c.3 末格回车 → 光标出表 */
+  await loadTable();
+  const lastCell = await win.evaluate(() => {
+    const cells = [...document.querySelectorAll('.qp-table__cell')];
+    const el = cells[cells.length - 1];
+    const b = el.getBoundingClientRect();
+    return { x: b.left + b.width / 2, y: b.top + b.height / 2, r: el.dataset.r, c: el.dataset.c };
+  });
+  await win.mouse.click(lastCell.x, lastCell.y);
+  await win.waitForTimeout(400);
+  await win.keyboard.press('Enter');
+  await win.waitForTimeout(500);
+  const afterEnter = await caret();
+  const enterOverlay = await overlay();
+  check(
+    '6c.3 末尾单元格回车 → 光标落到表格之外的下一行',
+    !enterOverlay.open && afterEnter.line === 7 && afterEnter.col === 0,
+    `${JSON.stringify(lastCell)} → L${afterEnter.line}:${afterEnter.col} 浮层=${enterOverlay.open}`,
+  );
+
+  /* 6c.4 左侧空白 + Delete */
+  await loadTable();
+  const geoL = await win.evaluate(() => {
+    const w = document.querySelector('.qp-table-wrap').getBoundingClientRect();
+    const g = document.querySelector('.cm-gutters').getBoundingClientRect();
+    return { x: (g.right + w.left) / 2, y: w.top + w.height / 2, from: w.left };
+  });
+  await win.mouse.click(geoL.x, geoL.y);
+  await win.waitForTimeout(350);
+  const atLeft = await caret();
+  await win.keyboard.press('Delete');
+  await win.waitForTimeout(450);
+  const afterDel = await win.evaluate(() => ({
+    table: !!document.querySelector('.qp-table'),
+    len: window.quillpad.editor.view.state.doc.length,
+  }));
+  check(
+    '6c.4 点表格左侧空白 → 光标在表外，Delete 删掉整张表',
+    atLeft.col === 0 && !afterDel.table && afterDel.len < TABLE_DOC.length - 40,
+    `落点 L${atLeft.line}:${atLeft.col} 剩余表=${afterDel.table} docLen=${afterDel.len}`,
+  );
+
+  /* 6c.5 右侧空白 + Backspace */
+  await loadTable();
+  const geoR = await win.evaluate(() => {
+    const w = document.querySelector('.qp-table-wrap').getBoundingClientRect();
+    const sc = document.querySelector('.cm-scroller').getBoundingClientRect();
+    return { x: (w.right + sc.right) / 2, y: w.top + w.height / 2 };
+  });
+  await win.mouse.click(geoR.x, geoR.y);
+  await win.waitForTimeout(350);
+  const atRight = await caret();
+  await win.keyboard.press('Backspace');
+  await win.waitForTimeout(450);
+  const afterBs = await win.evaluate(() => ({
+    table: !!document.querySelector('.qp-table'),
+    len: window.quillpad.editor.view.state.doc.length,
+  }));
+  check(
+    '6c.5 点表格右侧空白 → 光标在表外，Backspace 删掉整张表',
+    !afterBs.table && afterBs.len < TABLE_DOC.length - 40,
+    `落点 L${atRight.line}:${atRight.col} 剩余表=${afterBs.table} docLen=${afterBs.len}`,
+  );
+
+  // 还原文档
+  await win.evaluate((s) => {
+    window.quillpad.setTabContent(s.id, s.before);
+    window.quillpad.refreshViewMode();
+  }, saved);
+  await win.waitForTimeout(500);
+}
+
 /* ================================================ 第 7 项 · 启动参数与文件关联 */
 /**
  * 读文件关联相关注册表项（reg.exe 在本机安全策略里被禁，走 PowerShell）。
@@ -724,6 +899,7 @@ for (const [tag, fn] of [
   ['第 4 项', sectionGutterPolicy],
   ['第 5 项', sectionWelcomeDoc],
   ['第 6b 项', sectionHrLayout],
+  ['第 6c 项', sectionTableInteraction],
   ['第 7 项', sectionAssociations],
 ]) {
   try {

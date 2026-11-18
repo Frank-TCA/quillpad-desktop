@@ -88,6 +88,30 @@ const ARROW_RIGHT_AT_LINE_END = {
   },
 };
 
+/**
+ * 「光标停在逻辑行首时，左方向键不再跳到上一行行尾」。
+ *
+ * 与 `ARROW_RIGHT_AT_LINE_END` 对称：用户在行首按 ← 是想留在本行（多为误触 ——
+ * 上一行行尾往往是一段文字的末尾，光标跳过去再接一个字符就把两行粘起来了）。
+ *  - 只有**空选区**才拦截，拖选 / 多光标走原生；
+ *  - 只有**逻辑行首**才拦截（`head === lineAt(head).from`）。自动换行下段落内的
+ *    软换行处 `head !== line.from`，按 ← 仍正常回到上一个视觉行；
+ *  - `Shift-ArrowLeft` 是另一个按键名，扩选不受影响；
+ *  - 空行（`from === to`）同样视为行首：原地不动。
+ *
+ * @type {import('@codemirror/view').KeyBinding}
+ */
+const ARROW_LEFT_AT_LINE_START = {
+  key: 'ArrowLeft',
+  run: (view) => {
+    const sel = view.state.selection.main;
+    if (!sel.empty) return false;
+    const line = view.state.doc.lineAt(sel.head);
+    if (sel.head !== line.from) return false;
+    return true;
+  },
+};
+
 
 /**
  * WYSIWYG 阅读面容器扩展（QA D-2）。
@@ -231,7 +255,7 @@ export class EditorManager {
       highlightSelectionMatches({ highlightWordAroundCursor: true, minSelectionLength: 1 }),
       search({ top: true, createPanel: createSearchPanel }),
       syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
-      Prec.high(keymap.of([indentWithTab, ARROW_RIGHT_AT_LINE_END])),
+      Prec.high(keymap.of([indentWithTab, ARROW_RIGHT_AT_LINE_END, ARROW_LEFT_AT_LINE_START])),
       keymap.of([
         ...closeBracketsKeymap,
         ...defaultKeymap,

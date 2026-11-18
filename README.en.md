@@ -53,7 +53,7 @@ to first-class features:
 
 - Inline rendering: headings, bold/italic, strikethrough, inline code, links, blockquotes, lists, task items
 - Block elements: fenced code (with syntax highlighting), tables (add/remove rows and columns, per-column alignment), images, KaTeX math, footnotes, table of contents
-- Click a table to select the whole block, double-click to enter a cell; `Tab` moves between cells
+- Click a cell to edit it, `Tab` moves between cells; click the blank space beside a table to park the cursor outside it, then `Delete` / `Backspace` removes the whole table
 - Drag or paste an image and it is written to an `assets/` folder next to the document, with a random suffix on name collisions
 - The WYSIWYG surface adapts to window width, so wide screens no longer waste the margins
 
