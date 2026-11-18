@@ -13,6 +13,8 @@
  *     源码模式保留行号与折叠箭头，且行号与内容行逐行对齐（checked≥10 且 worst≤2.5px）
  *  5. 欢迎文档双语联动：切英文 → tab 变 Welcome.md 且英文模板且非脏；
  *     切回中文恢复；用户编辑过只改名不覆盖
+ *  5b. 欢迎文档另存为：虚拟标签改完 → 另存为**新文件**能落盘、标签转为磁盘
+ *     文件、二次保存走 nativePath 不再弹框（v1.0.4 第五轮修的 ENOENT）
  *  6. 文件级检查（无需启动应用）：docs/screenshots/ 四张截图存在非空且被
  *     README.md / README.en.md 引用；dist/release/ 三产物存在且达到体积门槛
  *  7. 启动参数与文件关联：安装器写下的 .md/.txt 默认关联、能力注册、应用内 IPC
@@ -553,6 +555,147 @@ async function sectionWelcomeDoc() {
   await win.waitForTimeout(600);
 }
 
+/* ===================== 第 5b 项 · 欢迎文档另存为（v1.0.4 第五轮修复） */
+/**
+ * 欢迎文档是内存里的虚拟标签：`path` 只是显示名、`nativePath` / `handleKey`
+ * 都为空，所以「保存」必然被路由到「另存为」。而 v1.0.0 起主进程的写入函数
+ * 在写之前无条件 `stat` 目标，目标文件不存在就 ENOENT —— 于是欢迎文档（以及
+ * 任何「未命名」标签）第一次保存永远失败，弹「保存失败：ENOENT …」。
+ *
+ * 这里用主进程桩把系统对话框换成临时目录里的**新文件名**，验证整条链路真的
+ * 落盘，并且第二次保存走 `nativePath` 直接写回、不再弹框。
+ */
+async function sectionWelcomeSave() {
+  console.log('── 第 5b 项 · 欢迎文档另存为（新文件）');
+  await win.evaluate(() => window.quillpad.setViewMode('wysiwyg', { user: true }));
+  await win.waitForTimeout(500);
+
+  const info = await win.evaluate(() => {
+    const app = window.quillpad;
+    let t = app.state.tabs.find((x) => x.path === '欢迎.md' || x.path === 'Welcome.md');
+    if (!t) {
+      app.openWelcomeDocument();
+      t = app.state.tabs.find((x) => x.path === '欢迎.md' || x.path === 'Welcome.md');
+    }
+    if (!t) return null;
+    app.activateTab(t.id);
+    return { id: t.id, name: t.name, path: t.path, nativePath: t.nativePath || null };
+  });
+  check(
+    '5b.1 存在虚拟欢迎标签（无磁盘路径）',
+    !!info && info.path === '欢迎.md' && info.nativePath === null,
+    JSON.stringify(info),
+  );
+  if (!info) return;
+  await win.waitForTimeout(500);
+
+  const tmpDir = mkdtempSync(path.join(os.tmpdir(), 'qp-welcome-'));
+  const target = path.join(tmpDir, 'welcome-saved.md');
+  await app.evaluate(async ({ dialog }, file) => {
+    globalThis.__qpRealSave = dialog.showSaveDialog;
+    globalThis.__qpSaveCalls = 0;
+    dialog.showSaveDialog = async () => {
+      globalThis.__qpSaveCalls += 1;
+      return { canceled: false, filePath: file };
+    };
+  }, target);
+
+  const edited = await win.evaluate((id) => {
+    window.quillpad.editor.view.dispatch({ changes: { from: 0, insert: 'WELCOME-EDIT\n' } });
+    const t = window.quillpad.state.tabs.find((x) => x.id === id);
+    return { dirty: t.content !== t.savedContent, head: t.content.slice(0, 12) };
+  }, info.id);
+  check(
+    '5b.2 欢迎文档可编辑并进入未保存态',
+    edited.dirty && edited.head.startsWith('WELCOME-EDIT'),
+    JSON.stringify(edited),
+  );
+
+  const saved1 = await win.evaluate(() => window.quillpad.saveActive());
+  await win.waitForTimeout(500);
+  const afterSave = await win.evaluate((id) => {
+    const t = window.quillpad.state.tabs.find((x) => x.id === id);
+    return t
+      ? { dirty: t.content !== t.savedContent, path: t.path, nativePath: t.nativePath || null, name: t.name }
+      : null;
+  }, info.id);
+  const calls1 = await app.evaluate(async () => globalThis.__qpSaveCalls);
+  const onDisk = existsSync(target) ? readFileSync(target, 'utf8') : '';
+  check(
+    '5b.3 另存为到新文件成功落盘',
+    saved1 === true && onDisk.startsWith('WELCOME-EDIT'),
+    `ok=${saved1} 写出=${onDisk.length}B 弹框=${calls1}`,
+  );
+  check(
+    '5b.4 保存后标签转为磁盘文件且不再脏',
+    !!afterSave &&
+      !afterSave.dirty &&
+      path.isAbsolute(afterSave.path || '') &&
+      afterSave.nativePath === afterSave.path,
+    JSON.stringify(afterSave),
+  );
+
+  await win.evaluate(() => {
+    window.quillpad.editor.view.dispatch({ changes: { from: 0, insert: 'SECOND-EDIT\n' } });
+  });
+  const saved2 = await win.evaluate(() => window.quillpad.saveActive());
+  await win.waitForTimeout(400);
+  const calls2 = await app.evaluate(async () => globalThis.__qpSaveCalls);
+  const onDisk2 = existsSync(target) ? readFileSync(target, 'utf8') : '';
+  check(
+    '5b.5 二次保存直接写回、不再弹另存为',
+    saved2 === true && calls2 === calls1 && onDisk2.startsWith('SECOND-EDIT'),
+    `ok=${saved2} 弹框=${calls2} 开头=${JSON.stringify(onDisk2.slice(0, 12))}`,
+  );
+
+  /* 5b.6 英文欢迎文档走同一条路径（defaultName = Welcome.md） */
+  const target2 = path.join(tmpDir, 'welcome-en.md');
+  await app.evaluate(async ({ dialog }, file) => {
+    dialog.showSaveDialog = async () => {
+      globalThis.__qpSaveCalls += 1;
+      return { canceled: false, filePath: file };
+    };
+  }, target2);
+  await win.evaluate(() => window.quillpad.applyLocale('en'));
+  await win.waitForTimeout(900);
+  const enInfo = await win.evaluate(async () => {
+    const app = window.quillpad;
+    app.openWelcomeDocument();
+    await new Promise((r) => setTimeout(r, 600));
+    const t = app.state.tabs.find((x) => x.path === 'Welcome.md');
+    if (!t) return null;
+    app.activateTab(t.id);
+    app.editor.view.dispatch({ changes: { from: 0, insert: 'EN-EDIT\n' } });
+    return { id: t.id, name: t.name, path: t.path, dirty: t.content !== t.savedContent };
+  });
+  const savedEn = await win.evaluate(() => window.quillpad.saveActive());
+  await win.waitForTimeout(400);
+  const onDiskEn = existsSync(target2) ? readFileSync(target2, 'utf8') : '';
+  check(
+    '5b.6 英文欢迎文档同样能另存为',
+    !!enInfo && enInfo.path === 'Welcome.md' && enInfo.dirty && savedEn === true && onDiskEn.startsWith('EN-EDIT'),
+    `path=${enInfo && enInfo.path} ok=${savedEn} 写出=${onDiskEn.length}B`,
+  );
+
+  // 还原：恢复真实对话框、关掉这两个已落盘的标签、回中文、删临时目录、补回内置欢迎文档
+  await app.evaluate(async ({ dialog }) => {
+    if (globalThis.__qpRealSave) dialog.showSaveDialog = globalThis.__qpRealSave;
+  });
+  if (enInfo) await win.evaluate((id) => window.quillpad.closeTab(id, true), enInfo.id);
+  await win.evaluate((id) => window.quillpad.closeTab(id, true), info.id);
+  await win.waitForTimeout(400);
+  await win.evaluate(() => window.quillpad.applyLocale('zh-CN'));
+  await win.waitForTimeout(700);
+  rmSync(tmpDir, { recursive: true, force: true });
+  await win.evaluate(() => {
+    const app = window.quillpad;
+    if (!app.state.tabs.some((x) => x.path === '欢迎.md' || x.path === 'Welcome.md')) {
+      app.openWelcomeDocument();
+    }
+  });
+  await win.waitForTimeout(500);
+}
+
 /* =========================== 第 6b 项 · 分隔线的绘制位置与宽度（v1.0.4 第二轮） */
 /**
  * 分隔线所在行是 `font-size/line-height: 0` + 上下 padding 撑出来的：
@@ -776,6 +919,50 @@ async function sectionTableInteraction() {
     `落点 L${atRight.line}:${atRight.col} 剩余表=${afterBs.table} docLen=${afterBs.len}`,
   );
 
+  /* 6c.6 左侧空白 + Backspace → 表格保留（只有 Delete 删表） */
+  await loadTable();
+  const geoL2 = await win.evaluate(() => {
+    const w = document.querySelector('.qp-table-wrap').getBoundingClientRect();
+    const g = document.querySelector('.cm-gutters').getBoundingClientRect();
+    return { x: (g.right + w.left) / 2, y: w.top + w.height / 2 };
+  });
+  await win.mouse.click(geoL2.x, geoL2.y);
+  await win.waitForTimeout(350);
+  const atLeft2 = await caret();
+  await win.keyboard.press('Backspace');
+  await win.waitForTimeout(450);
+  const afterBsL = await win.evaluate(() => ({
+    table: !!document.querySelector('.qp-table'),
+    len: window.quillpad.editor.view.state.doc.length,
+  }));
+  check(
+    '6c.6 左侧空白 + Backspace → 表格保留（反方向键不回删表）',
+    atLeft2.col === 0 && afterBsL.table && afterBsL.len >= TABLE_DOC.length - 2,
+    `落点 L${atLeft2.line}:${atLeft2.col} 剩余表=${afterBsL.table} docLen=${afterBsL.len}`,
+  );
+
+  /* 6c.7 右侧空白 + Delete → 表格保留（只有 Backspace 删表） */
+  await loadTable();
+  const geoR2 = await win.evaluate(() => {
+    const w = document.querySelector('.qp-table-wrap').getBoundingClientRect();
+    const sc = document.querySelector('.cm-scroller').getBoundingClientRect();
+    return { x: (w.right + sc.right) / 2, y: w.top + w.height / 2 };
+  });
+  await win.mouse.click(geoR2.x, geoR2.y);
+  await win.waitForTimeout(350);
+  const atRight2 = await caret();
+  await win.keyboard.press('Delete');
+  await win.waitForTimeout(450);
+  const afterDelR = await win.evaluate(() => ({
+    table: !!document.querySelector('.qp-table'),
+    len: window.quillpad.editor.view.state.doc.length,
+  }));
+  check(
+    '6c.7 右侧空白 + Delete → 表格保留（反方向键不删表）',
+    afterDelR.table && afterDelR.len >= TABLE_DOC.length - 2,
+    `落点 L${atRight2.line}:${atRight2.col} 剩余表=${afterDelR.table} docLen=${afterDelR.len}`,
+  );
+
   // 还原文档
   await win.evaluate((s) => {
     window.quillpad.setTabContent(s.id, s.before);
@@ -898,6 +1085,7 @@ for (const [tag, fn] of [
   ['第 3 项', sectionFilePicker],
   ['第 4 项', sectionGutterPolicy],
   ['第 5 项', sectionWelcomeDoc],
+  ['第 5b 项', sectionWelcomeSave],
   ['第 6b 项', sectionHrLayout],
   ['第 6c 项', sectionTableInteraction],
   ['第 7 项', sectionAssociations],

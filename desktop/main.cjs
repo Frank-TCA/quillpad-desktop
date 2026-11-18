@@ -129,6 +129,11 @@ async function readTextFile(filePath) {
 /**
  * 写回磁盘。写入前保留原文件的 BOM 约定（由渲染层通过 opts.bom 告知）。
  *
+ * 目标不存在是「新建文件」的正常情形（另存为、欢迎文档、未命名标签都走这里），
+ * 必须让 `writeFile` 把它创建出来。v1.0.0–1.0.4 第一版在这里无条件先 `stat`，
+ * 于是「另存为」到任何新文件名都撞 ENOENT，虚拟标签永远存不下来。
+ * 只有 ENOENT 之外的错误（权限、路径非法）和「目标是目录」才当失败。
+ *
  * @param {string} filePath
  * @param {string} text
  * @param {{bom?: boolean}} [opts]
@@ -136,8 +141,15 @@ async function readTextFile(filePath) {
  */
 async function writeTextFile(filePath, text, opts = {}) {
   try {
-    const stat = await fs.promises.stat(filePath);
-    if (!stat.isFile()) return { ok: false, error: t('目标不是文件', 'Target is not a file') };
+    try {
+      const stat = await fs.promises.stat(filePath);
+      if (!stat.isFile()) return { ok: false, error: t('目标不是文件', 'Target is not a file') };
+    } catch (err) {
+      if (!err || err.code !== 'ENOENT') {
+        return { ok: false, error: (err && err.message) || String(err) };
+      }
+      // 不存在 → 下面 writeFile 直接创建
+    }
     const payload = (opts.bom ? '\uFEFF' : '') + String(text);
     await fs.promises.writeFile(filePath, payload, 'utf8');
     const after = await fs.promises.stat(filePath);
@@ -670,6 +682,17 @@ ipcMain.handle('qp:save-dialog', async (event, payload) => {
       if (stat.isDirectory()) defaultPath = path.join(dir, defaultName);
     } catch {
       // 目录不存在就用纯文件名，让系统决定起始位置
+    }
+  } else if (!path.isAbsolute(defaultName)) {
+    // 只给文件名时（未命名标签、欢迎文档这类没有目录归属的标签），起始目录取
+    // 系统「文档」。否则 Electron 按相对路径解析，落点是进程工作目录 —— 也
+    // 就是安装目录，用户点「保存」会把文件悄悄写进程序文件夹。
+    try {
+      const docs = app.getPath('documents');
+      const stat = await fs.promises.stat(docs);
+      if (stat.isDirectory()) defaultPath = path.join(docs, defaultName);
+    } catch {
+      // 文档目录不可用就退回纯文件名
     }
   }
 

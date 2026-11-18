@@ -38,22 +38,28 @@ import { collectHeadingsFromScan } from './toc.js';
 import { collectFootnotes } from './footnotes.js';
 
 /**
- * 删除光标紧邻的那张表（表前 / 表后一格之内的边界都算）。
+ * 删除光标紧邻的那张表。
  *
  * 见 `tableEdgeDelete` 的说明：CM 的原子区间只拦「跨界删除」，表前后各有一条
  * 换行挡着，单按一格退格只会把两行粘起来。这里直接把整块连同它一侧的换行删掉。
  *
+ * 方向必须分开：Delete 是「向前删」、Backspace 是「向后删」。光标停在表格
+ * **左端外侧**（`head === block.from`）时只认 Delete，停在**右端外侧**
+ * （`head === block.to`）时只认 Backspace；反方向的按键交回 CM 按普通字符
+ * 删除处理，否则「光标明明在表外」也会整表消失，退格删不到上一行。
+ *
  * @param {import('@codemirror/view').EditorView} view
  * @param {any} blockField 块层 StateField
+ * @param {'start'|'end'} side `start` 对应 Delete，`end` 对应 Backspace
  * @return {boolean} 是否处理了这次按键
  */
-function deleteTableAtCursor(view, blockField) {
+function deleteTableAtCursor(view, blockField, side) {
   const sel = view.state.selection.main;
   if (!sel.empty) return false;
   const value = view.state.field(blockField, false);
   if (!value || !value.blocks) return false;
   const block = value.blocks.find(
-    (b) => b.kind === 'table' && (b.from === sel.head || b.to === sel.head),
+    (b) => b.kind === 'table' && (side === 'start' ? b.from === sel.head : b.to === sel.head),
   );
   if (!block) return false;
 
@@ -145,13 +151,18 @@ export function createWysiwygExtension(opts) {
   }
 
   /**
-   * 光标贴在表格边界上时，Delete / Backspace 删掉整张表。
+   * 光标贴在表格边界上时，按方向删掉整张表。
    *
    * 为什么不能靠 CM 的 `atomicRanges` 自己搞定：原子区间只在「删除范围**跨进**
    * 区间」时生效 —— 表前一个字符是换行，退格删的是那个换行（两行被粘起来），
-   * 表格纹丝不动；表后同理。所以在这里显式接管：光标恰好等于某张表的 `from`
-   * 或 `to`，就整块删除，并连带吃掉它后面那行的换行（表后没内容时吃前面的），
-   * 保证删完不留一串空行。
+   * 表格纹丝不动；表后同理。所以在这里显式接管，并连带吃掉它后面那行的换行
+   * （表后没内容时吃前面的），保证删完不留一串空行。
+   *
+   * 分工与编辑器习惯一致：
+   *  - 光标在表格**左端外侧**（`head === from`）→ 只有 Delete 删表，
+   *    Backspace 照常删掉表格上方那一格；
+   *  - 光标在表格**右端外侧**（`head === to`）→ 只有 Backspace 删表，
+   *    Delete 照常删掉表格下方那一格。
    *
    * 只在 WYSIWYG 装的块层里注册，源码 / 分栏模式没有 `blockField`，按键照旧。
    *
@@ -159,11 +170,11 @@ export function createWysiwygExtension(opts) {
    */
   const tableEdgeDelete = {
     key: 'Delete',
-    run: (view) => deleteTableAtCursor(view, blockField),
+    run: (view) => deleteTableAtCursor(view, blockField, 'start'),
   };
   const tableEdgeBackspace = {
     key: 'Backspace',
-    run: (view) => deleteTableAtCursor(view, blockField),
+    run: (view) => deleteTableAtCursor(view, blockField, 'end'),
   };
 
   /**
