@@ -107,8 +107,8 @@ const ARROW_RIGHT_AT_LINE_END = {
  * source / split 仍尊重用户自己的「自动换行」开关。
  *
  * 编辑器根节点上的 `qp-wy` 类是本模式的布局开关：所见即所得也装行号槽 /
- * 折叠槽，而「槽位 + 正文列」必须作为**一组**居中（见 wysiwyg.css §0）。
- * 用类而不是全局规则，保证源码 / 分栏的布局一个字节都不变。
+ * 折叠槽，行号槽与源码模式一样贴滚动区左缘，正文列在槽位右侧居中
+ * （见 wysiwyg.css §0）。用类而不是全局规则，保证源码 / 分栏的布局一个字节都不变。
  */
 const WYSIWYG_DOC_EXTENSION = [
   EditorView.contentAttributes.of({ class: 'qp-doc' }),

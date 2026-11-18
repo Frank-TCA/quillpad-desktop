@@ -30,12 +30,13 @@
      所以容器宽度不再需要「46em + 20px」那 20px 补偿。 */
   width: var(--qp-measure, 46em);
   max-width: 100%;
-  /* 居中交给 `.cm-scroller` 的 justify-content：行号槽是 scroller 的 flex 兄弟，
-     用 `margin: 0 auto` 只能让正文列在「槽位右侧的剩余空间」里居中，行号就会
-     贴在滚动区最左边、离正文两三百像素。让整行（槽位 + 正文列）作为一组居中，
-     行号才紧挨着正文。窗口变窄时允许正文列收缩（min-width:0 + flex-shrink），
-     不会撑出横向滚动条。 */
-  margin: 0;
+  /* 正文列在**行号槽右侧的剩余空间里居中**（`margin: 0 auto` 让 flex 行里的
+     自由空间均分到两侧）。不能把「槽位 + 正文列」整组居中：那会让行号栏浮在
+     窗口中间，左侧空出两百来像素既不放行号也不放正文。
+     槽位本身贴滚动区左缘（与源码 / 分栏模式同一水平位置），正文列则维持原来
+     的居中位置 —— 窗口变窄时 auto 边距归零、正文列自己收缩（min-width:0 +
+     flex-shrink），不会撑出横向滚动条。 */
+  margin: 0 auto;
   flex: 0 1 auto;
   min-width: 0;
 }
@@ -50,12 +51,12 @@
   --qp-line-pad-r: 0px;
 }
 
-/* 所见即所得：行号槽与正文列作为**一组**居中。
-   源码 / 分栏不加 `.qp-wy`，仍是「槽位贴左 + 正文列占满」的原生布局。 */
+/* 所见即所得：行号槽贴滚动区左缘，正文列随后的居中由 `margin: 0 auto` 完成
+   （见上面 `.cm-content.qp-doc`）。
+   之前这里把「槽位 + 正文列」整组居中（`justify-content: center`），行号栏
+   于是浮在窗口中间、左侧空出一条既不放行号也不放正文的空白。 */
 .cm-editor.qp-wy .cm-scroller {
-  justify-content: center;
-  /* 内容比可视区宽时退回 start，避免 flex 居中把左侧内容裁掉（点不到行首） */
-  justify-content: safe center;
+  justify-content: flex-start;
 }
 
 /* 空行：与正文行**同高**（--qp-blank-h = 正文 16px × 1.75 = 28px）。
@@ -762,6 +763,20 @@ html[data-theme='nord'] .cm-editor.qp-wy .cm-selectionBackground {
   border-top: 1px solid var(--border);
 }
 
+/* 分隔线画在**行盒的垂直中线**上（与源码模式里 `---` 文本居中一致）。
+   不能用「行内布局」定位：行盒是 `font-size/line-height: 0`，`<hr>` 会贴在
+   内容区顶端；而上下内边距并不总是对称（前一行是空行时上内边距被压到 4px，
+   见下面 `.qp-blank + .qp-hr-line` 那条），于是分隔线看起来紧贴行顶。
+   改成绝对定位 + `top: 50%`：百分比按**包含块（行的 padding box）**解析，
+   正好落在行高中线，且完全脱离布局 —— 行高仍只由上下 padding 决定，
+   文档总高与光标换算不受影响。左右 `0` 让它铺满内容列（与表格、正文同宽）。 */
+.cm-line.qp-hr-line .qp-hr {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+}
+
 /* 承载 <hr> 的那一行本身会贡献一个 28px 行高，必须压平（font-size/line-height
    归零），间距全部由本行的 padding 决定 —— 与预览的 hr 上下 32px 一致。
 
@@ -770,6 +785,8 @@ html[data-theme='nord'] .cm-editor.qp-wy .cm-selectionBackground {
    失配 —— 其下标题的 padding-top 就会在 0 / 23.04px 之间跳（整篇 docHeight
    跟着抖）。行类与 widget 的生死无关，选择器恒成立。 */
 .cm-line.qp-hr-line {
+  /* `<hr>` 用绝对定位画在行中线上，需要本行作为定位容器。 */
+  position: relative;
   font-size: 0;
   line-height: 0;
   padding-top: var(--qp-hr-margin, 32px);

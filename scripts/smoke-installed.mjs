@@ -409,6 +409,20 @@ async function sectionGutterPolicy() {
       gutters: g ? Math.round(g.getBoundingClientRect().width) : null,
       lineNumbers: !!document.querySelector('.cm-lineNumbers'),
       foldGutter: !!document.querySelector('.cm-foldGutter'),
+      /* 布局验算：行号槽贴滚动区左缘（与源码模式同一水平位置），正文列在槽位
+         右侧的剩余空间居中 —— 左、右两段留白应等宽。 */
+      gutterLeft: Math.round(
+        g.getBoundingClientRect().left - document.querySelector('.cm-scroller').getBoundingClientRect().left,
+      ),
+      gapLeft: Math.round(
+        document.querySelector('.cm-content').getBoundingClientRect().left -
+          g.getBoundingClientRect().right,
+      ),
+      gapRight: Math.round(
+        document.querySelector('.cm-scroller').getBoundingClientRect().left +
+          document.querySelector('.cm-scroller').clientWidth -
+          document.querySelector('.cm-content').getBoundingClientRect().right,
+      ),
       checked,
       worst,
       bad: bad.slice(0, 6),
@@ -422,6 +436,9 @@ async function sectionGutterPolicy() {
   check('4.1b 所见即所得行号与该行首个可见字符 top 差 ≤1.5px',
     wy.checked >= 10 && wy.worst <= 1.5,
     `${wy.checked} 行 worst=${wy.worst}px${wy.bad.length ? ' ' + wy.bad.join(',') : ''}`);
+  check('4.1c 所见即所得行号槽贴左、正文列在剩余空间居中',
+    wy.gutterLeft === 0 && wy.gapLeft > 0 && Math.abs(wy.gapLeft - wy.gapRight) <= 1,
+    `槽左偏=${wy.gutterLeft}px 左留白=${wy.gapLeft}px 右留白=${wy.gapRight}px`);
 
   await win.evaluate(() => window.quillpad.setViewMode('source', { user: true }));
   await win.waitForTimeout(800);
@@ -534,6 +551,62 @@ async function sectionWelcomeDoc() {
   });
   await win.evaluate(() => window.quillpad.applyLocale('zh-CN'));
   await win.waitForTimeout(600);
+}
+
+/* =========================== 第 6b 项 · 分隔线的绘制位置与宽度（v1.0.4 第二轮） */
+/**
+ * 分隔线所在行是 `font-size/line-height: 0` + 上下 padding 撑出来的：
+ * 前一行是空行时**上**内边距会被压到 4px（与预览的外边距折叠等价），
+ * 行内布局的 `<hr>` 于是贴在行顶。改成绝对定位 `top: 50%` 后横线必须落在
+ * 行高中线上，且仍铺满内容列（与表格 / 正文同宽）。
+ */
+async function sectionHrLayout() {
+  console.log('── 第 6b 项 · 分隔线垂直居中');
+  await win.evaluate(() => window.quillpad.setViewMode('wysiwyg', { user: true }));
+  await win.waitForTimeout(800);
+  const saved = await win.evaluate(() => {
+    const app = window.quillpad;
+    const tab = app.state.tabs.find((t) => t.id === app.state.activeTabId);
+    const before = tab.content;
+    app.setTabContent(tab.id, '正文段落。\n\n---\n\n下一段。\n');
+    app.refreshViewMode();
+    return { id: tab.id, before };
+  });
+  await win.waitForTimeout(900);
+  const m = await win.evaluate(() => {
+    const line = document.querySelector('.cm-line.qp-hr-line');
+    const bar = line && line.querySelector('.qp-hr');
+    const content = document.querySelector('.cm-content');
+    if (!line || !bar || !content) return { found: false };
+    const lb = line.getBoundingClientRect();
+    const hb = bar.getBoundingClientRect();
+    const cb = content.getBoundingClientRect();
+    return {
+      found: true,
+      lineH: Math.round(lb.height),
+      above: Math.round(hb.top - lb.top),
+      below: Math.round(lb.bottom - hb.bottom),
+      width: Math.round(hb.width),
+      contentW: Math.round(cb.width),
+      left: Math.round(hb.left - cb.left),
+    };
+  });
+  check(
+    '6b.1 分隔线画在行盒垂直中线上',
+    m.found && Math.abs(m.above - m.below) <= 1 && m.above >= 8,
+    m.found ? `行高=${m.lineH}px 上=${m.above} 下=${m.below}` : '未找到 .qp-hr',
+  );
+  check(
+    '6b.2 分隔线铺满内容列宽（与表格 / 正文同宽）',
+    m.found && m.width === m.contentW && m.left === 0,
+    m.found ? `横线=${m.width}px 内容列=${m.contentW}px 左偏=${m.left}px` : '未找到 .qp-hr',
+  );
+  // 还原文档，别把测过的短文档留给后续项目
+  await win.evaluate((s) => {
+    window.quillpad.setTabContent(s.id, s.before);
+    window.quillpad.refreshViewMode();
+  }, saved);
+  await win.waitForTimeout(500);
 }
 
 /* ================================================ 第 7 项 · 启动参数与文件关联 */
@@ -650,6 +723,7 @@ for (const [tag, fn] of [
   ['第 3 项', sectionFilePicker],
   ['第 4 项', sectionGutterPolicy],
   ['第 5 项', sectionWelcomeDoc],
+  ['第 6b 项', sectionHrLayout],
   ['第 7 项', sectionAssociations],
 ]) {
   try {

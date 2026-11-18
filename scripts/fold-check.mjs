@@ -164,8 +164,18 @@ const wy = await page.evaluate(async () => {
     gutters: gutters ? Math.round(gutters.getBoundingClientRect().width) : null,
     lineNumbers: !!document.querySelector('.cm-lineNumbers'),
     foldGutter: !!document.querySelector('.cm-foldGutter'),
-    // 内容列居中后与滚动容器左缘的偏移（用来确认「槽位 + 内容」是整组居中的）
-    offset: Math.round(content.getBoundingClientRect().left - scroller.getBoundingClientRect().left),
+    /* 布局验算：行号槽贴滚动区左缘（与源码模式同一水平位置），正文列在槽位
+       右侧的剩余空间居中 —— 左（槽右缘→正文左缘）与右（正文右缘→滚动区右缘）
+       两段留白应当等宽。 */
+    gutterLeft: Math.round(gutters.getBoundingClientRect().left - scroller.getBoundingClientRect().left),
+    gapLeft: Math.round(content.getBoundingClientRect().left - gutters.getBoundingClientRect().right),
+    /* 右留白要按**可视宽**算（`clientWidth` 已扣掉竖向滚动条）：
+       用 rect.right 会把滚动条那 10px 也算成留白，装到本机后就会出现 199 / 209 的假失败。 */
+    gapRight: Math.round(
+      scroller.getBoundingClientRect().left +
+        scroller.clientWidth -
+        content.getBoundingClientRect().right,
+    ),
     checked,
     worst,
     bad: bad.slice(0, 6),
@@ -174,7 +184,12 @@ const wy = await page.evaluate(async () => {
 check(
   '所见即所得有行号栏与折叠槽（v1.0.4 需求变更，反向断言已作废）',
   wy.gutters !== null && wy.gutters > 0 && wy.lineNumbers && wy.foldGutter,
-  `gutters=${wy.gutters} lineNumbers=${wy.lineNumbers} foldGutter=${wy.foldGutter} 内容左移=${wy.offset}px`,
+  `gutters=${wy.gutters} lineNumbers=${wy.lineNumbers} foldGutter=${wy.foldGutter}`,
+);
+check(
+  '所见即所得行号槽贴左、正文列在剩余空间居中',
+  wy.gutterLeft === 0 && Math.abs(wy.gapLeft - wy.gapRight) <= 1 && wy.gapLeft > 0,
+  `槽左偏=${wy.gutterLeft}px 左留白=${wy.gapLeft}px 右留白=${wy.gapRight}px`,
 );
 check(
   '所见即所得行号与该行首个可见字符 top 差 ≤1.5px',
@@ -496,6 +511,49 @@ check(
   '所见即所得下点收起箭头可展开（折叠状态可恢复）',
   unfolded === 0,
   `展开后折叠占位=${unfolded}`,
+);
+
+/* ------------------- 8. 分隔线画在行盒垂直中线上（v1.0.4 第二轮修正） */
+/**
+ * 分隔线所在行是 `font-size/line-height: 0` + 上下 padding 撑出来的，
+ * 前一行是空行时**上**内边距会被压到 4px（与预览的外边距折叠等价），
+ * 于是行内布局的 `<hr>` 会贴在行顶。改成绝对定位 `top: 50%` 后，
+ * 横线上下留白必须等宽。
+ */
+await page.evaluate(async () => {
+  const app = window.quillpad;
+  const tab = app.state.tabs.find((x) => x.id === app.state.activeTabId);
+  app.setTabContent(tab.id, '正文段落。\n\n---\n\n下一段。\n');
+  app.refreshViewMode();
+});
+await page.waitForTimeout(900);
+const hr = await page.evaluate(() => {
+  const line = document.querySelector('.cm-line.qp-hr-line');
+  const bar = line && line.querySelector('.qp-hr');
+  const content = document.querySelector('.cm-content');
+  if (!line || !bar) return { found: false };
+  const lb = line.getBoundingClientRect();
+  const hb = bar.getBoundingClientRect();
+  const cb = content.getBoundingClientRect();
+  return {
+    found: true,
+    lineH: Math.round(lb.height),
+    above: Math.round(hb.top - lb.top),
+    below: Math.round(lb.bottom - hb.bottom),
+    width: Math.round(hb.width),
+    contentW: Math.round(cb.width),
+    left: Math.round(hb.left - cb.left),
+  };
+});
+check(
+  '所见即所得分隔线画在行盒垂直中线上',
+  hr.found && Math.abs(hr.above - hr.below) <= 1 && hr.above >= 8,
+  `行高=${hr.lineH}px 上=${hr.above} 下=${hr.below}`,
+);
+check(
+  '所见即所得分隔线铺满内容列宽（与表格 / 正文同宽）',
+  hr.found && hr.width === hr.contentW && hr.left === 0,
+  `横线=${hr.width}px 内容列=${hr.contentW}px 左偏=${hr.left}px`,
 );
 
 check('无运行时错误', errors.length === 0, errors.join(' | '));
