@@ -9,7 +9,7 @@
  *  3. 插件安装对话框文件控件双语：EN "Choose File"/"No file chosen"，
  *     ZH 「选择文件」/「未选择任何文件」，选临时 zip 后显示文件名
  *  4. 行号栏 / 折叠箭头：所见即所得**也装**行号槽与折叠槽，且行号与该行首个可见
- *     字符 top 差 ≤2px（v1.0.4 需求反转，原「整列不装」断言已作废）；
+ *     字符 top 差 ≤1.5px（v1.0.4 需求反转，原「整列不装」断言已作废）；
  *     源码模式保留行号与折叠箭头，且行号与内容行逐行对齐（checked≥10 且 worst≤2.5px）
  *  5. 欢迎文档双语联动：切英文 → tab 变 Welcome.md 且英文模板且非脏；
  *     切回中文恢复；用户编辑过只改名不覆盖
@@ -317,7 +317,7 @@ async function sectionGutterPolicy() {
   console.log('── 第 4 项 · 行号栏与折叠箭头按视图模式隐显');
 
   /* v1.0.4 需求反转：所见即得**重新**装上行号槽与折叠槽，并要求行号与每行首个可见
-     字符垂直对齐（≤2px）；源码 / 分栏本来就是 CodeMirror 原生对齐。
+     字符垂直对齐（≤1.5px）；源码 / 分栏本来就是 CodeMirror 原生对齐。
      ⚠️ 4.1 的旧断言「所见即得下不显示行号栏与折叠箭头」因此被需求作废 —— 那不是
      回归，这里改成正向断言，其余断言（源码对齐、箭头数量）一条都没放宽。 */
   await win.evaluate(() => window.quillpad.setViewMode('wysiwyg', { user: true }));
@@ -391,7 +391,7 @@ async function sectionGutterPolicy() {
         const d = Math.abs(nr.top - cr.top);
         checked += 1;
         if (d > worst) worst = Math.round(d * 10) / 10;
-        if (d > 2) bad.push(`L${no} 差${Math.round(d * 10) / 10}`);
+        if (d > 1.5) bad.push(`L${no} 差${Math.round(d * 10) / 10}`);
       }
     };
     const step = Math.round(view.scrollDOM.clientHeight * 0.6);
@@ -419,8 +419,8 @@ async function sectionGutterPolicy() {
   check('4.1 所见即所得显示行号栏与折叠箭头（v1.0.4 需求变更，反向断言已作废）',
     wy.gutters !== null && wy.gutters > 0 && wy.lineNumbers && wy.foldGutter,
     `gutters=${wy.gutters} lineNumbers=${wy.lineNumbers} foldGutter=${wy.foldGutter}`);
-  check('4.1b 所见即所得行号与该行首个可见字符 top 差 ≤2px',
-    wy.checked >= 10 && wy.worst <= 2,
+  check('4.1b 所见即所得行号与该行首个可见字符 top 差 ≤1.5px',
+    wy.checked >= 10 && wy.worst <= 1.5,
     `${wy.checked} 行 worst=${wy.worst}px${wy.bad.length ? ' ' + wy.bad.join(',') : ''}`);
 
   await win.evaluate(() => window.quillpad.setViewMode('source', { user: true }));

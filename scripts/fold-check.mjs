@@ -2,10 +2,10 @@
  * QuillPad · 行号栏 / 折叠箭头 / 光标定位回归检查
  *
  * v1.0.2 曾把所见即得当成纯阅读面，隐藏了行号栏与折叠箭头；**v1.0.4 需求反转**：
- * 所见即得重新装上行号槽与折叠槽，并要求行号与每行首个可见字符垂直对齐（≤2px）。
+ * 所见即得重新装上行号槽与折叠槽，并要求行号与每行首个可见字符垂直对齐（≤1.5px）。
  * 本脚本锁定新边界，以及 v1.0.1 修好的光标定位：
  *
- *  1. 所见即所得**有**行号槽 / 折叠槽，且行号与该行首个可见字符 top 差 ≤2px；
+ *  1. 所见即所得**有**行号槽 / 折叠槽，且行号与该行首个可见字符 top 差 ≤1.5px；
  *  2. 有文字的行，行首光标坐标正常（不是 0 高度、不偏移）；
  *  3. 拖选两端与鼠标所在行一致；
  *  4. 源码模式**保留**行号与折叠箭头；
@@ -146,7 +146,7 @@ const wy = await page.evaluate(async () => {
       const d = Math.abs(nr.top - cr.top);
       checked += 1;
       if (d > worst) worst = Math.round(d * 10) / 10;
-      if (d > 2) bad.push(`L${no} 差${Math.round(d * 10) / 10}`);
+      if (d > 1.5) bad.push(`L${no} 差${Math.round(d * 10) / 10}`);
     }
   };
   const step = Math.round(view.scrollDOM.clientHeight * 0.6);
@@ -177,8 +177,8 @@ check(
   `gutters=${wy.gutters} lineNumbers=${wy.lineNumbers} foldGutter=${wy.foldGutter} 内容左移=${wy.offset}px`,
 );
 check(
-  '所见即所得行号与该行首个可见字符 top 差 ≤2px',
-  wy.checked >= 10 && wy.worst <= 2,
+  '所见即所得行号与该行首个可见字符 top 差 ≤1.5px',
+  wy.checked >= 10 && wy.worst <= 1.5,
   `${wy.checked} 行 worst=${wy.worst}px${wy.bad.length ? ' ' + wy.bad.join(',') : ''}`,
 );
 
