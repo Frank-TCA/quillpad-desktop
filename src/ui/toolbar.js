@@ -69,6 +69,7 @@ const MD_TOOLBAR_SPEC = [
   ['md.inlineCode', 'codeInline'],
   ['md.link', 'link'],
   ['markdown.insertImage', 'image'],
+  ['md.table', 'table'],
   ['md.ul', 'list'],
   ['md.ol', 'listOrdered'],
   ['md.task', 'listChecks'],

@@ -21,6 +21,7 @@ import {
 } from './scan.js';
 import { markerDecoration, nodeDecoration, widgetDecoration, hiddenMark } from './marks.js';
 import { createBlockField, resolveFeatures } from './blocks.js';
+import { gutterAlignPlugin } from './gutter-align.js';
 import { decoBudget, shouldSkipHeavy } from './perf.js';
 import {
   ImageWidget,
@@ -58,6 +59,9 @@ export function createWysiwygExtension(opts) {
   const extension = [
     blockField,
     inlinePlugin,
+    // 行号 / 折叠箭头与行内容对齐（标题有几十像素的 padding-top、代码行字号又
+    // 与正文不同，不处理就会出现「数字浮在文字上方」）
+    gutterAlignPlugin,
     // 被整块替换的区域在光标移动时是原子单位
     EditorView.atomicRanges.of((view) => {
       const value = view.state.field(blockField, false);

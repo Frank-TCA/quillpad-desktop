@@ -234,14 +234,19 @@ function buildScan(state) {
         lang: info.lang,
         bodyFrom: doc.line(Math.min(total, n + 1)).from,
       };
-      // 围栏头：行内层负责隐藏 ```lang 并在行首插入语言标签 + 复制按钮
+      // 围栏头：行内层负责隐藏语言名并在行首插入语言标签 + 复制按钮。
+      // 只隐藏 ``` 之后的语言名：``` 本身在所见即所得里保持可见（弱化的等宽
+      // 标记），语言名则由右上角的标签呈现 —— 两者都可见就是「双份语言名」。
       inline.push({
         kind: INLINE_KINDS.codeHead,
         from: info.fenceFrom,
         to: info.fenceTo,
         lineNumber: n,
         lang: info.lang,
-        marks: [{ from: info.fenceFrom, to: info.fenceTo }],
+        marks:
+          info.fenceTo > info.fenceFrom + info.fenceLen
+            ? [{ from: info.fenceFrom + info.fenceLen, to: info.fenceTo }]
+            : [],
         fence: activeFence,
       });
       continue;

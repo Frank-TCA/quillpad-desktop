@@ -78,10 +78,6 @@
   --qp-code-leading: 1.65;
   --qp-code-pad-y: 14px;
   --qp-code-pad-x: 16px;
-  /* 代码块行号槽宽度（从代码正文可用宽度里划出来的一块：正文列因此窄 24px，
-     长行会比没有行号时更早折行）。按 4 位数预留：4 位数字在 13.6px 等宽字体下
-     实测 31.88px，槽内可写宽度 = 16 + 24 − 8 = 32px。 */
-  --qp-code-ln-w: 24px;
   /* 代码块与上下文的间距（= 预览 pre 的 1em margin） */
   --qp-code-gap: 16px;
   --qp-code-radius: 8px;

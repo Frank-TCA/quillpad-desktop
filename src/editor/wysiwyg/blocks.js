@@ -14,8 +14,8 @@
  * 时才重算（用 `touched` 签名比对），避免每次移动光标都重建整篇装饰。
  */
 
-import { EditorView, Decoration, GutterMarker, gutterLineClass } from '@codemirror/view';
-import { StateField, RangeSet } from '@codemirror/state';
+import { EditorView, Decoration } from '@codemirror/view';
+import { StateField } from '@codemirror/state';
 import { lineDecoration } from './marks.js';
 import { scanMarkdown, INLINE_KINDS } from './scan.js';
 import {
@@ -30,23 +30,6 @@ import { resolveImageUrl } from './image.js';
 
 /** 可整块替换的块类型。 */
 const REPLACEABLE = new Set(['table', 'frontmatter', 'math-block', 'image-row']);
-
-/**
- * 「渲染态看不见的行」的 gutter 标记：空行、代码围栏行。
- *
- * 这些行在 WYSIWYG 里没有自己的字形：围栏行的 ``` 已被零宽隐藏、高度压到 0
- * 只留上下间距；空行虽然与正文行同高（--qp-blank-h = 28px），但行内没有任何
- * 字符，行号本身没有意义。行号槽按真实槽高定位，一个行号塞进 0 高度的围栏行
- * 就会和下一行叠在一起，所以这两类行直接把行号藏掉；
- * 源码 / 分栏视图不受影响（那边有真实的 gutter 与字形）。
- *
- * 注意 `gutterLineClass` 收的是 `GutterMarker` 而不是 `Decoration`
- * （它读 `elementClass` 和 `compare`），给成 Decoration 会在 syncGutters 里抛
- * `a[i].compare is not a function`，整个插件崩掉。
- */
-const collapsedGutterMarker = new (class extends GutterMarker {
-  elementClass = 'qp-gutter-hidden';
-})();
 
 /**
  * 创建块级装饰 StateField。
@@ -74,10 +57,6 @@ export function createBlockField(opts) {
     },
     provide: (field) => [
       EditorView.decorations.from(field, (v) => v.deco),
-      // 空行与代码围栏行的行号要单独压掉：围栏行高度是 0（只有上下间距），
-      // 空行没有任何字形，行号槽却按真实槽高定位，一个行号挤进去就会和下一行
-      // 叠在一起（见 collapsedGutterMarker 的说明）。
-      gutterLineClass.from(field, (v) => v.gutter),
     ],
   });
 }
@@ -121,8 +100,6 @@ export function computeBlocks(state, opts, prev) {
   const decos = [];
   /** @type {import('@codemirror/state').Range<Decoration>[]} */
   const atomic = [];
-  /** @type {import('@codemirror/state').Range<Decoration>[]} 只给 gutter 用的行标记 */
-  const gutterDecos = [];
 
   /* ------------------------------------------------------- 1. 行装饰 */
   const lineAttrs = new Map();
@@ -133,16 +110,9 @@ export function computeBlocks(state, opts, prev) {
     lineAttrs.set(n, cur);
   };
 
-  /* 代码块内的行号（WYSIWYG 专属，每个代码块各自从 1 起）。
-     计数器只认 `kind === 'code'` 的连续行：一旦遇到非代码行（开 / 闭围栏、
-     空行、正文…）立刻归零，所以同一个文档里的多个代码块互不影响；
-     围栏行本身不带 data-qp-ln，也就不显示行号。 */
-  let codeLineNo = 0;
-
   for (const info of scan.lines) {
     if (!info) continue;
     const n = info.number;
-    if (info.kind !== 'code') codeLineNo = 0;
     switch (info.kind) {
       case 'heading': {
         const level = info.level || 1;
@@ -188,20 +158,21 @@ export function computeBlocks(state, opts, prev) {
         break;
       }
       case 'code': {
-        // 代码行序号：CSS 用 `::before { content: attr(data-qp-ln) }` 渲染。
-        // 空行（块内空行）也算一行，序号连续不跳号。
-        codeLineNo += 1;
-        addLine(
-          n,
-          { 'data-qp-node': 'code-line', 'data-qp-ln': String(codeLineNo) },
-          'qp-code-line',
-        );
+        addLine(n, { 'data-qp-node': 'code-line' }, 'qp-code-line');
         break;
       }
       case 'fence': {
         addLine(n, { 'data-qp-node': 'code-fence' }, 'qp-code-fence');
-        // 围栏行高度被压到 0（只有上下间距），行号会和下一行叠在一起
-        gutterDecos.push(collapsedGutterMarker.range(state.doc.line(n).from));
+        break;
+      }
+      case 'hr': {
+        /* 分隔线所在行需要一个**与 widget 渲染无关**的稳定行类。
+           `---` 的 <hr> 是行内 widget，选区覆盖该行时 widget 会被撤下换成源码，
+           任何以「行里有没有 .qp-hr」为准的选择器（原先用的 `:has(.qp-hr)`）
+           都会在那一刻失配 —— 其下标题的 padding-top 随之在 0 / 23.04px 之间跳，
+           整篇 docHeight 抖动。行类由装饰层在每次重算时写入，与 widget 的
+           生死无关，因此选择器恒成立。 */
+        addLine(n, { 'data-qp-node': 'hr-line' }, 'qp-hr-line');
         break;
       }
       case 'table': {
@@ -238,8 +209,6 @@ export function computeBlocks(state, opts, prev) {
     if (line.text.trim() === '') {
       const deco = lineDecoration({}, 'qp-blank');
       decos.push(deco.range(line.from));
-      // 同名行在 gutter 里再挂一个标记，CSS 用它把行号藏掉（见 qp-gutter-hidden）
-      gutterDecos.push(collapsedGutterMarker.range(line.from));
     }
   }
 
@@ -316,7 +285,6 @@ export function computeBlocks(state, opts, prev) {
 
   const deco = Decoration.set(decos, true);
   const atomicSet = Decoration.set(atomic, true);
-  const gutterSet = RangeSet.of(gutterDecos, true);
   const touched = touchedSignature(state, blocks);
 
   if (opts.onStats) {
@@ -324,7 +292,7 @@ export function computeBlocks(state, opts, prev) {
     opts.onStats({ blocks: decos.length, ms });
   }
   void prev;
-  return { deco, atomic: atomicSet, gutter: gutterSet, blocks, touched };
+  return { deco, atomic: atomicSet, blocks, touched };
 }
 
 /**
@@ -456,9 +424,14 @@ function selectionTouches(state, from, to) {
  * @return {{deco: any, from: number, to: number}|null}
  */
 function buildBlockDecoration(state, opts, features, scan, block) {
-  // 覆盖到下一行行首，避免替换后残留一个空行
+  /* 替换区间默认「覆盖到下一行行首」（吃掉块末的换行符），避免替换后残留一个空行。
+     但表格必须例外：codeMirror 把「跨行首的块级替换」与紧随其后的那一行并进同一个
+     块，紧跟表格的第一条空行因此没有自己的行盒（实测 0px），第二条才是 28px——
+     用户看到的就是「表格后少了一个空行」。只吃到块末字符，把换行符留给下一行，
+     空行就能拿到与其它空行完全一致的行盒（28px），也不多出幽灵空行。 */
   const lastLine = state.doc.lineAt(Math.max(block.from, block.to - 1));
-  const end = lastLine.number < state.doc.lines ? lastLine.to + 1 : lastLine.to;
+  const eatBreak = block.kind !== 'table' && lastLine.number < state.doc.lines;
+  const end = eatBreak ? lastLine.to + 1 : lastLine.to;
   const from = state.doc.lineAt(block.from).from;
 
   if (block.kind === 'table') {

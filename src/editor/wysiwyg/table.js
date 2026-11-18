@@ -245,9 +245,16 @@ const widthWatchers = new Map();
  * 测量 `.cm-content` 的内容列宽（正文文本所在的列宽）。
  *
  * 表格 widget 是 `.cm-content` 的直接块级子节点，把根节点宽度设为内容列宽
- * 即可让表格右缘与正文右端精确对齐。不能用 `width:100%`（spike S1 哨兵坑），
- * 也不能按 `scrollDOM.clientWidth - offsetLeft` 估算：`.cm-content.qp-doc`
- * 带 `max-width:46em; margin:0 auto`，估算会把表格撑出正文列（右侧溢出）。
+ * 即可让表格左右边缘与 `.qp-code-line` / `.qp-quote` 的外边缘对齐
+ * （表格在预览里是 `width:100%` 的块级元素，与 pre / blockquote 同宽）。
+ * 不能用 `width:100%`（spike S1 哨兵坑），也不能按
+ * `scrollDOM.clientWidth - offsetLeft` 估算：`.cm-content.qp-doc` 带
+ * `max-width:46em; margin:0 auto`，估算会把表格撑出正文列（右侧溢出）。
+ *
+ * 这里**只**减 `.cm-content` 自己的左右内边距，**不再**减 `.cm-line` 的
+ * 左右内边距：行盒的 `0 14px 0 6px` 是行**内部**的呼吸区，行的外边缘（带背景
+ * 与边框的那条边）本身就是内容列的左右边界。减掉它会让表格比代码块 / 引用块
+ * 各窄 20px（用户可见的「表格缩进了一截」）。
  *
  * @param {import('@codemirror/view').EditorView} view
  * @return {number} 像素宽度；测量无效（隐藏 / 哨兵值）时返回 0
@@ -258,15 +265,7 @@ function measureContentColumn(view) {
   const rect = content.getBoundingClientRect();
   const cs = getComputedStyle(content);
   const padH = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
-  // 正文列真正减掉的是 `.cm-line` 的左右内边距：`.cm-content.qp-doc` 为补偿
-  // 这 20px 特意把容器加宽（见 wysiwyg.css §0），表格若按容器宽算就会比
-  // 预览宽 20px，右缘伸出正文列。
-  const line = content.querySelector('.cm-line');
-  const lcs = line ? getComputedStyle(line) : null;
-  const linePadH = lcs
-    ? (parseFloat(lcs.paddingLeft) || 0) + (parseFloat(lcs.paddingRight) || 0)
-    : 0;
-  const width = rect.width - padH - linePadH;
+  const width = rect.width - padH;
   if (!Number.isFinite(width) || width <= 0 || width > SENTINEL_WIDTH) return 0;
   return width;
 }

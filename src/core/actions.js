@@ -34,6 +34,7 @@ import {
   prefixLines,
   insertBlock,
   insertLink,
+  insertTableSkeleton,
 } from '../editor/markdown-format.js';
 import { openPdfDialog } from '../ui/pdf-dialog.js';
 import { openCharsDialog } from '../ui/chars.js';
@@ -1021,6 +1022,13 @@ export function registerCommands(app) {
         });
         input.click();
       },
+    },
+    {
+      id: 'md.table',
+      title: t('插入表格', 'Insert Table'),
+      category: t('插入', 'Insert'),
+      enabled: mdEnabled,
+      run: () => insertTableSkeleton(view()),
     },
     {
       id: 'markdown.pickCodeLanguage',

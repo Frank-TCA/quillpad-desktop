@@ -33,7 +33,6 @@ import {
   indentOnInput,
   foldKeymap,
   foldGutter,
-  unfoldAll,
   indentUnit,
   syntaxHighlighting,
   defaultHighlightStyle,
@@ -60,6 +59,35 @@ import { bus } from '../core/state.js';
 /** 大文件阈值：超过后关闭语法高亮。 */
 const BIG_FILE = 2 * 1024 * 1024;
 
+/**
+ * 「光标停在逻辑行末时，右方向键不再跳到下一行」。
+ *
+ * 用户诉求：在一行末尾按 → 应该原地不动（N++ / 多数编辑器里 → 会跨行，误触后
+ * 光标跑到下一行行首，选区被打断）。这里用 `Prec.high` 抢在 defaultKeymap 之前
+ * 吃掉这个按键：
+ *  - 只有**空选区**才拦截（拖选 / 多光标选区一律走原生行为）；
+ *  - 只有**逻辑行末**才拦截（`head === lineAt(head).to`）。开了自动换行时，
+ *    段落内软换行处 `head !== line.to`，按 → 仍正常跳到下一个视觉行；
+ *  - `Shift-ArrowRight` 是另一个按键名（`Shift-ArrowRight`），不受影响，
+ *    扩选照常；
+ *  - 空行（`from === to`）同样视为行末：仍会原地不动。这样做的理由是「行末」
+ *    的定义对空行同样成立，且与用户在非空行的手感一致；代价是空行上不能靠 →
+ *    往右走，↑ / ↓ / End / 点击都不受影响。
+ *
+ * @type {import('@codemirror/view').KeyBinding}
+ */
+const ARROW_RIGHT_AT_LINE_END = {
+  key: 'ArrowRight',
+  run: (view) => {
+    const sel = view.state.selection.main;
+    if (!sel.empty) return false;
+    const line = view.state.doc.lineAt(sel.head);
+    if (sel.head !== line.to) return false;
+    // 消费掉按键：返回 true 且不 dispatch，光标原地不动
+    return true;
+  },
+};
+
 
 /**
  * WYSIWYG 阅读面容器扩展（QA D-2）。
@@ -77,9 +105,14 @@ const BIG_FILE = 2 * 1024 * 1024;
  * 折成多行；编辑面若按源码方式横向溢出，同一条长句会一直顶到右边界被裁掉，
  * 段落高度、换行位置、整体节奏全都对不上。该扩展只在本模式生效，
  * source / split 仍尊重用户自己的「自动换行」开关。
+ *
+ * 编辑器根节点上的 `qp-wy` 类是本模式的布局开关：所见即所得也装行号槽 /
+ * 折叠槽，而「槽位 + 正文列」必须作为**一组**居中（见 wysiwyg.css §0）。
+ * 用类而不是全局规则，保证源码 / 分栏的布局一个字节都不变。
  */
 const WYSIWYG_DOC_EXTENSION = [
   EditorView.contentAttributes.of({ class: 'qp-doc' }),
+  EditorView.editorAttributes.of({ class: 'qp-wy' }),
   EditorView.lineWrapping,
 ];
 
@@ -196,7 +229,7 @@ export class EditorManager {
       highlightSelectionMatches({ highlightWordAroundCursor: true, minSelectionLength: 1 }),
       search({ top: true, createPanel: createSearchPanel }),
       syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
-      Prec.high(keymap.of([indentWithTab])),
+      Prec.high(keymap.of([indentWithTab, ARROW_RIGHT_AT_LINE_END])),
       keymap.of([
         ...closeBracketsKeymap,
         ...defaultKeymap,
@@ -233,19 +266,19 @@ export class EditorManager {
   }
 
   /**
-   * 当前模式该用的行号槽 / 折叠槽（v1.0.2）。
+   * 当前模式该用的行号槽 / 折叠槽。
    *
-   * 所见即所得是「阅读面」：文档行号与折叠箭头对它没有意义，反而因为块级
-   * widget（表格 / 目录 / 分隔线）高度不一而需要一整套对齐补偿。这里干脆
-   * 整列不装 —— 编辑器根节点上不会出现 `.cm-gutters`，内容区自然左移，
-   * 也不再需要任何「槽位对齐」代码。
+   * 三种模式都装：所见即所得从 v1.0.4 起恢复行号与折叠箭头（用户明确要求）。
+   * 难点在于「与每行文字垂直对齐」—— 所见即所得的行盒高度差异极大（正文 28px、
+   * 标题 139px 且 padding-top 79px、代码行 …），gutter 元素默认把内容顶在盒子
+   * 顶部，数字就会浮在标题上方的留白里。对齐由 `wysiwyg/gutter-align.js` 按几何
+   * 逐槽写 `padding-top` / `line-height` 完成，这里只管装配。
    *
-   * 源码 / 分栏保留行号与折叠，且是 CodeMirror 原生行为（行高一致，无需补偿）。
+   * `highlightActiveLineGutter` 一并装上：它只改当前行槽位的底色，不参与对齐。
    *
    * @return {import('@codemirror/state').Extension}
    */
   _gutterExtension() {
-    if (this.wysiwygActive) return [];
     return [lineNumbers(), highlightActiveLineGutter(), foldGutter()];
   }
 
@@ -565,12 +598,10 @@ export class EditorManager {
     // QA D-2：装饰层与阅读面排版容器同进同退，保证三态切换后
     // `.cm-content` 的计算样式与当前模式一致（撤销栈/选区/滚动仍保留）。
     this._reconfigureAll(this.docTypographyCompartment, this._docTypographyExtension());
-    // v1.0.2：行号槽 / 折叠槽只在源码与分栏里存在 —— 所见即所得是阅读面，
-    // 不显示行号，也不显示折叠箭头。
+    // v1.0.4：所见即所得重新装上行号槽与折叠槽，「进入本模式就展开全部折叠」
+    // 这条反制措施随之取消 —— 折叠箭头又能点了，折叠状态属于文档本身，
+    // 切模式来回不应该被静默清空。
     this._reconfigureAll(this.gutterCompartment, this._gutterExtension());
-    // 折叠状态存在 state 里，切模式不会自动清掉。进入所见即所得时已没有折叠
-    // 箭头可点，残留的折叠会让内容看上去凭空少了一截，所以在这里一次展开。
-    if (this.wysiwygActive) unfoldAll(this.view);
     this.view.requestMeasure();
     requestAnimationFrame(() => {
       this.view.scrollDOM.scrollTop = top;

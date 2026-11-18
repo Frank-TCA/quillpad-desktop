@@ -8,7 +8,8 @@
  *     成功 toast + 行消失 + pluginList 真删（移植 plugin-manager-check.mjs）
  *  3. 插件安装对话框文件控件双语：EN "Choose File"/"No file chosen"，
  *     ZH 「选择文件」/「未选择任何文件」，选临时 zip 后显示文件名
- *  4. 行号栏 / 折叠箭头按模式隐显：所见即所得整列不装（无 `.cm-gutters`）；
+ *  4. 行号栏 / 折叠箭头：所见即所得**也装**行号槽与折叠槽，且行号与该行首个可见
+ *     字符 top 差 ≤2px（v1.0.4 需求反转，原「整列不装」断言已作废）；
  *     源码模式保留行号与折叠箭头，且行号与内容行逐行对齐（checked≥10 且 worst≤2.5px）
  *  5. 欢迎文档双语联动：切英文 → tab 变 Welcome.md 且英文模板且非脏；
  *     切回中文恢复；用户编辑过只改名不覆盖
@@ -315,21 +316,112 @@ async function sectionFilePicker() {
 async function sectionGutterPolicy() {
   console.log('── 第 4 项 · 行号栏与折叠箭头按视图模式隐显');
 
-  /* v1.0.2 起：所见即所得是阅读面，不装行号槽与折叠槽（`.cm-gutters` 整个不出现）；
-     源码 / 分栏保留，且是 CodeMirror 原生对齐，不需要任何补偿。 */
+  /* v1.0.4 需求反转：所见即得**重新**装上行号槽与折叠槽，并要求行号与每行首个可见
+     字符垂直对齐（≤2px）；源码 / 分栏本来就是 CodeMirror 原生对齐。
+     ⚠️ 4.1 的旧断言「所见即得下不显示行号栏与折叠箭头」因此被需求作废 —— 那不是
+     回归，这里改成正向断言，其余断言（源码对齐、箭头数量）一条都没放宽。 */
   await win.evaluate(() => window.quillpad.setViewMode('wysiwyg', { user: true }));
   await win.waitForTimeout(900);
-  const wy = await win.evaluate(() => {
+  /* 先把侧栏收起，让正文列宽度与用户实际阅读时一致（更宽的标题更容易暴露对齐误差） */
+  await win.evaluate(() => window.quillpad.setSidebarVisible?.(false));
+  await win.waitForTimeout(400);
+  const wy = await win.evaluate(async () => {
+    const view = window.quillpad.editor.view;
+    const doc = view.state.doc;
     const g = document.querySelector('.cm-gutters');
+    /** 行号数字的文本矩形 */
+    const numRect = (el) => {
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      let node = walker.nextNode();
+      while (node) {
+        const idx = (node.nodeValue || '').search(/\S/);
+        if (idx >= 0) {
+          const range = document.createRange();
+          range.setStart(node, idx);
+          range.setEnd(node, idx + 1);
+          const r = range.getBoundingClientRect();
+          if (r.height > 0) return r;
+        }
+        node = walker.nextNode();
+      }
+      return null;
+    };
+    /** 行内首个可见字符的矩形（跳过隐藏标记与 widget 内部文字） */
+    const charRect = (line) => {
+      const SKIP =
+        '.qp-md-hide, .qp-code-head, .qp-code-ops, .qp-table-wrap, .qp-toc, .qp-frontmatter, .qp-math--block, .qp-footnotes, .qp-img-wrap';
+      const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+      let node = walker.nextNode();
+      while (node) {
+        const idx = (node.nodeValue || '').search(/\S/);
+        if (idx >= 0 && !(node.parentElement && node.parentElement.closest(SKIP))) {
+          const range = document.createRange();
+          range.setStart(node, idx);
+          range.setEnd(node, idx + 1);
+          const r = range.getBoundingClientRect();
+          if (r.height > 0) return r;
+        }
+        node = walker.nextNode();
+      }
+      return null;
+    };
+    let checked = 0;
+    let worst = 0;
+    const bad = [];
+    const seen = new Set();
+    const collect = () => {
+      const nums = Array.from(
+        view.dom.querySelectorAll('.cm-lineNumbers .cm-gutterElement'),
+      ).filter((el) => el.style.visibility !== 'hidden' && /^\d+$/.test(el.textContent.trim()));
+      for (const el of Array.from(view.contentDOM.querySelectorAll('.cm-line'))) {
+        let no;
+        try {
+          no = doc.lineAt(view.posAtDOM(el, 0)).number;
+        } catch {
+          continue;
+        }
+        if (seen.has(no)) continue;
+        const slot = nums.find((n) => n.textContent.trim() === String(no));
+        if (!slot) continue;
+        const cr = charRect(el);
+        if (!cr) continue;
+        const nr = numRect(slot);
+        if (!nr) continue;
+        seen.add(no);
+        const d = Math.abs(nr.top - cr.top);
+        checked += 1;
+        if (d > worst) worst = Math.round(d * 10) / 10;
+        if (d > 2) bad.push(`L${no} 差${Math.round(d * 10) / 10}`);
+      }
+    };
+    const step = Math.round(view.scrollDOM.clientHeight * 0.6);
+    for (let y = 0; y <= view.scrollDOM.scrollHeight; y += step) {
+      view.scrollDOM.scrollTop = y;
+      view.requestMeasure();
+      await new Promise((res) => setTimeout(res, 130));
+      collect();
+    }
+    view.scrollDOM.scrollTop = 0;
+    view.requestMeasure();
+    await new Promise((res) => setTimeout(res, 220));
+    collect();
     return {
       gutters: g ? Math.round(g.getBoundingClientRect().width) : null,
       lineNumbers: !!document.querySelector('.cm-lineNumbers'),
       foldGutter: !!document.querySelector('.cm-foldGutter'),
+      checked,
+      worst,
+      bad: bad.slice(0, 6),
     };
   });
-  check('4.1 所见即所得不显示行号栏与折叠箭头',
-    wy.gutters === null && !wy.lineNumbers && !wy.foldGutter,
+  await win.evaluate(() => window.quillpad.setSidebarVisible?.(true));
+  await win.waitForTimeout(300);
+  check('4.1 所见即所得显示行号栏与折叠箭头（v1.0.4 需求变更，反向断言已作废）',
+    wy.gutters !== null && wy.gutters > 0 && wy.lineNumbers && wy.foldGutter,
     `gutters=${wy.gutters} lineNumbers=${wy.lineNumbers} foldGutter=${wy.foldGutter}`);
+  check('4.1b 所见即所得行号与该行首个可见字符 top 差 ≤2px',
+    wy.checked >= 10 && wy.worst <= 2,
+    `${wy.checked} 行 worst=${wy.worst}px${wy.bad.length ? ' ' + wy.bad.join(',') : ''}`);
 
   await win.evaluate(() => window.quillpad.setViewMode('source', { user: true }));
   await win.waitForTimeout(800);

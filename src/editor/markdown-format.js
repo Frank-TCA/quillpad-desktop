@@ -84,7 +84,10 @@ export function wrapSelection(view, left, right, placeholder = '') {
  *
  * - 所有参与行（默认忽略空行）已带该前缀时去掉（toggle）；
  * - 有序列表可传生成函数得到递增 `1. ` `2. `；
- * - 空行默认跳过，避免产生「只有前缀的空行」。
+ * - 空行默认跳过，避免产生「只有前缀的空行」；
+ * - **例外**：选区覆盖的行**全部为空**时（典型是「光标停在空行上点列表按钮」）
+ *   照样插入前缀，并把光标放到前缀之后，用户可以直接敲字。否则点了按钮毫无反应。
+ *   再点一次走上面那条 toggle 分支：此时行文本已是 `- `，`re` 命中 → 前缀被去掉。
  *
  * @param {import('@codemirror/view').EditorView} view
  * @param {string|((i: number) => string)} prefix 静态前缀，或按行序号生成前缀
@@ -110,6 +113,29 @@ export function prefixLines(view, prefix, opts = {}) {
   const re = strip || (typeof prefix === 'string' ? new RegExp('^' + escape(prefix)) : null);
   const active = skipEmpty ? lines.filter((l) => l.text.trim().length > 0) : lines;
   const allPrefixed = !!re && active.length > 0 && active.every((l) => re.test(l.text));
+
+  /* 空行特例：选区覆盖的行**全部为空**（光标在空行上 / 选中若干空行），
+     且还没有前缀 —— 这时跳过空行的规则会让整个命令变成空操作。改为插入前缀，
+     光标落到本行前缀之后。已经带前缀的行（`- `）trim 后非空，走下面的常规分支。 */
+  const allEmpty = lines.every((l) => l.text.trim().length === 0);
+  if (skipEmpty && allEmpty && !allPrefixed) {
+    let seqEmpty = 0;
+    const texts = lines.map((l) => {
+      const p = typeof prefix === 'function' ? prefix(seqEmpty) : prefix;
+      seqEmpty += 1;
+      return p + l.text;
+    });
+    const from = lines[0].from;
+    const insert = texts.join('\n');
+    // 光标落在第一行前缀之后（多行时选中整块，与常规分支一致）
+    const caret = from + (typeof prefix === 'function' ? prefix(0) : prefix).length;
+    view.dispatch({
+      changes: { from, to: lines[lines.length - 1].to, insert },
+      selection: sel.empty ? { anchor: caret } : { anchor: from, head: from + insert.length },
+    });
+    view.focus();
+    return;
+  }
 
   let seq = 0;
   const newTexts = lines.map((l) => {
@@ -194,5 +220,29 @@ export function insertLink(view) {
     changes: { from: sel.from, to: sel.to, insert: text },
     selection: { anchor: urlFrom, head: urlTo },
   });
+  view.focus();
+}
+
+/**
+ * 插入 3 列 2 行的骨架表格（表头 + 一行数据）。
+ *
+ * 走块级语义（`insertBlock`）：前后各留一个空行、绝不把表格塞进段落中间。
+ * 插入后光标落在**第一个表头单元格的文字**上，可以直接敲字；
+ * 表格块本身是原子单位，此时选区不在块内，所见即所得会直接把它渲染成表格。
+ *
+ * @param {import('@codemirror/view').EditorView} view
+ */
+export function insertTableSkeleton(view) {
+  const cols = [t('列 1', 'Column 1'), t('列 2', 'Column 2'), t('列 3', 'Column 3')];
+  const text = [
+    `| ${cols[0]} | ${cols[1]} | ${cols[2]} |`,
+    '| --- | --- | --- |',
+    '|  |  |  |',
+  ].join('\n');
+  insertBlock(view, text);
+  // insertBlock 把选区放在插入块的首尾之间；首格文字前面是 `| `（2 个字符）
+  const start = view.state.selection.main.anchor;
+  const caret = Math.max(0, Math.min(view.state.doc.length, start + 2));
+  view.dispatch({ selection: { anchor: caret } });
   view.focus();
 }
