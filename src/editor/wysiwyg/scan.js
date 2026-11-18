@@ -16,6 +16,7 @@
  */
 
 import { syntaxTree } from '@codemirror/language';
+import { rowHasPipe } from './table-model.js';
 
 /** 行级类型枚举。 */
 export const LINE_KINDS = /** @type {const} */ ({
@@ -434,7 +435,18 @@ function buildScan(state) {
       /* ---- 表格 ---- */
       if (name === 'Table') {
         const first = doc.lineAt(nodeFrom);
-        const last = doc.lineAt(Math.max(nodeFrom, nodeTo - 1));
+        const hardLast = doc.lineAt(Math.max(nodeFrom, nodeTo - 1));
+        /* lezer 的 GFM 表格会把紧随其后的普通行也塞进 Table 节点（GFM 规范确实
+           这么规定：表格续到空行或另一个块级结构为止）。在编辑器里那等于「表下
+           正文被渲染进表格」，而且表格操作会把它们改写成真正的行 —— 所以这里
+           按「不含竖线即结束」把块区间收窄：第 1 行是表头、第 2 行是分隔行
+           （lezer 已校验过），从第 3 行起逐行要求含未转义竖线。 */
+        let last = hardLast.number > first.number ? doc.line(first.number + 1) : first;
+        for (let n = last.number + 1; n <= hardLast.number; n += 1) {
+          const probe = doc.line(n);
+          if (!rowHasPipe(probe.text)) break;
+          last = probe;
+        }
         blocks.push({
           kind: 'table',
           from: first.from,

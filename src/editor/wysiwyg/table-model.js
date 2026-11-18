@@ -64,6 +64,30 @@ function splitRow(line) {
 }
 
 /**
+ * 这一行是否含**未转义**的竖线（即「像一条表格行」）。
+ *
+ * 用途：判定表格块到哪里结束。GFM 规范里表格要一直续到空行或另一个块级结构，
+ * 所以 `| a | b |` 下面紧跟的 `你好` 会被规范当成一行（`你好` + 空单元格）——
+ * GitHub 与 marked 都是这个行为。但在编辑器里这就成了「表下正文被吞进表格」，
+ * 而且任何一次表格操作（切换对齐等）都会把那一行**改写成真正的表格行**写回源文件。
+ * 因此 QuillPad 的渲染统一采用更符合直觉的规则：**不含竖线的行结束表格**。
+ *
+ * @param {string} line
+ * @return {boolean}
+ */
+export function rowHasPipe(line) {
+  const s = String(line == null ? '' : line);
+  for (let i = 0; i < s.length; i += 1) {
+    if (s[i] === '\\') {
+      i += 1; // 跳过被转义的字符（`\|` 不是分隔符）
+      continue;
+    }
+    if (s[i] === '|') return true;
+  }
+  return false;
+}
+
+/**
  * 是否为合法的分隔行（只允许 `-` `:` `|` 空格）。
  * @param {string} line
  * @return {boolean}
@@ -124,7 +148,13 @@ export function parseTable(text, from = 0, to = from + String(text || '').length
 
   /** @type {string[][]} */
   const rows = [];
+  /* 只把「含竖线」的行当数据行：解析器（lezer 的 GFM 表格）会把紧随表格的
+     普通正文行也算进 Table 节点，逐行吃掉。这里做一次截断，`to` / `rawLines`
+     一起收窄 —— 否则序列化时会把那些行的内容当成单元格写回去，用户的正文就没了。 */
+  let used = 2;
   for (let i = 2; i < rawLines.length; i += 1) {
+    if (!rowHasPipe(rawLines[i])) break;
+    used = i + 1;
     const { cells } = splitRow(rawLines[i]);
     /** @type {string[]} */
     const row = [];
@@ -132,15 +162,17 @@ export function parseTable(text, from = 0, to = from + String(text || '').length
     rows.push(row);
   }
 
+  const keptLines = rawLines.slice(0, used);
+
   const firstCell = headerRow.cells[0] || '';
   const model = {
     from,
-    to,
+    to: from + keptLines.join('\n').length,
     headers,
     aligns,
     rows,
     widths: [],
-    rawLines: rawLines.slice(),
+    rawLines: keptLines,
     dashes: dashes.length === colCount ? dashes : new Array(colCount).fill(3),
     lead: headerRow.lead,
     trail: headerRow.trail,

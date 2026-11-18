@@ -17,6 +17,9 @@
  *     文件、二次保存走 nativePath 不再弹框（v1.0.4 第五轮修的 ENOENT）
  *  6. 文件级检查（无需启动应用）：docs/screenshots/ 四张截图存在非空且被
  *     README.md / README.en.md 引用；dist/release/ 三产物存在且达到体积门槛
+ *  6d. 表格下沿：表下紧跟正文（无空行）时尾行不被吞进表格 —— 所见即所得表格
+ *     行数正确、点「切换对齐」不改写尾行、浮层开着点对齐不产生 `||` 半行、
+ *     分栏预览把尾行渲染成 <p>（v1.0.5）
  *  7. 启动参数与文件关联：安装器写下的 .md/.txt 默认关联、能力注册、应用内 IPC
  *     读得到；第二实例转交文件能打开，且不再误报「文件过大」（argv[0] 不再是
  *     待打开文件，程序自己的 238MB exe 不再被读一遍）
@@ -971,6 +974,133 @@ async function sectionTableInteraction() {
   await win.waitForTimeout(500);
 }
 
+/* =========================================== 第 6d 项 · 表格下沿（v1.0.5） */
+/**
+ * GFM 规范让表格一直续到空行，于是「表下紧跟正文」会被当成表格行。
+ * QuillPad 统一改为「不含竖线的行结束表格」，这里盯四件事：
+ *  1) 所见即所得里尾行不再被吞进表格（表格行数正确、正文仍是正文行）；
+ *  2) 点一次「切换对齐」不会把尾行改写成 `| 正文 |  |`；
+ *  3) 单元格浮层开着点对齐 → 先提交再操作，不产生半行拼接（`||`）；
+ *  4) 分栏预览与所见即所得一致：尾行渲染成 <p>，不在 <table> 里。
+ */
+async function sectionTableTail() {
+  console.log('── 第 6d 项 · 表格下沿不被吞');
+  await win.evaluate(() => window.quillpad.setViewMode('wysiwyg', { user: true }));
+  await win.waitForTimeout(700);
+
+  /* 注意：最后一行「第二行正文」后面没有空行，正是用户报的场景 */
+  const TAIL_DOC = '# 表\n\n| 列一 | 列二 |\n| --- | --- |\n| a1 | b1 |\n表尾正文\n第二行正文\n';
+  const saved = await win.evaluate((d) => {
+    const app = window.quillpad;
+    const tab = app.state.tabs.find((t) => t.id === app.state.activeTabId);
+    const before = tab.content;
+    app.setTabContent(tab.id, d);
+    app.refreshViewMode();
+    return { id: tab.id, before };
+  }, TAIL_DOC);
+  await win.waitForTimeout(900);
+
+  const loadTail = async () => {
+    await win.evaluate((d) => {
+      const app = window.quillpad;
+      const tab = app.state.tabs.find((t) => t.id === app.state.activeTabId);
+      app.setTabContent(tab.id, d);
+      app.refreshViewMode();
+    }, TAIL_DOC);
+    await win.waitForTimeout(800);
+  };
+  const docNow = () => win.evaluate(() => window.quillpad.editor.view.state.doc.toString());
+  const tableRows = () =>
+    win.evaluate(() => document.querySelectorAll('.qp-table tr').length);
+  const visibleLines = () =>
+    win.evaluate(() => [...document.querySelectorAll('.cm-line')].map((l) => l.textContent.trim()));
+  const clickAlign = async () => {
+    const p = await win.evaluate(() => {
+      const b = document.querySelector('.qp-table-ops__btn[data-op="alignCycle"]');
+      if (!b) return null;
+      const r = b.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    });
+    if (!p) return false;
+    await win.mouse.move(p.x, p.y);
+    await win.waitForTimeout(160);
+    await win.mouse.click(p.x, p.y);
+    await win.waitForTimeout(420);
+    return true;
+  };
+
+  /* 6d.1 尾行不被吞进表格 */
+  const rows0 = await tableRows();
+  const lines0 = await visibleLines();
+  check(
+    '6d.1 表下紧跟正文时，表格只渲染表头 + 数据行，正文仍是正文行',
+    rows0 === 2 && lines0.includes('表尾正文') && lines0.includes('第二行正文'),
+    `tr=${rows0} 可见行=${JSON.stringify(lines0)}`,
+  );
+
+  /* 6d.2 切换对齐不改写尾行 */
+  await clickAlign();
+  const docAfterAlign = await docNow();
+  check(
+    '6d.2 点「切换对齐」只改分隔行，不把尾行改写成表格行',
+    docAfterAlign.includes('表尾正文\n第二行正文') &&
+      !docAfterAlign.includes('| 表尾正文') &&
+      docAfterAlign.split('\n')[3].includes(':---'),
+    JSON.stringify(docAfterAlign),
+  );
+
+  /* 6d.3 浮层开着点对齐 → 先提交再操作，不留半行 */
+  await loadTail();
+  const cell = await win.evaluate(() => {
+    const el = document.querySelector('.qp-table__cell[data-r="1"][data-c="0"]');
+    if (!el) return null;
+    const b = el.getBoundingClientRect();
+    return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
+  });
+  if (cell) {
+    await win.mouse.click(cell.x, cell.y);
+    await win.waitForTimeout(350);
+  }
+  const alignRan = await clickAlign();
+  await win.keyboard.press('Enter');
+  await win.waitForTimeout(450);
+  const docAfterRace = await docNow();
+  check(
+    '6d.3 单元格浮层开着时点对齐 → 提交不产生 `||` 半行',
+    alignRan && !docAfterRace.includes('||') && !docAfterRace.includes('| 表尾正文'),
+    JSON.stringify(docAfterRace),
+  );
+
+  /* 6d.4 分栏预览同规则：尾行是 <p> 不是表格单元格 */
+  const preview = await win.evaluate(() => {
+    window.quillpad.setViewMode('split');
+    return new Promise((resolve) =>
+      setTimeout(() => {
+        const el = document.querySelector('#preview-pane .markdown-body');
+        const table = el ? el.querySelector('table') : null;
+        resolve({
+          html: el ? el.innerHTML.replace(/\s+/g, ' ').trim() : '',
+          rows: table ? table.querySelectorAll('tr').length : 0,
+        });
+      }, 500),
+    );
+  });
+  check(
+    '6d.4 分栏预览里尾行渲染为 <p>，表格只有表头 + 一行数据',
+    preview.rows === 2 && preview.html.includes('<p>表尾正文 第二行正文</p>'),
+    `tr=${preview.rows} html=${preview.html.slice(0, 120)}`,
+  );
+  await win.evaluate(() => window.quillpad.setViewMode('wysiwyg'));
+  await win.waitForTimeout(500);
+
+  // 还原文档
+  await win.evaluate((s) => {
+    window.quillpad.setTabContent(s.id, s.before);
+    window.quillpad.refreshViewMode();
+  }, saved);
+  await win.waitForTimeout(500);
+}
+
 /* ================================================ 第 7 项 · 启动参数与文件关联 */
 /**
  * 读文件关联相关注册表项（reg.exe 在本机安全策略里被禁，走 PowerShell）。
@@ -1088,6 +1218,7 @@ for (const [tag, fn] of [
   ['第 5b 项', sectionWelcomeSave],
   ['第 6b 项', sectionHrLayout],
   ['第 6c 项', sectionTableInteraction],
+  ['第 6d 项', sectionTableTail],
   ['第 7 项', sectionAssociations],
 ]) {
   try {

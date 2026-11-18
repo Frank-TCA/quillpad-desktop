@@ -21,6 +21,8 @@ import {
   serializeTable,
   applyCellEdit,
   unescapeCell,
+  isDelimiterRow,
+  rowHasPipe,
 } from './table-model.js';
 import { applyTableOp } from './table-ops.js';
 
@@ -127,6 +129,44 @@ function recallCell(from, rowCount, colCount) {
     r: Math.min(Math.max(0, rowCount), Math.max(0, r)),
     c: Math.min(Math.max(0, colCount - 1), Math.max(0, c)),
   };
+}
+
+/**
+ * 按块起始偏移，从**当前文档**重新解析那张表。
+ *
+ * 为什么不能直接用 widget 上的 `this.model`：它的 `from` / `to` 是渲染那一刻的
+ * 快照。只要表格文本长度变过（切换对齐会把 `---` 变成 `:---:`、单元格编辑会改
+ * 字数），旧 `to` 就短了一截 —— 拿它去 `sliceString()` 会切在半行中间，随后
+ * 序列化再写回，末尾那一格就会多出一个 `|`，或者把后面的正文并进表格。
+ *
+ * 探针实测过的两个具体故障都出自这里：
+ *  1. 浮层开着时点「切换对齐」→ 提交时用旧区间 → 最后一行变成 `| 3 | 4 ||`；
+ *  2. 表下紧跟正文（GFM 会把它算成表格行）→ 点一次对齐就把正文写成 `| 正文 |  |  |`。
+ *
+ * 第 2 条的另一半在 `scan.js`（收窄表格块区间）与 `table-model.js`（解析时在
+ * 无竖线行处截断）；这里负责「按当前文本重新取一遍」，三者合起来保证操作只碰
+ * 真正的表格行。
+ *
+ * @param {import('@codemirror/view').EditorView} view
+ * @param {number} from 表格块起始偏移（必须是行首）
+ * @return {import('./table-model.js').TableModel|null} 该位置已不是一张完整的表时返回 null
+ */
+function liveTableModel(view, from) {
+  const doc = view.state.doc;
+  if (!Number.isFinite(from) || from < 0 || from > doc.length) return null;
+  const head = doc.lineAt(from);
+  // 起始偏移必须仍落在行首，否则说明表已被移动 / 前面的文字改过长度
+  if (head.from !== from) return null;
+  if (head.number >= doc.lines) return null;
+  const delim = doc.line(head.number + 1);
+  if (!isDelimiterRow(delim.text)) return null;
+  let lastNo = delim.number;
+  for (let n = lastNo + 1; n <= doc.lines; n += 1) {
+    if (!rowHasPipe(doc.line(n).text)) break;
+    lastNo = n;
+  }
+  const last = doc.line(lastNo);
+  return parseTable(doc.sliceString(head.from, last.to), head.from, last.to);
 }
 
 /**
@@ -540,11 +580,8 @@ export class TableWidget extends WidgetType {
    * @param {DOMRect} [rect] 打开前量好的单元格矩形
    */
   _openEditor(view, cell, domRow, col, rect) {
-    const model = parseTable(
-      view.state.doc.sliceString(this.model.from, this.model.to),
-      this.model.from,
-      this.model.to,
-    ) || this.model;
+    const model = liveTableModel(view, this.model.from);
+    if (!model) return;
     // DOM 行下标：0 = 表头，1..rows.length = 数据行
     const lastRow = model.rows.length;
     const lastCol = Math.max(0, model.headers.length - 1);
@@ -618,25 +655,25 @@ export class TableWidget extends WidgetType {
    * @param {{focusNext: number}} options
    */
   _applyCell(view, model, change, options) {
-    // 浮层可能比文档活得久（换文件 / 整体替换 / 撤销跨过表格边界）：
-    // 位置失效时直接丢弃这次提交，绝不能 dispatch 一个越界 range。
-    if (!model || model.to > view.state.doc.length || model.from < 0) {
+    // 浮层可能比文档活得久（换文件 / 整体替换 / 撤销跨过表格边界，或浮层开着时
+    // 点了工具栏按钮）：一律按当前文本重新定位这张表，旧区间一个字符都不要用。
+    const live = liveTableModel(view, model ? model.from : -1);
+    if (!live) {
       closeCellEditor();
       return;
     }
-    const live = parseTable(
-      view.state.doc.sliceString(model.from, model.to),
-      model.from,
-      model.to,
-    );
-    const base = live || model;
+    const base = live;
     const next = applyCellEdit(base, change.r - 1, change.c, change.value);
     this._dispatchModel(view, next, base);
     rememberCell(base.from, change.r, change.c);
     const dir = options && options.focusNext ? options.focusNext : 0;
     if (dir) {
-      // Tab / Shift-Tab：换到相邻单元格（行末跳到下一行首格）
-      const cells = Array.from(view.dom.querySelectorAll('.qp-table__cell')).map((el) => ({
+      /* Tab / Shift-Tab：换到相邻单元格（行末跳到下一行首格）。
+         必须限定在**这一张表**的 widget 里：`view.dom` 下所有表格的单元格都混在
+         一起，按全局下标挪动会在多表文档里跳到别张表的格子上。 */
+      const scope =
+        view.dom.querySelector(`.qp-table-wrap[data-qp-from="${base.from}"]`) || view.dom;
+      const cells = Array.from(scope.querySelectorAll('.qp-table__cell')).map((el) => ({
         r: Number(el.getAttribute('data-r')),
         c: Number(el.getAttribute('data-c')),
         el,
@@ -648,7 +685,9 @@ export class TableWidget extends WidgetType {
         rememberCell(base.from, target.r, target.c);
         // 下一帧重新取节点：这一帧里可能又有 dispatch 把 widget 换掉了
         requestAnimationFrame(() => {
-          const el = view.dom.querySelector(
+          const host =
+            view.dom.querySelector(`.qp-table-wrap[data-qp-from="${base.from}"]`) || view.dom;
+          const el = host.querySelector(
             `.qp-table__cell[data-r="${target.r}"][data-c="${target.c}"]`,
           );
           if (!el) return;
@@ -667,11 +706,7 @@ export class TableWidget extends WidgetType {
    * @param {{row?: number, col?: number}} at
    */
   _applyOp(view, op, at) {
-    const model = parseTable(
-      view.state.doc.sliceString(this.model.from, this.model.to),
-      this.model.from,
-      this.model.to,
-    );
+    const model = liveTableModel(view, this.model.from);
     if (!model) return;
     const next = applyTableOp(model, op, at || this.activeCell);
     this._dispatchModel(view, next, model);
@@ -687,8 +722,10 @@ export class TableWidget extends WidgetType {
     const out = serializeTable(next);
     const docLen = view.state.doc.length;
     const from = Math.max(0, Math.min(prev.from, docLen));
-    // 同样的越界保护：宁可少改一次，也不能抛 "Invalid change range"
-    const to = Math.max(from, Math.min(prev.from + prev.rawLines.join('\n').length, docLen));
+    /* 替换区间取 prev.to：调用方给的都是 `liveTableModel()` 按当前文本重算的结果，
+       它与 `prev.rawLines.join('\n').length` 严格相等；用 `to` 更直观，也不会在
+       `rawLines` 被截断（表下正文）时把区间算短、留下半行。 */
+    const to = Math.max(from, Math.min(prev.to, docLen));
     view.dispatch({
       changes: { from, to, insert: out.text },
     });
@@ -720,6 +757,11 @@ export class TableWidget extends WidgetType {
         e.stopPropagation();
         const view = this._view || (this.opts.getView ? this.opts.getView() : null);
         if (!view) return;
+        /* 浮层还开着（点了单元格在输入、还没提交）就先提交一次：不提交的话，
+           操作会先把表格改写一遍，而浮层仍挂着旧区间，稍后提交必然写错位置
+           （实测会出现 `| 3 | 4 ||` 这种半行拼接）。提交走的是当前文本，
+           所以这里两件事的顺序必须是「先提交、再操作」。 */
+        if (isCellEditorOpen()) commitCellEditor(false);
         /* 用「记忆里的那一格」而不是实例字段：每次操作都会让 widget 重建、
            新实例的 `activeCell` 回到 {0,0}，直接用它会从第二次点击起一律改首列
            （用户报的「切换对齐」Bug）。 */

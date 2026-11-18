@@ -38,8 +38,10 @@ import {
   computeWidths,
   escapeCell,
   unescapeCell,
+  rowHasPipe,
 } from '../src/editor/wysiwyg/table-model.js';
 import { applyTableOp } from '../src/editor/wysiwyg/table-ops.js';
+import { renderMarkdown } from '../src/core/markdown.js';
 import { EditorState } from '@codemirror/state';
 import {
   rectInfo,
@@ -733,6 +735,50 @@ await testAsync('API 权限：声明 editor:read 后 getText 可用，写仍被�
   assertEqual(read.text, 'abc');
   const write = await dispatchApi(methods, { method: 'editor.replaceSelection', params: { text: 'x' } });
   assertEqual(write.code, 'EPERM_EDITOR_WRITE');
+});
+
+/* ------------------------------------------ 11. 表格下沿：尾行不被吞（v1.0.5） */
+
+test('rowHasPipe：只有未转义的竖线才算表格行标记', () => {
+  assertEqual(rowHasPipe('| a | b |'), true);
+  assertEqual(rowHasPipe('a | b'), true);
+  assertEqual(rowHasPipe('尾巴正文'), false);
+  assertEqual(rowHasPipe(''), false);
+  assertEqual(rowHasPipe('a \\| b'), false, '整行只有转义竖线 → 不是表格行');
+  assertEqual(rowHasPipe('\\| a | b'), true);
+});
+
+test('parseTable：表下无竖线的正文不算数据行，to 同步收窄', () => {
+  const table = '| a | b |\n| --- | --- |\n| 1 | 2 |';
+  const text = `${table}\n尾巴\n第二行`;
+  const m = parseTable(text, 0, text.length);
+  assert(m, '解析失败');
+  assertEqual(m.rows.length, 1, '只应有一条数据行');
+  assertEqual(m.rows[0], ['1', '2']);
+  assertEqual(m.to, table.length, 'to 必须落在最后一行表格行末');
+  assertEqual(m.rawLines.length, 3, 'rawLines 只保留表格三行');
+  assertEqual(serializeTable(m).text, table, '序列化不得写出尾行');
+});
+
+test('renderMarkdown：表下正文渲染为 <p>，不进入 <table>', () => {
+  const html = renderMarkdown('| a | b |\n| --- | --- |\n| 1 | 2 |\n尾巴\n第二行\n');
+  const flat = html.replace(/\s+/g, ' ');
+  assert(html.includes('<table>'), '表格应渲染');
+  assert(flat.includes('<p>尾巴 第二行</p>'), `尾行应是段落：${flat}`);
+  assert(flat.indexOf('尾巴') > flat.indexOf('</table>'), '尾行必须排在 </table> 之后');
+});
+
+test('renderMarkdown：代码围栏里的「表格 + 尾行」原样保留', () => {
+  const html = renderMarkdown('```\n| a | b |\n| --- | --- |\n尾\n```\n');
+  assert(!html.includes('<table>'), '围栏内不应渲染表格');
+  assert(html.includes('尾'), '围栏内容必须完整');
+});
+
+test('renderMarkdown：表格后面接引用 / 列表时不额外插入空行', () => {
+  const quoted = renderMarkdown('| a |\n| --- |\n| 1 |\n> 引用\n');
+  assert(quoted.includes('<blockquote>'), '引用应渲染');
+  const listed = renderMarkdown('| a |\n| --- |\n| 1 |\n- 列表\n');
+  assert(listed.includes('<ul>'), '列表应渲染');
 });
 
 /* --------------------------------------------------------------- 汇总 */
