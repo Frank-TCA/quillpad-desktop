@@ -7,6 +7,7 @@
 import { marked } from 'marked';
 import { t } from './i18n.js';
 import { isDelimiterRow, rowHasPipe } from '../editor/wysiwyg/table-model.js';
+import { promoteLooseEmphasis } from '../editor/wysiwyg/loose-emphasis.js';
 
 marked.setOptions({
   gfm: true,
@@ -114,7 +115,7 @@ export function renderInlineMarkdown(text) {
       .replace(/"/g, '&quot;');
   }
   try {
-    const html = marked.parseInline(src, { async: false });
+    const html = marked.parseInline(promoteLooseEmphasis(src), { async: false });
     return sanitize(typeof html === 'string' ? html : '');
   } catch (err) {
     console.warn('[QuillPad] 行内 Markdown 渲染失败：', err && err.message);
@@ -133,7 +134,7 @@ export function renderInlineMarkdown(text) {
 export function renderMarkdown(text) {
   if (!text) return '';
   try {
-    const html = marked.parse(breakTableTails(text), { async: false });
+    const html = marked.parse(promoteLooseEmphasis(breakTableTails(text)), { async: false });
     return sanitize(typeof html === 'string' ? html : '');
   } catch (err) {
     console.warn('[QuillPad] Markdown 渲染失败：', err);

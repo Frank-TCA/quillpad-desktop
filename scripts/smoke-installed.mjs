@@ -23,6 +23,8 @@
  *  6e. 首开渲染 / 列表 / 单元格（v1.0.6）：视口外的表格首次打开即渲染成 widget、
  *     单元格里的 `**粗**` `*斜*` `` `代码` `` 渲染成真实标签、视口外的有序 / 无序
  *     列表保持序号与圆点、列表末行回车新行序号仍在、整篇其它结构数量不变
+ *  6f. 中文标点边界的强调（v1.0.6）：句中的 `**“正文”**` / `*“斜体”*` /
+ *     `~~“删除”~~` 都渲染（星号隐藏），表格单元格同样生效，行内代码与围栏内原样
  *  7. 启动参数与文件关联：安装器写下的 .md/.txt 默认关联、能力注册、应用内 IPC
  *     读得到；第二实例转交文件能打开，且不再误报「文件过大」（argv[0] 不再是
  *     待打开文件，程序自己的 238MB exe 不再被读一遍）
@@ -1300,6 +1302,90 @@ async function sectionWysiwygStructure() {
   await win.waitForTimeout(500);
 }
 
+/* ============================== 第 6f 项 · 中文标点边界的强调（v1.0.6） */
+/**
+ * CommonMark 的定界符要过左右侧翼检查，`**“正文”**` 写在句子中间时两头都踩线
+ * → 整段强调失效、星号原样露出来。v1.0.6 补了一条收窄的豁免（内侧紧贴中文标点
+ * 才生效），这里验证装好的包里确实生效，且行内代码 / 围栏不受影响。
+ */
+async function sectionLooseEmphasis() {
+  console.log('── 第 6f 项 · 中文标点边界的强调');
+
+  const saved = await win.evaluate(() => {
+    const app = window.quillpad;
+    const tab = app.state.tabs.find((t) => t.id === app.state.activeTabId);
+    return { id: tab.id, before: tab.content };
+  });
+
+  // ① 句中的加粗 / 斜体 / 删除线
+  await win.evaluate((d) => {
+    const app = window.quillpad;
+    app.setTabContent(app.state.activeTabId, d);
+    app.refreshViewMode();
+  }, '这里是**“正文”**结束\n\n这里是*“斜体”*结束\n\n这里是~~“删除”~~结束\n');
+  await win.waitForTimeout(700);
+
+  const inline = await win.evaluate(() => ({
+    strong: [...document.querySelectorAll('.cm-content [data-qp-node="strong"]')].map((e) => e.textContent),
+    em: [...document.querySelectorAll('.cm-content [data-qp-node="em"]')].map((e) => e.textContent),
+    del: [...document.querySelectorAll('.cm-content [data-qp-node="del"]')].map((e) => e.textContent),
+    hidden: [...document.querySelectorAll('.qp-md-hide')].map((e) => e.textContent),
+  }));
+  check(
+    '6f.1 句中 **“正文”** / *“斜体”* / ~~“删除”~~ 都渲染且标记已隐藏',
+    inline.strong.join('') === '“正文”' &&
+      inline.em.join('') === '“斜体”' &&
+      inline.del.join('') === '“删除”' &&
+      inline.hidden.length === 6 &&
+      inline.hidden.every((t) => /^(?:\*+|~~)$/.test(t)),
+    JSON.stringify(inline),
+  );
+
+  // ② 表格单元格里的中文引号加粗
+  await win.evaluate((d) => {
+    const app = window.quillpad;
+    app.setTabContent(app.state.activeTabId, d);
+    app.refreshViewMode();
+  }, '| 列 | 值 |\n| --- | --- |\n| **“单元格”** | *“斜”* |\n');
+  await win.waitForTimeout(700);
+  check(
+    '6f.2 表格单元格里的 **“单元格”** 也加粗',
+    await win.evaluate(() => {
+      const s = document.querySelector('.qp-table td strong');
+      const e = document.querySelector('.qp-table td em');
+      return !!s && s.textContent === '“单元格”' && !!e && e.textContent === '“斜”';
+    }),
+  );
+
+  // ③ 行内代码 / 围栏里的星号原样保留
+  await win.evaluate((d) => {
+    const app = window.quillpad;
+    app.setTabContent(app.state.activeTabId, d);
+    app.refreshViewMode();
+  }, '``**“代码”**`` 保持\n\n```\n**“围栏”**\n```\n');
+  await win.waitForTimeout(700);
+  check(
+    '6f.3 行内代码 / 围栏里的中文引号强调保持原样',
+    await win.evaluate(() => {
+      const strong = document.querySelectorAll('.cm-content [data-qp-node="strong"]');
+      const code = document.querySelector('.cm-content [data-qp-node="code-inline"]');
+      return (
+        strong.length === 0 &&
+        !!code &&
+        code.textContent === '**“代码”**' &&
+        document.body.textContent.includes('**“围栏”**')
+      );
+    }),
+  );
+
+  // 还原文档
+  await win.evaluate((s) => {
+    window.quillpad.setTabContent(s.id, s.before);
+    window.quillpad.refreshViewMode();
+  }, saved);
+  await win.waitForTimeout(500);
+}
+
 /* ================================================ 第 7 项 · 启动参数与文件关联 */
 /**
  * 读文件关联相关注册表项（reg.exe 在本机安全策略里被禁，走 PowerShell）。
@@ -1419,6 +1505,7 @@ for (const [tag, fn] of [
   ['第 6c 项', sectionTableInteraction],
   ['第 6d 项', sectionTableTail],
   ['第 6e 项', sectionWysiwygStructure],
+  ['第 6f 项', sectionLooseEmphasis],
   ['第 7 项', sectionAssociations],
 ]) {
   try {

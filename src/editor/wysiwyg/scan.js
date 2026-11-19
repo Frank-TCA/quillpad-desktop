@@ -17,6 +17,7 @@
 
 import { syntaxTree, ensureSyntaxTree } from '@codemirror/language';
 import { rowHasPipe } from './table-model.js';
+import { findLooseEmphasis, MARK_KIND as LOOSE_MARK_KIND } from './loose-emphasis.js';
 
 /**
  * 取「覆盖全文」的语法树。
@@ -504,6 +505,9 @@ function buildScan(state) {
   /* ------------------------------------- 4. 正则行内补充：公式 / 脚注引用 */
   collectRegexInline(state, lines, inline);
 
+  /* ------------------------- 5. 中文标点边界的强调（lezer 按 CommonMark 会漏） */
+  collectLooseEmphasis(state, lines, inline);
+
   // 行内元素按位置排序，方便调试与断言
   inline.sort((a, b) => a.from - b.from || a.to - b.to);
 
@@ -797,6 +801,70 @@ function collectRegexInline(state, lines, inline) {
       }
     }
   }
+}
+
+/**
+ * 补扫「中文标点贴边」的强调：`**“正文”**` / `*“斜体”*` / `~~“删除”~~`。
+ *
+ * CommonMark 的定界符要过左右侧翼（flanking）检查：`**` 后面紧跟 `“` 时
+ * 不算合法的「开启」、`**` 前面紧跟 `”` 时不算合法的「闭合」，于是整段强调
+ * 失效、星号原样露在正文里（lezer 与 marked 表现一致，不是编辑器独有的 bug）。
+ * 判定规则与收窄理由见 `loose-emphasis.js`。
+ *
+ * 只补 lezer **没解析出来**的区间：已被 strong / em / del / 行内代码 / 链接 /
+ * 公式 / 脚注覆盖的位置一律跳过，避免同一段文本被装饰两次。
+ *
+ * @param {import('@codemirror/state').EditorState} state
+ * @param {object[]} lines
+ * @param {object[]} inline
+ */
+function collectLooseEmphasis(state, lines, inline) {
+  const doc = state.doc;
+  /** @type {Map<number, Array<[number, number]>>} 每行已被占用的行内区间 */
+  const busyByLine = new Map();
+  for (const e of inline) {
+    if (!e || !e.lineNumber) continue;
+    const arr = busyByLine.get(e.lineNumber);
+    if (arr) arr.push([e.from, e.to]);
+    else busyByLine.set(e.lineNumber, [[e.from, e.to]]);
+  }
+
+  /** @type {object[]} */
+  const added = [];
+  for (const info of lines) {
+    if (!info) continue;
+    if (
+      info.kind === LINE_KINDS.code ||
+      info.kind === LINE_KINDS.fence ||
+      info.kind === LINE_KINDS.frontmatter ||
+      info.kind === LINE_KINDS.mathBlock
+    ) {
+      continue;
+    }
+    const text = doc.sliceString(info.from, info.to);
+    if (!text.includes('*') && !text.includes('~~')) continue;
+    const busy = busyByLine.get(info.number) || [];
+    for (const hit of findLooseEmphasis(text)) {
+      const from = info.from + hit.from;
+      const to = info.from + hit.to;
+      if (busy.some(([a, b]) => from < b && to > a)) continue;
+      const len = hit.mark.length;
+      added.push({
+        kind: hit.kind,
+        markKind: LOOSE_MARK_KIND[hit.kind] || 'bold',
+        from,
+        to,
+        lineNumber: info.number,
+        marks: [
+          { from, to: from + len },
+          { from: to - len, to },
+        ],
+        contentFrom: from + len,
+        contentTo: to - len,
+      });
+    }
+  }
+  if (added.length) inline.push(...added);
 }
 
 /**

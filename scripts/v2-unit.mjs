@@ -42,6 +42,11 @@ import {
 } from '../src/editor/wysiwyg/table-model.js';
 import { applyTableOp } from '../src/editor/wysiwyg/table-ops.js';
 import { renderMarkdown, renderInlineMarkdown } from '../src/core/markdown.js';
+import {
+  matchLooseEmphasis,
+  findLooseEmphasis,
+  promoteLooseEmphasis,
+} from '../src/editor/wysiwyg/loose-emphasis.js';
 import { EditorState } from '@codemirror/state';
 import {
   rectInfo,
@@ -810,6 +815,70 @@ test('renderInlineMarkdown：表格里 `\\|` 还原后仍渲染加粗', () => {
   const html = renderInlineMarkdown(cell);
   assert(html.includes('<strong>'), `应加粗：${html}`);
   assert(html.includes('|'), '竖线保留在文字里');
+});
+
+/* --------------------------- 中文标点边界的强调（loose emphasis，v1.0.6+） */
+test('matchLooseEmphasis：中文标点贴边的强调对能被识别', () => {
+  const a = matchLooseEmphasis('这里是**“正文”**结束', 3);
+  assert(a && a.kind === 'strong' && a.content === '“正文”', `strong：${JSON.stringify(a)}`);
+  const b = matchLooseEmphasis('这里是*“斜体”*结束', 3);
+  assert(b && b.kind === 'em' && b.content === '“斜体”', `em：${JSON.stringify(b)}`);
+  const c = matchLooseEmphasis('这里是~~“删除”~~结束', 3);
+  assert(c && c.kind === 'del' && c.content === '“删除”', `del：${JSON.stringify(c)}`);
+  const d = matchLooseEmphasis('**「书名」**', 0);
+  assert(d && d.content === '「书名」', `书名号：${JSON.stringify(d)}`);
+});
+
+test('matchLooseEmphasis：英文 / 幂运算 / 三连星不被接管', () => {
+  assert(matchLooseEmphasis('a**b**c', 1) === null, 'a**b**c 交给标准解析器');
+  assert(matchLooseEmphasis('2**3**4', 1) === null, '2**3**4');
+  assert(matchLooseEmphasis('***粗斜***', 0) === null, '***');
+  assert(matchLooseEmphasis('这里是**“未闭合', 3) === null, '未闭合');
+  assert(matchLooseEmphasis('这里是\\**“x”**', 4) === null, '转义起点');
+});
+
+test('findLooseEmphasis：一行多个、跳过非强调星号', () => {
+  const hits = findLooseEmphasis('混合**“粗”**与*“斜”*与~~“删”~~');
+  assert(hits.length === 3, `命中数：${hits.length}`);
+  assert(hits.map((h) => h.kind).join(',') === 'strong,em,del', hits.map((h) => h.kind).join(','));
+  assert(findLooseEmphasis('没有星号的一行') .length === 0, '无星号');
+});
+
+test('promoteLooseEmphasis：渲染前把中文标点强调提升为标签', () => {
+  assert(promoteLooseEmphasis('这里是**“正文”**结束') === '这里是<strong>“正文”</strong>结束', 'strong');
+  assert(promoteLooseEmphasis('这里是*“斜”*结束') === '这里是<em>“斜”</em>结束', 'em');
+  assert(promoteLooseEmphasis('这里是~~“删”~~结束') === '这里是<del>“删”</del>结束', 'del');
+  // 不该动的地方
+  assert(promoteLooseEmphasis('``**“代码”**``') === '``**“代码”**``', '行内代码');
+  assert(promoteLooseEmphasis('```\n**“围栏”**\n```') === '```\n**“围栏”**\n```', '围栏');
+  assert(promoteLooseEmphasis('这里是**正文**结束') === '这里是**正文**结束', '标准情形交给 marked');
+  assert(promoteLooseEmphasis('2**3**4') === '2**3**4', '幂运算');
+});
+
+test('renderMarkdown：普通正文在 “” 中的加粗不再失效', () => {
+  const html = renderMarkdown('这里是**“正文”**结束\n');
+  assert(html.includes('<strong>“正文”</strong>'), `应加粗：${html}`);
+  const multi = renderMarkdown('这里是**“正文”和“其它”**结束\n');
+  assert(multi.includes('<strong>“正文”和“其它”</strong>'), `连续引号：${multi}`);
+  const asc = renderMarkdown('这里是**"正文"**结束\n');
+  assert(asc.includes('<strong>'), `ASCII 双引号：${asc}`);
+});
+
+test('renderMarkdown：斜体 / 删除线同规则，链接与代码不受影响', () => {
+  assert(renderMarkdown('*“斜”*\n').includes('<em>“斜”</em>'), '斜体');
+  assert(renderMarkdown('~~“删”~~\n').includes('<del>“删”</del>'), '删除线');
+  const link = renderMarkdown('[**“文字”**](https://a.com/**x**)\n');
+  assert(link.includes('<strong>“文字”</strong>'), `链接文字加粗：${link}`);
+  assert(link.includes('https://a.com/**x**'), '链接目标原样');
+  const code = renderMarkdown('``**“代码”**``\n');
+  assert(code.includes('<code>**“代码”**</code>'), `行内代码原样：${code}`);
+});
+
+test('renderInlineMarkdown：表格单元格里的中文引号加粗', () => {
+  const html = renderInlineMarkdown('**“单元格”**');
+  assert(html.includes('<strong>“单元格”</strong>'), html);
+  const em = renderInlineMarkdown('*“斜”*');
+  assert(em.includes('<em>“斜”</em>'), em);
 });
 
 /* --------------------------------------------------------------- 汇总 */

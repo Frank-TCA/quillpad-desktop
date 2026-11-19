@@ -1308,6 +1308,77 @@ check(
   `on=${rmOn} off=${rmOff}`,
 );
 
+/* ============================ T03b 中文标点边界的强调（loose emphasis） */
+group('T03b 中文标点边界的强调');
+
+await setDoc('这里是**“正文”**结束\n\n尾段。\n', { line: 3 });
+await wait(240);
+const cjkStrong = await page.evaluate(() => {
+  const el = document.querySelector('.cm-content [data-qp-node="strong"]');
+  const hidden = [...document.querySelectorAll('.qp-md-hide')].map((n) => n.textContent);
+  return { text: el ? el.textContent : null, hidden };
+});
+check(
+  'T03b① 普通正文在 “” 中的 **加粗** 渲染为 strong 且标记隐藏',
+  cjkStrong.text === '“正文”' && cjkStrong.hidden.join('') === '****',
+  JSON.stringify(cjkStrong),
+);
+
+await setDoc('这里是*“斜体”*与~~“删除”~~结束\n\n尾段。\n', { line: 3 });
+await wait(240);
+const cjkOther = await page.evaluate(() => ({
+  em: [...document.querySelectorAll('.cm-content [data-qp-node="em"]')].map((e) => e.textContent),
+  del: [...document.querySelectorAll('.cm-content [data-qp-node="del"]')].map((e) => e.textContent),
+}));
+check(
+  'T03b② 斜体 / 删除线同规则生效',
+  cjkOther.em.join('') === '“斜体”' && cjkOther.del.join('') === '“删除”',
+  JSON.stringify(cjkOther),
+);
+
+await setDoc('这里是**"正文"**结束\n\n尾段。\n', { line: 3 });
+await wait(240);
+check(
+  'T03b③ ASCII 双引号同样加粗',
+  await page.evaluate(() => {
+    const el = document.querySelector('.cm-content [data-qp-node="strong"]');
+    return !!el && el.textContent === '"正文"';
+  }),
+);
+
+await setDoc('这里是 2 ** 3 ** 4 与 a*b*c\n\n尾段。\n', { line: 3 });
+await wait(240);
+check(
+  'T03b④ 带空格的星号不被误判为加粗',
+  await page.evaluate(() => !document.querySelector('.cm-content [data-qp-node="strong"]')),
+);
+
+await setDoc('| 列 | 值 |\n| --- | --- |\n| **“单元格”** | x |\n', { line: 1 });
+await wait(300);
+check(
+  'T03b⑤ 表格单元格里的中文引号加粗',
+  await page.evaluate(() => {
+    const el = document.querySelector('.qp-table td strong');
+    return !!el && el.textContent === '“单元格”';
+  }),
+);
+
+await setDoc('``**“代码”**`` 保持\n\n```\n**“围栏”**\n```\n', { line: 1 });
+await wait(300);
+check(
+  'T03b⑥ 行内代码 / 围栏内的星号原样保留',
+  await page.evaluate(() => {
+    const strong = [...document.querySelectorAll('.cm-content [data-qp-node="strong"]')];
+    const code = document.querySelector('.cm-content [data-qp-node="code-inline"]');
+    return (
+      strong.length === 0 &&
+      !!code &&
+      code.textContent === '**“代码”**' &&
+      document.body.textContent.includes('**“围栏”**')
+    );
+  }),
+);
+
 /* ================================================================ 收尾 */
 check('全流程无 console error', errors.length === 0, errors.slice(0, 3).join(' | '));
 
