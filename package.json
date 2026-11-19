@@ -1,6 +1,6 @@
 {
   "name": "quillpad",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "private": true,
   "type": "module",
   "description": "QuillPad — 面向 Notepad++ 用户的现代文本/代码编辑器",
@@ -57,6 +57,7 @@
     "test:plugins": "node scripts/data-check.mjs && node scripts/plugin-pack-check.mjs && node scripts/plugin-keys-check.mjs",
     "plugins:pack": "node scripts/build-community-zips.mjs",
     "readme:shots": "node scripts/readme-shots.mjs",
+    "release:shot": "node scripts/release-shot.mjs",
     "test": "node scripts/menu-fix-check.mjs && node scripts/smoke.mjs && node scripts/p1-check.mjs && node scripts/find-panel-check.mjs && node scripts/statusbar-check.mjs && node scripts/edit-ops-check.mjs && node scripts/fold-check.mjs && node scripts/v2-unit.mjs && node scripts/newfile-check.mjs && node scripts/data-check.mjs && node scripts/plugin-pack-check.mjs && node scripts/plugin-keys-check.mjs"
   },
   "dependencies": {

@@ -15,7 +15,7 @@
  */
 
 import { EditorView, Decoration } from '@codemirror/view';
-import { StateField } from '@codemirror/state';
+import { StateField, StateEffect } from '@codemirror/state';
 import { lineDecoration } from './marks.js';
 import { scanMarkdown, INLINE_KINDS } from './scan.js';
 import {
@@ -32,6 +32,15 @@ import { resolveImageUrl } from './image.js';
 const REPLACEABLE = new Set(['table', 'frontmatter', 'math-block', 'image-row']);
 
 /**
+ * 「重新扫描块结构」—— 不改变文档、也不移动光标，只让块层重算一次。
+ *
+ * 用途：`ensureSyntaxTree` 有 80ms 上限，超大文档第一次只能解析到一部分；
+ * 解析在后台继续推进之后，用这个 effect 把块层拉起来重算，视口外晚到的
+ * 表格 / 列表 / 引用才不会一直缺到用户敲键盘为止。
+ */
+export const rescanBlocks = StateEffect.define();
+
+/**
  * 创建块级装饰 StateField。
  *
  * @param {object} opts `createWysiwygExtension` 的入参
@@ -40,18 +49,21 @@ const REPLACEABLE = new Set(['table', 'frontmatter', 'math-block', 'image-row'])
 export function createBlockField(opts) {
   return StateField.define({
     create(state) {
-      return computeBlocks(state, opts, null);
+      return safeCompute(state, opts, null);
     },
     update(value, tr) {
-      if (tr.docChanged) return computeBlocks(tr.state, opts, value);
+      if (tr.docChanged) return safeCompute(tr.state, opts, value);
       // 语言包是异步加载的：加载完成后会 reconfigure，此时语法树才可用，
       // 必须重算一次，否则首屏的表格 / 标题等块级装饰会一直缺到用户敲键盘为止。
-      if (tr.reconfigured) return computeBlocks(tr.state, opts, value);
+      if (tr.reconfigured) return safeCompute(tr.state, opts, value);
+      /* 解析在后台继续推进（大文档首次打开时 ensureSyntaxTree 只来得及解析
+         一部分）：收到重扫请求就再算一次，晚到的块结构补上。 */
+      if (tr.effects.some((e) => e.is(rescanBlocks))) return safeCompute(tr.state, opts, value);
       if (tr.selection) {
         if (!value.blocks.length) return value;
         const touched = touchedSignature(tr.state, value.blocks);
         if (touched === value.touched) return value;
-        return computeBlocks(tr.state, opts, value);
+        return safeCompute(tr.state, opts, value);
       }
       return value;
     },
@@ -59,6 +71,36 @@ export function createBlockField(opts) {
       EditorView.decorations.from(field, (v) => v.deco),
     ],
   });
+}
+
+/**
+ * `computeBlocks` 的异常兜底。
+ *
+ * 块层是**整篇唯一的结构来源**：只要它抛一次，整篇的标题 / 列表 / 引用 / 表格
+ * 会一起消失，而行内层（独立 ViewPlugin）还在，于是「标记被隐藏、行首却什么
+ * 都不显示」—— 用户看到的就是「整篇渲染被破坏、点与序号都不见了」。
+ * 任何单次扫描异常都退回上一版装饰：宁可结构旧一帧，也不能整篇失去格式。
+ *
+ * @param {import('@codemirror/state').EditorState} state
+ * @param {object} opts
+ * @param {object|null} prev
+ * @return {object}
+ */
+function safeCompute(state, opts, prev) {
+  try {
+    return computeBlocks(state, opts, prev);
+  } catch (err) {
+    console.warn('[QuillPad] 块级结构扫描失败，沿用上一版装饰：', err && err.message);
+    return (
+      prev || {
+        deco: Decoration.none,
+        atomic: Decoration.none,
+        gutter: Decoration.none,
+        blocks: [],
+        touched: '',
+      }
+    );
+  }
 }
 
 /**

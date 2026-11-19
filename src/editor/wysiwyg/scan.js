@@ -15,8 +15,33 @@
  * 在同一次 update 中会各取一次，缓存保证「一次计算、两处复用」。
  */
 
-import { syntaxTree } from '@codemirror/language';
+import { syntaxTree, ensureSyntaxTree } from '@codemirror/language';
 import { rowHasPipe } from './table-model.js';
+
+/**
+ * 取「覆盖全文」的语法树。
+ *
+ * `syntaxTree(state)` 返回的是**当前已解析到的部分**：CodeMirror 只按视口惰性
+ * 推进解析，打开一个大文档时，视口外的区域可能整段还是纯文本占位。块级结构
+ * （列表 / 引用 / 表格）全部由语法树驱动，于是会出现「首次打开 .md，表格不渲染，
+ * 切一下标签再回来才对」——切的瞬间视口重新渲染、解析推进到那里，块才补上。
+ * 同一份文档里游标离开列表行时行首标记消失、整篇看起来重新排版，也是这条。
+ *
+ * `ensureSyntaxTree` 会同步推进解析直到 `upto`：文档通常几十毫秒内解析完。
+ * 超时（超大文档）则返回 null，退回已解析的那部分 —— 剩下的由块层的延迟重扫
+ * 兜底（见 `blocks.js` 的 `rescanBlocks`）。
+ *
+ * @param {import('@codemirror/state').EditorState} state
+ * @return {import('@lezer/common').Tree}
+ */
+const FULL_PARSE_TIMEOUT = 80;
+function fullSyntaxTree(state) {
+  try {
+    return ensureSyntaxTree(state, state.doc.length, FULL_PARSE_TIMEOUT) || syntaxTree(state);
+  } catch {
+    return syntaxTree(state);
+  }
+}
 
 /** 行级类型枚举。 */
 export const LINE_KINDS = /** @type {const} */ ({
@@ -306,7 +331,7 @@ function buildScan(state) {
   }
 
   /* ---------------------------------------------- 3. lezer 结构（块 + 行内） */
-  const tree = syntaxTree(state);
+  const tree = fullSyntaxTree(state);
   const fmTo = frontmatterEnd > 0 ? doc.line(frontmatterEnd).to : -1;
 
   tree.iterate({

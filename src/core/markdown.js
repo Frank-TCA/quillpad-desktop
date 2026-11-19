@@ -91,6 +91,41 @@ function sanitize(html) {
 }
 
 /**
+ * 把一段**行内** Markdown 渲染为 HTML（表格单元格里用）。
+ *
+ * 表格 widget 的单元格是普通 DOM，拿不到 CodeMirror 的行内装饰，只能自己把
+ * `**粗**` / `*斜*` / `` `代码` `` / `~~删除~~` / `[链接](url)` 渲染出来 ——
+ * 否则同一份表格在预览里是加粗、在所见即所得里却是星号。
+ *
+ * 只走 `parseInline`：不产生 `<p>` 包裹，也不会把单元格里的 `|` 当表格语法。
+ *
+ * @param {string} text 单元格原文（已去掉 `\|` 转义）
+ * @return {string}
+ */
+export function renderInlineMarkdown(text) {
+  const src = String(text == null ? '' : text);
+  if (!src.trim()) return '';
+  if (!/([*_~`\[]|https?:\/\/)/.test(src)) {
+    // 没有任何行内语法：直接转义，省一次解析（表格最常见的路径）
+    return src
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+  try {
+    const html = marked.parseInline(src, { async: false });
+    return sanitize(typeof html === 'string' ? html : '');
+  } catch (err) {
+    console.warn('[QuillPad] 行内 Markdown 渲染失败：', err && err.message);
+    return src
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+}
+
+/**
  * 把 Markdown 渲染为 HTML。
  * @param {string} text
  * @return {string}

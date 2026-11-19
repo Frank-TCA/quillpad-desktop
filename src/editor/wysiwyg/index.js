@@ -15,13 +15,14 @@
 
 import { EditorView, Decoration, ViewPlugin, keymap } from '@codemirror/view';
 import { Prec } from '@codemirror/state';
+import { ensureSyntaxTree } from '@codemirror/language';
 import {
   scanMarkdown,
   activeLineNumbers,
   INLINE_KINDS,
 } from './scan.js';
 import { markerDecoration, nodeDecoration, widgetDecoration, hiddenMark } from './marks.js';
-import { createBlockField, resolveFeatures } from './blocks.js';
+import { createBlockField, resolveFeatures, rescanBlocks } from './blocks.js';
 import { gutterAlignPlugin } from './gutter-align.js';
 import { decoBudget, shouldSkipHeavy } from './perf.js';
 import {
@@ -208,6 +209,56 @@ export function createWysiwygExtension(opts) {
     },
   );
 
+  /**
+   * 解析进度兜底（大文档首次打开 / 粘贴大段内容）。
+   *
+   * `scan.js` 会用 `ensureSyntaxTree` 同步解析全文，但它有 80ms 上限：超大文档
+   * 首次打开只解析到一部分，视口外的列表 / 引用 / 表格还没成形。等解析在后台
+   * 推进完，这里主动让块层再算一次 —— 否则那些结构会一直缺到用户敲键盘为止
+   * （用户报的「首次打开表格不渲染，切一下标签再回来才对」正是这条）。
+   *
+   * 判据用 `ensureSyntaxTree(..., 0)`：已覆盖全文时它立刻返回、零额外解析，
+   * 所以常规击键路径上这个定时器几乎是空转。
+   */
+  const blockRescanPlugin = ViewPlugin.fromClass(
+    class {
+      /** @param {import('@codemirror/view').EditorView} view */
+      constructor(view) {
+        this.view = view;
+        this.timer = null;
+        this.rounds = 0;
+        this.schedule(30);
+      }
+
+      update(u) {
+        const reconfigured = u.transactions.some((t) => t.reconfigured);
+        if (u.docChanged || reconfigured) {
+          this.rounds = 0;
+          this.schedule();
+        }
+      }
+
+      schedule(delay = 160) {
+        if (this.timer) clearTimeout(this.timer);
+        this.timer = setTimeout(() => {
+          this.timer = null;
+          if (!this.view.dom.isConnected) return;
+          const { state } = this.view;
+          // 已覆盖全文：块层那次计算用的就是完整树，不必再算
+          if (ensureSyntaxTree(state, state.doc.length, 0)) return;
+          if (this.rounds >= 3) return;
+          this.rounds += 1;
+          this.view.dispatch({ effects: rescanBlocks.of(null) });
+          this.schedule(500);
+        }, delay);
+      }
+
+      destroy() {
+        if (this.timer) clearTimeout(this.timer);
+      }
+    },
+  );
+
   /** @type {any} */
   const extension = [
     blockField,
@@ -215,6 +266,8 @@ export function createWysiwygExtension(opts) {
     Prec.high(keymap.of([tableEdgeDelete, tableEdgeBackspace])),
     // 点在表格左右两侧的空白处 → 光标停到表格外侧（见 tableBlankTarget）
     tableBlankPlugin,
+    // 语法树晚到（大文档）时补一次块级重算
+    blockRescanPlugin,
     inlinePlugin,
     // 行号 / 折叠箭头与行内容对齐（标题有几十像素的 padding-top、代码行字号又
     // 与正文不同，不处理就会出现「数字浮在文字上方」）
@@ -317,7 +370,17 @@ function createInlinePlugin(opts) {
       update(u) {
         // 语言包异步加载完成会 reconfigure → 语法树可用，必须重算行内装饰
         const reconfigured = u.transactions.some((t) => t.reconfigured);
-        if (u.docChanged || u.selectionSet || u.viewportChanged || u.focusChanged || reconfigured) {
+        // 块层请求重扫（大文档解析推进完）时，行内层也要跟上，否则视口内的
+        // 加粗 / 斜体 / 列表标记会一直停在「纯文本」那一版
+        const rescanned = u.transactions.some((t) => t.effects.some((e) => e.is(rescanBlocks)));
+        if (
+          u.docChanged ||
+          u.selectionSet ||
+          u.viewportChanged ||
+          u.focusChanged ||
+          reconfigured ||
+          rescanned
+        ) {
           this.decorations = computeInline(u.view, opts);
         }
       }

@@ -289,7 +289,21 @@
 
 /* 项目符号 / 序号用 ::before 绘制（源码 `-` / `1.` 已被零宽隐藏）。
    缩进基准与预览 `.markdown-body ul{padding-left:1.4em}` 一致：
-   标记占 1.4em，正文从 1.4em 处起排；颜色继承正文（浏览器列表标记行为）。 */
+   标记占 1.4em，正文从 1.4em 处起排；颜色继承正文（浏览器列表标记行为）。
+
+   下面第一条是无条件兜底：只要行还是 `.qp-li`，行首就必须有标记 ——
+   行属性（data-qp-list / data-qp-num）因任何原因缺失时，宁可显示成 `•`，
+   也不能出现「行首空着、源码又已经被隐藏」的空白（用户报的「点和序号都
+   不见了」）。后两条按列表类型覆盖。 */
+.cm-line.qp-li::before {
+  content: '\2022';
+  display: inline-block;
+  width: 1.4em;
+  margin-left: calc((var(--qp-li-depth, 1) - 1) * 1.4em);
+  text-align: center;
+  color: inherit;
+}
+
 .cm-line.qp-li[data-qp-list='ul']::before {
   content: '•';
   display: inline-block;
@@ -667,6 +681,40 @@ html[data-theme='nord'] .cm-editor.qp-wy .cm-selectionBackground {
 .qp-table__cell {
   cursor: text;
   min-height: 24px;
+}
+
+/* 单元格内的行内 Markdown（**粗** / *斜* / `代码` / ~~删~~ / 链接）。
+   数值与正文的行内节点（.qp-node-strong 等）一致，保证同一段文字在表格里
+   与在正文里长得一样。 */
+.qp-table__cell strong {
+  font-weight: 680;
+  color: var(--text);
+}
+
+.qp-table__cell em {
+  font-style: italic;
+}
+
+.qp-table__cell del {
+  text-decoration: line-through;
+  color: var(--text-faint);
+}
+
+.qp-table__cell code {
+  font-family: var(--font-mono);
+  font-size: var(--qp-code-inline-size, 0.86em);
+  padding: 0.16em 0.42em;
+  border-radius: var(--radius-xs);
+  background: var(--bg-hover);
+  color: var(--accent-2);
+}
+
+/* 单元格里的链接只做视觉标记，点击语义仍是「编辑这一格」（见 table.js） */
+.qp-table__cell a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid var(--accent-soft);
+  cursor: text;
 }
 
 .qp-table__cell:hover {

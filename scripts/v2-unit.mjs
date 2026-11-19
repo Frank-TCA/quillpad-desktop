@@ -41,7 +41,7 @@ import {
   rowHasPipe,
 } from '../src/editor/wysiwyg/table-model.js';
 import { applyTableOp } from '../src/editor/wysiwyg/table-ops.js';
-import { renderMarkdown } from '../src/core/markdown.js';
+import { renderMarkdown, renderInlineMarkdown } from '../src/core/markdown.js';
 import { EditorState } from '@codemirror/state';
 import {
   rectInfo,
@@ -779,6 +779,37 @@ test('renderMarkdown：表格后面接引用 / 列表时不额外插入空行', 
   assert(quoted.includes('<blockquote>'), '引用应渲染');
   const listed = renderMarkdown('| a |\n| --- |\n| 1 |\n- 列表\n');
   assert(listed.includes('<ul>'), '列表应渲染');
+});
+
+/* ------------------------------------------- 表格单元格的行内 Markdown */
+
+test('renderInlineMarkdown：粗 / 斜 / 代码 / 删除 / 链接都转成真实标签', () => {
+  assert(renderInlineMarkdown('**粗**').includes('<strong>粗</strong>'), '粗体');
+  assert(renderInlineMarkdown('*斜*').includes('<em>斜</em>'), '斜体');
+  assert(renderInlineMarkdown('`c()`').includes('<code>c()</code>'), '行内代码');
+  assert(renderInlineMarkdown('~~删~~').includes('<del>删</del>'), '删除线');
+  assert(renderInlineMarkdown('[名](https://a.b)').includes('href="https://a.b"'), '链接');
+});
+
+test('renderInlineMarkdown：纯文本原样、特殊字符转义、不产生块级标签', () => {
+  assert(renderInlineMarkdown('普通文字') === '普通文字', '纯文本');
+  const esc = renderInlineMarkdown('a < b & c');
+  assert(esc.includes('&lt;') && esc.includes('&amp;'), `转义：${esc}`);
+  assert(!renderInlineMarkdown('**x**').includes('<p>'), '不应有 <p> 包裹');
+  assert(renderInlineMarkdown('') === '', '空串');
+  assert(renderInlineMarkdown(null) === '', 'null');
+});
+
+test('renderInlineMarkdown：脚本标签被净化，不会注入', () => {
+  const html = renderInlineMarkdown('**x**<script>alert(1)</script>');
+  assert(!/<script/i.test(html), `脚本必须被移除：${html}`);
+});
+
+test('renderInlineMarkdown：表格里 `\\|` 还原后仍渲染加粗', () => {
+  const cell = unescapeCell('**粗\\|分隔**');
+  const html = renderInlineMarkdown(cell);
+  assert(html.includes('<strong>'), `应加粗：${html}`);
+  assert(html.includes('|'), '竖线保留在文字里');
 });
 
 /* --------------------------------------------------------------- 汇总 */

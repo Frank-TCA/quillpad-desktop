@@ -16,6 +16,7 @@
 import { WidgetType } from '@codemirror/view';
 import { icon } from '../../ui/icons.js';
 import { t } from '../../core/i18n.js';
+import { renderInlineMarkdown } from '../../core/markdown.js';
 import {
   parseTable,
   serializeTable,
@@ -538,7 +539,17 @@ export class TableWidget extends WidgetType {
       cell.className = 'qp-table__cell';
       cell.setAttribute('data-r', String(domRow));
       cell.setAttribute('data-c', String(c));
-      cell.textContent = unescapeCell(raw);
+      /* 单元格内容按行内 Markdown 渲染：`**粗**` / `*斜*` / `` `code` `` /
+         `~~删~~` / 链接，与预览、与正文行内保持一致。这里是 widget 内部
+         的普通 DOM，拿不到 CM 的行内装饰，只能自己渲染。
+         `\n` 之类在单元格里不存在（表格按行切分），无需处理块级语法。 */
+      const shown = renderInlineMarkdown(unescapeCell(raw));
+      if (shown) cell.innerHTML = shown;
+      else cell.textContent = '';
+      // 单元格里的链接不跳转：单击的语义是「编辑这一格」
+      cell.addEventListener('click', (e) => {
+        if (e.target instanceof HTMLElement && e.target.closest('a')) e.preventDefault();
+      });
       const align = this.model.aligns[c];
       if (align) cell.style.textAlign = align;
       cell.title = t('单击编辑单元格', 'Click to edit cell');

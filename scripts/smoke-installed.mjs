@@ -20,6 +20,9 @@
  *  6d. 表格下沿：表下紧跟正文（无空行）时尾行不被吞进表格 —— 所见即所得表格
  *     行数正确、点「切换对齐」不改写尾行、浮层开着点对齐不产生 `||` 半行、
  *     分栏预览把尾行渲染成 <p>（v1.0.5）
+ *  6e. 首开渲染 / 列表 / 单元格（v1.0.6）：视口外的表格首次打开即渲染成 widget、
+ *     单元格里的 `**粗**` `*斜*` `` `代码` `` 渲染成真实标签、视口外的有序 / 无序
+ *     列表保持序号与圆点、列表末行回车新行序号仍在、整篇其它结构数量不变
  *  7. 启动参数与文件关联：安装器写下的 .md/.txt 默认关联、能力注册、应用内 IPC
  *     读得到；第二实例转交文件能打开，且不再误报「文件过大」（argv[0] 不再是
  *     待打开文件，程序自己的 238MB exe 不再被读一遍）
@@ -1101,6 +1104,202 @@ async function sectionTableTail() {
   await win.waitForTimeout(500);
 }
 
+/* ============================== 第 6e 项 · 首开渲染 / 列表 / 单元格（v1.0.6） */
+/**
+ * 造一份「表格 / 列表 / 引用都在视口外」的大文档。
+ * 首次打开时语法树是惰性分片解析的，视口外的块结构过去会整段丢失
+ * （表格不渲染、列表行首没有点与序号），必须靠全文解析 + 解析推进后重扫补上。
+ */
+function buildBigDoc() {
+  const out = ['# 大文档', ''];
+  for (let i = 0; i < 90; i += 1) {
+    out.push(`前置段落 ${i}：撑大文档体积，让结构落在视口之外。`);
+    out.push('');
+  }
+  out.push('## 表格区', '');
+  out.push('| 样式 | 内容 |');
+  out.push('| --- | --- |');
+  out.push('| 粗体 | **加粗文字** |');
+  out.push('| 斜体 | *斜体文字* |');
+  out.push('| 代码 | `inline()` |');
+  out.push('');
+  out.push('## 列表区', '');
+  out.push('1. 有序甲');
+  out.push('2. 有序乙');
+  out.push('');
+  out.push('- 无序甲');
+  out.push('- 无序乙');
+  out.push('');
+  out.push('> 引用尾巴');
+  out.push('');
+  for (let i = 0; i < 60; i += 1) {
+    out.push(`尾部段落 ${i}：继续把文档拉长。`);
+    out.push('');
+  }
+  return out.join('\n');
+}
+
+async function sectionWysiwygStructure() {
+  console.log('── 第 6e 项 · 首开渲染 / 列表 / 单元格');
+  await win.evaluate(() => window.quillpad.setViewMode('wysiwyg', { user: true }));
+  await win.waitForTimeout(600);
+
+  const saved = await win.evaluate(() => {
+    const app = window.quillpad;
+    const tab = app.state.tabs.find((t) => t.id === app.state.activeTabId);
+    return { id: tab.id, before: tab.content };
+  });
+
+  const BIG = buildBigDoc();
+  await win.evaluate((d) => {
+    const app = window.quillpad;
+    app.setTabContent(app.state.activeTabId, d);
+    app.refreshViewMode();
+  }, BIG);
+  await win.waitForTimeout(1100);
+
+  /* 滚到「表格区」，表格应当已经渲染成 widget（不是裸源码） */
+  const tableState = await win.evaluate(() => {
+    const app = window.quillpad;
+    const view = app.editor.view;
+    const pos = view.state.doc.toString().indexOf('## 表格区');
+    view.dispatch({ selection: { anchor: pos + 1 }, scrollIntoView: true });
+    return new Promise((resolve) =>
+      setTimeout(() => {
+        const wrap = document.querySelector('.qp-table-wrap');
+        resolve({
+          wraps: document.querySelectorAll('.qp-table-wrap').length,
+          rows: wrap ? wrap.querySelectorAll('tr').length : 0,
+          strong: !!document.querySelector('.qp-table__cell strong'),
+          em: !!document.querySelector('.qp-table__cell em'),
+          code: !!document.querySelector('.qp-table__cell code'),
+          pipeText: [...document.querySelectorAll('.cm-line')].some((l) =>
+            l.textContent.includes('| 样式 |'),
+          ),
+        });
+      }, 700),
+    );
+  });
+  check(
+    '6e.1 视口外的表格首次打开即渲染成 widget（不是裸源码）',
+    tableState.wraps >= 1 && tableState.rows === 4 && !tableState.pipeText,
+    `wrap=${tableState.wraps} tr=${tableState.rows} 露出源码=${tableState.pipeText}`,
+  );
+  check(
+    '6e.2 单元格里的加粗 / 斜体 / 行内代码渲染成真实标签',
+    tableState.strong && tableState.em && tableState.code,
+    `strong=${tableState.strong} em=${tableState.em} code=${tableState.code}`,
+  );
+
+  /* 滚到「列表区」：有序 / 无序 / 引用都应有各自的装饰 */
+  const listState = await win.evaluate(() => {
+    const app = window.quillpad;
+    const view = app.editor.view;
+    const pos = view.state.doc.toString().indexOf('## 列表区');
+    view.dispatch({ selection: { anchor: pos + 1 }, scrollIntoView: true });
+    return new Promise((resolve) =>
+      setTimeout(() => {
+        const rows = [...document.querySelectorAll('.cm-line')].filter((el) =>
+          /有序甲|无序甲|引用尾巴/.test(el.textContent),
+        );
+        resolve({
+          lis: document.querySelectorAll('.qp-li').length,
+          quotes: document.querySelectorAll('.qp-quote').length,
+          rows: rows.map((el) => ({
+            text: el.textContent.slice(0, 8),
+            cls: el.className,
+            num: el.getAttribute('data-qp-num'),
+            before: getComputedStyle(el, '::before').content,
+          })),
+        });
+      }, 700),
+    );
+  });
+  const olRow = listState.rows.find((r) => r.text.includes('有序甲'));
+  const ulRow = listState.rows.find((r) => r.text.includes('无序甲'));
+  check(
+    '6e.3 视口外的有序 / 无序列表保持行首序号与圆点',
+    listState.lis >= 4 &&
+      !!olRow &&
+      olRow.num === '1' &&
+      /1\./.test(olRow.before) &&
+      !!ulRow &&
+      /•/.test(ulRow.before),
+    `li=${listState.lis} ol=${JSON.stringify(olRow)} ul=${JSON.stringify(ulRow)}`,
+  );
+
+  /* 引用块同理：滚到它所在的位置再数（视口外的行根本没有 DOM） */
+  const quoteState = await win.evaluate(() => {
+    const app = window.quillpad;
+    const view = app.editor.view;
+    const pos = view.state.doc.toString().indexOf('> 引用尾巴');
+    view.dispatch({ selection: { anchor: pos + 1 }, scrollIntoView: true });
+    return new Promise((resolve) =>
+      setTimeout(() => {
+        const rows = [...document.querySelectorAll('.cm-line')].filter((el) =>
+          el.textContent.includes('引用尾巴'),
+        );
+        resolve({
+          quotes: document.querySelectorAll('.qp-quote').length,
+          row: rows.length ? rows[0].className : null,
+        });
+      }, 600),
+    );
+  });
+  check(
+    '6e.4 视口外的引用块渲染成引用样式（不是纯文本行）',
+    quoteState.quotes >= 1 && /qp-quote/.test(quoteState.row || ''),
+    `quote=${quoteState.quotes} row=${quoteState.row}`,
+  );
+
+  /* 在有序列表末行回车：新行要有序号，且整篇其它结构不塌 */
+  const beforeKinds = await win.evaluate(() => ({
+    h: document.querySelectorAll('.qp-h').length,
+    quote: document.querySelectorAll('.qp-quote').length,
+  }));
+  await win.evaluate(() => {
+    const app = window.quillpad;
+    const view = app.editor.view;
+    const text = view.state.doc.toString();
+    const pos = text.indexOf('2. 有序乙') + '2. 有序乙'.length;
+    view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
+    view.focus();
+  });
+  await win.waitForTimeout(300);
+  await win.keyboard.press('Enter');
+  await win.waitForTimeout(600);
+  const afterEnter = await win.evaluate(() => {
+    // 用文本定位：表格 widget 会替换掉若干 .cm-line，按下标取会错位
+    const dom = [...document.querySelectorAll('.cm-line')].find(
+      (el) => el.textContent.trim() === '3.',
+    );
+    return {
+      cls: dom ? dom.className : '',
+      num: dom ? dom.getAttribute('data-qp-num') : null,
+      before: dom ? getComputedStyle(dom, '::before').content : 'none',
+      h: document.querySelectorAll('.qp-h').length,
+      quote: document.querySelectorAll('.qp-quote').length,
+    };
+  });
+  check(
+    '6e.5 列表末行回车后，新行的序号仍在（行首不空）',
+    /qp-li/.test(afterEnter.cls) && afterEnter.num === '3' && /3\./.test(afterEnter.before),
+    `cls=${afterEnter.cls} num=${afterEnter.num} ::before=${afterEnter.before}`,
+  );
+  check(
+    '6e.6 列表编辑不影响整篇其它结构（标题 / 引用数量不变）',
+    afterEnter.h === beforeKinds.h && afterEnter.quote === beforeKinds.quote,
+    `h ${beforeKinds.h}→${afterEnter.h} quote ${beforeKinds.quote}→${afterEnter.quote}`,
+  );
+
+  // 还原文档
+  await win.evaluate((s) => {
+    window.quillpad.setTabContent(s.id, s.before);
+    window.quillpad.refreshViewMode();
+  }, saved);
+  await win.waitForTimeout(500);
+}
+
 /* ================================================ 第 7 项 · 启动参数与文件关联 */
 /**
  * 读文件关联相关注册表项（reg.exe 在本机安全策略里被禁，走 PowerShell）。
@@ -1219,6 +1418,7 @@ for (const [tag, fn] of [
   ['第 6b 项', sectionHrLayout],
   ['第 6c 项', sectionTableInteraction],
   ['第 6d 项', sectionTableTail],
+  ['第 6e 项', sectionWysiwygStructure],
   ['第 7 项', sectionAssociations],
 ]) {
   try {
